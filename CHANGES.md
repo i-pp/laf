@@ -1,4 +1,65 @@
+<!--
+KISS Open License Version 1.0 (KOL-v1)
+
+SPDX-FileCopyrightText: 2026 I-plusplus Inc.
+SPDX-License-Identifier: LicenseRef-KOL-v1
+
+Copyright remains with its respective holders; original copyright and attribution notices must be preserved.
+Contributors may add copyright notices for their own original modifications.
+Distributed modifications must be identified as required by Section 4(c) of KOL-v1.
+
+Use, modification, distribution, and incorporation into commercial or proprietary software are permitted
+without license fees or source disclosure, subject to all terms of the complete KOL-v1 license.
+
+Contributors grant the patent permissions stated in KOL-v1. Outputs are not covered merely because a
+KOL-licensed tool produced them; embedded licensed material remains subject to applicable license terms.
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OR LIABILITY TO THE EXTENT PERMITTED BY APPLICABLE LAW.
+
+This header is a summary, not a separate license or an amendment to KOL-v1.
+All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
+
+Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
+-->
+
 # Source changes
+
+## 2026-11-09: embedded notices and repository-wide first-party scope
+
+Moved the existing KOL notices into HTML comments in all 19 Markdown files and
+removed all 25 `.license` sidecars. The approved full header summary and existing
+first-party-only scope are preserved in the comments. All six JSON files (five
+examples and one synthetic fixture) remain byte-for-byte unchanged, without
+comments or added fields.
+
+`README.md`, `LICENSING.md` and `NOTICE` now explain that the top-level LICENSE
+covers project-authored material throughout the repository and its subdirectories,
+unless a file states different terms. Third-party material keeps its own terms.
+The complete license instruments, runtime code and existing code headers are
+unchanged. `MANIFEST.sha256` is refreshed. The affected paths, apart from the
+removed sidecars, are:
+
+- `AGENTS.md`
+- `CHANGES.md`
+- `LICENSING.md`
+- `MANIFEST.sha256`
+- `NOTICE`
+- `README.md`
+- `THIRD_PARTY_NOTICES.md`
+- `docs/laf-candidate-profiles.md`
+- `docs/laf-cli-response-validation.md`
+- `docs/laf-core-integration.md`
+- `docs/laf-host-supervisor.md`
+- `docs/laf-model-management.md`
+- `inference/aceis_npu_service/DISTRIBUTION.md`
+- `inference/aceis_npu_service/README.md`
+- `inference/aceis_service/README.md`
+- `inference/aceis_service/distribution-notes.md`
+- `inference/local_platform/API.md`
+- `inference/local_platform/README.md`
+- `inference/local_platform/development-scope.md`
+- `inference/local_platform/naming.md`
+- `inference/local_platform/workspace-client.md`
 
 ## 2026-11-09: English development rules
 

@@ -1,3 +1,27 @@
+<!--
+KISS Open License Version 1.0 (KOL-v1)
+
+SPDX-FileCopyrightText: 2026 I-plusplus Inc.
+SPDX-License-Identifier: LicenseRef-KOL-v1
+
+Copyright remains with its respective holders; original copyright and attribution notices must be preserved.
+Contributors may add copyright notices for their own original modifications.
+Distributed modifications must be identified as required by Section 4(c) of KOL-v1.
+
+Use, modification, distribution, and incorporation into commercial or proprietary software are permitted
+without license fees or source disclosure, subject to all terms of the complete KOL-v1 license.
+
+Contributors grant the patent permissions stated in KOL-v1. Outputs are not covered merely because a
+KOL-licensed tool produced them; embedded licensed material remains subject to applicable license terms.
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OR LIABILITY TO THE EXTENT PERMITTED BY APPLICABLE LAW.
+
+This header is a summary, not a separate license or an amendment to KOL-v1.
+All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
+
+Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
+-->
+
 # Local AI Fabric
 
 Local AI Fabric (LAF) provides a guarded local inference service, an opt-in Core
@@ -85,9 +109,11 @@ records its exact source/fixture fingerprints and current result scope. Preserve
 failed and unexecuted stages when reproducing it on another executor.
 
 The Owner approved this bounded first-party source import and KOL v1 licensing.
-Files covered by KOL are identified by their headers or exact-path `.license`
-notices. External assets retain their separate terms; this approval does not
-license or authorize their redistribution. The source review found no obvious
+The top-level LICENSE covers the project's first-party material throughout
+this repository and its subdirectories; see [LICENSING.md](LICENSING.md).
+Markdown carries embedded license comments, while JSON examples and fixtures
+remain unmodified. External assets retain their separate terms; this approval
+does not license or authorize their redistribution. The source review found no obvious
 credentials or private host paths in the selected tree, but does not establish
 exhaustive security, patent or legal clearance. KOL is a custom license, not a
 claim of OSI approval. Preserve applicable notices and identify distributed
