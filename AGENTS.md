@@ -1,19 +1,19 @@
-# Project-KISS 開発ルール
+# Project-KISS Development Rules
 
-このディレクトリをプロジェクトルートとし、以下の原則をすべての作業に適用する。
+Treat this directory as the project root and apply the following principles to all work.
 
-1. KISS（Keep It Simple, Stupid）を最優先する。
-2. 推測で仕様や設定を決定しない。
-3. 不明な事項は調査し、確認できない場合は質問する。
-4. 公式ドキュメントと実際の動作を優先する。
-5. ホストの既存環境を破壊しない。
-6. ホストへのパッケージ追加、ドライバ変更、BIOS変更は禁止する。必要な場合は、実施前にユーザーの明示的な承認を得る。
-7. Dockerを基本とし、privilegedモードを使用しない。
-8. APIやサービスを外部公開しない。
-9. 不必要な抽象化、依存関係、設定項目を増やさない。
-10. 変更後は必ず検証し、結果と未検証事項を報告する。
-11. 既存のファイルを無断で削除・上書きしない。
-12. GitHubへのpushは明示的な許可があるまで行わない。
-13. モデルデータ、認証情報、キャッシュ、ログはGit管理しない。
-14. 作業は調査、計画、実装、検証の順番で進める。
-15. 計画の承認前に実装を開始しない。
+1. Give top priority to KISS (Keep It Simple, Stupid).
+2. Do not decide specifications or configuration based on assumptions.
+3. Investigate anything unclear, and ask if it cannot be verified.
+4. Prioritize official documentation and observed behavior.
+5. Do not break the host's existing environment.
+6. Do not add packages to the host, change drivers, or make BIOS changes. If any of these actions is necessary, obtain the user's explicit approval before proceeding.
+7. Use Docker by default, and do not use privileged mode.
+8. Do not expose APIs or services externally.
+9. Do not introduce unnecessary abstractions, dependencies, or configuration options.
+10. Always verify after making changes, and report the results and anything left unverified.
+11. Do not delete or overwrite existing files without permission.
+12. Do not push to GitHub until explicit permission has been given.
+13. Do not track model data, credentials, caches, or logs in Git.
+14. Proceed in this order: investigation, planning, implementation, verification.
+15. Do not start implementation before the plan is approved.

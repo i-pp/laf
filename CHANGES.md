@@ -1,5 +1,12 @@
 # Source changes
 
+## 2026-11-09: English development rules
+
+Translated `AGENTS.md` into English while preserving the meaning and order of
+all 15 development rules. The translated text uses ASCII characters only.
+Existing licensing notices are unchanged. This entry identifies the changes in
+`AGENTS.md` and `CHANGES.md`; `MANIFEST.sha256` is refreshed for these files.
+
 ## 2026-11-09: initial standalone source-only import
 
 The reviewed component layout was adapted into a standalone tree without private
