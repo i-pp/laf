@@ -119,8 +119,7 @@ exhaustive security, patent or legal clearance. KOL is a custom license, not a
 claim of OSI approval. Preserve applicable notices and identify distributed
 changes as required by the full license.
 
-`MANIFEST.sha256` identifies all distributed files except itself. The Python
-runner separately records its source/fixture fingerprints and selected test
+The Python runner records its source/fixture fingerprints and selected test
 scope; its fixed `p0_complete`, `release_authorized` and `deployed` flags remain
 false because tests do not grant runtime-release or deployment approval.
 

@@ -24,6 +24,14 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## 2026-11-09: remove repository-wide checksum manifest
+
+Removed the root `MANIFEST.sha256` and its current descriptions from `README.md`
+and `LICENSING.md`. Earlier entries below retain their historical references to
+the manifest. Runtime asset integrity checks and the test runner's source/fixture
+fingerprints remain unchanged. This entry records the changes to those three
+files and `CHANGES.md`.
+
 ## 2026-11-09: embedded notices and repository-wide first-party scope
 
 Moved the existing KOL notices into HTML comments in all 19 Markdown files and
