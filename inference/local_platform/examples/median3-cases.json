@@ -1,0 +1,6 @@
+[
+  {"function":"median3","args":[1,2,100],"expected":2},
+  {"function":"median3","args":[9,1,4],"expected":4},
+  {"function":"median3","args":[5,5,1],"expected":5},
+  {"function":"median3","args":[-10,0,2],"expected":0}
+]

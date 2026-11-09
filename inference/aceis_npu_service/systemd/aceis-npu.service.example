@@ -1,0 +1,43 @@
+# KISS Open License Version 1.0 (KOL-v1)
+#
+# SPDX-FileCopyrightText: 2026 I-plusplus Inc.
+# SPDX-License-Identifier: LicenseRef-KOL-v1
+#
+# Copyright remains with its respective holders; original copyright and attribution notices must be preserved.
+# Contributors may add copyright notices for their own original modifications.
+# Distributed modifications must be identified as required by Section 4(c) of KOL-v1.
+#
+# Use, modification, distribution, and incorporation into commercial or proprietary software are permitted
+# without license fees or source disclosure, subject to all terms of the complete KOL-v1 license.
+#
+# Contributors grant the patent permissions stated in KOL-v1. Outputs are not covered merely because a
+# KOL-licensed tool produced them; embedded licensed material remains subject to applicable license terms.
+#
+# THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OR LIABILITY TO THE EXTENT PERMITTED BY APPLICABLE LAW.
+#
+# This header is a summary, not a separate license or an amendment to KOL-v1.
+# All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
+
+# TEMPLATE ONLY: not an installable default. Replace every /REPLACE/ path.
+# Prerequisites: separately acquired compatible SDK/XRT/model, built worker,
+# Python, device access, and a private existing RUN_PARENT directory.
+# Validate the foreground launch and resource budgets before installing.
+[Unit]
+Description=AceIS optional private RyzenAI classifier
+StartLimitIntervalSec=300
+StartLimitBurst=2
+
+[Service]
+Type=simple
+WorkingDirectory=/REPLACE/CHECKOUT
+RuntimeDirectory=aceis-npu
+RuntimeDirectoryMode=0700
+UMask=0077
+# Use a fresh per-invocation run directory. The parent directory must already exist.
+ExecStart=/usr/bin/python3 -m inference.aceis_npu_service.service --worker /REPLACE/BUILT_WORKER --sdk /REPLACE/SDK_ROOT --xrt /REPLACE/XRT_ROOT --model /REPLACE/PINNED_MODEL.onnx --run-dir /REPLACE/RUN_PARENT/${INVOCATION_ID} --socket %t/aceis-npu/service.sock
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=8
+[Install]
+WantedBy=default.target
