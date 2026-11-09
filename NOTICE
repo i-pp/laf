@@ -8,8 +8,9 @@ This distribution includes AceIS, developed by I-plusplus and the AceIS contribu
 Here, AceIS identifies the AceIS-named service adapter components in this source
 tree. This is not a complete AceIS system, a runtime image, or a model distribution.
 The tree includes Local AI Fabric client and router adapters. Covered first-party
-files are identified by their SPDX headers or exact-path accompanying .license
-files. See LICENSING.md for scope.
+material is covered by the top-level LICENSE throughout this repository and
+its subdirectories, as explained in LICENSING.md. SPDX comments identify the
+same first-party scope where comment syntax is available.
 
 Referenced runtimes, SDKs, libraries, models, tokenizer assets and container images
 remain under their own terms. They are not relicensed by this NOTICE or LICENSE.
