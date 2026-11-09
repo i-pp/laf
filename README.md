@@ -22,6 +22,8 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
+<!-- Modified 2026-11-09: add the checkout-local interactive chat guide. -->
+
 # Local AI Fabric
 
 Local AI Fabric (LAF) provides a guarded local inference service, an opt-in Core
@@ -67,6 +69,16 @@ The socket group uses fake providers, not Docker or real models. The full group
 combines both groups. A denied socket is an error, never an automatically skipped
 or passing test. Native C++/ORT, real GPU/NPU, clean-host runtime and second-PC
 checks are separate and are not run by this Python suite.
+
+## Terminal conversation with an existing Router
+
+The checkout-local `laf` launcher adds an interactive `chat` command. It keeps
+recent conversation turns in memory, uses the existing JSON job API, and prints
+chat-like replies. An explicit workspace enables a bounded filename-only search
+requested by the model or `/find`. It cannot read file contents, write files or
+run a shell. Start with [the chat CLI guide](docs/laf-chat-cli.md) for practical
+commands, privacy boundaries and the real-model acceptance work still required.
+This client does not install models or turn this preview into a clean-host runtime.
 
 ## Code map
 

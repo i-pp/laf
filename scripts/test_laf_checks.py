@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-09: require the new CLI launcher in source fingerprints.
+
 """Runner accounting regressions, using synthetic test objects only."""
 import importlib.util
 from pathlib import Path
@@ -111,7 +113,7 @@ class CheckTests(unittest.TestCase):
                      'inference/local_platform/fixtures/provenance-synthetic.json',
                      'inference/core_container/Dockerfile',
                      'inference/aceis_npu_service/worker.cpp',
-                     'inference/aceis_npu_service/build.sh', 'README.md'):
+                     'inference/aceis_npu_service/build.sh', 'README.md', 'laf'):
             self.assertRegex(values[name], r'^[0-9a-f]{64}$')
 
     def test_source_has_no_private_home_or_original_repository_reference(self):

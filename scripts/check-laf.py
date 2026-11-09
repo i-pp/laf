@@ -19,6 +19,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-09: include offline conversation CLI regressions.
+
 """Run standalone LAF Python regressions without models, Docker or vendor SDKs.
 
 Portable omits exactly the enumerated socket tests. Sockets selects only those
@@ -48,6 +50,7 @@ MODULES = (
     'inference.aceis_service.test_npu_bridge',
     'inference.aceis_service.test_service',
     'inference.core_container.test_build',
+    'inference.local_platform.test_chat',
     'inference.local_platform.test_cli',
     'inference.local_platform.test_cli_responses',
     'inference.local_platform.test_developer',
@@ -128,7 +131,7 @@ def source_identity(root=ROOT):
         paths.extend(path for path in (root / directory).rglob('*')
                      if '__pycache__' not in path.parts and path.suffix != '.pyc'
                      and (path.is_file() or path.is_symlink()))
-    paths.extend(root / name for name in ('README.md', 'AGENTS.md', '.gitignore'))
+    paths.extend(root / name for name in ('README.md', 'AGENTS.md', '.gitignore', 'laf'))
     result = {}
     for path in sorted(paths):
         if path.is_symlink() or not path.is_file():

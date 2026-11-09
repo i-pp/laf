@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-09: reuse bounded JSON jobs for interactive chat.
+
 """Bounded standalone CLI for a private local inference service.
 
 It does not depend on AceIS daemon/MCP and does not expose a network listener.
@@ -160,8 +162,20 @@ def ask(path, model, text, max_tokens=512, timeout=180, call=request, sleep=time
         raise ClientError('input must be1..8192 UTF-8 bytes and fit the server context budget')
     if len(text.encode("utf-8")) + 64 + max_tokens + 256 > 8192:
         raise ClientError('input exceeds server context budget')
-    body = {'model':model,'messages':[{'role':'user','content':text}],
+    return converse(path, model, [{'role':'user','content':text}], max_tokens,
+                    timeout, call=call, sleep=sleep)
+
+
+def converse(path, model, messages, max_tokens=512, timeout=180, call=None, sleep=time.sleep):
+    """One bounded JSON chat job. Never replay an uncertain submission."""
+    from inference.aceis_service.core import validate_request
+    body = {'model':model,'messages':messages,
             'max_tokens':max_tokens,'timeout_seconds':timeout}
+    try:
+        validate_request(body)
+    except (ValueError, UnicodeError) as exc:
+        raise ClientError(str(exc)) from None
+    call = request if call is None else call
     # A submission failure might follow accepted work. Never replay it.
     try:
         submitted = call(path,'POST','/v1/jobs',body)
@@ -228,7 +242,15 @@ def main(argv=None):
     source=q.add_mutually_exclusive_group(required=True);source.add_argument('--prompt');source.add_argument('--input',help='UTF-8 file, or - for stdin')
     q.add_argument('--max-tokens',type=int,default=512);q.add_argument('--timeout',type=int,default=180)
     q.add_argument('--output',help='create a new JSON file; never overwrite')
+    chat=sub.add_parser('chat',help='interactive conversation; optional bounded workspace filename search')
+    chat.add_argument('--model',choices=MODELS,default='gpt-oss-120b')
+    chat.add_argument('--max-tokens',type=int,default=512)
+    chat.add_argument('--timeout',type=int,default=180)
+    chat.add_argument('--workspace',help='absolute owned directory; permits filename-only search, no shell or file contents')
     args=p.parse_args(argv)
+    if args.command=='chat':
+        from .chat import run_chat
+        return run_chat(args.socket,args.model,args.max_tokens,args.timeout,args.workspace)
     if args.command=='model':
         from .model_management import main as model_main
         return model_main(args.model_args)

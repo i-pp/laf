@@ -122,3 +122,11 @@ LICENSING.md, THIRD_PARTY_NOTICES.md, this file and the matching `.license`
 notices. MANIFEST.sha256 records final file identities, excluding itself.
 Future distributed modifications must identify changed files or components as
 required by KOL section 4(c), while preserving applicable original notices.
+
+## Interactive CLI source changes (2026-11-09)
+
+- Add a checkout-local `laf` launcher and `chat` subcommand over existing bounded JSON jobs.
+- Retain recent conversation turns in memory, display replies as chat, and mark context/output limits.
+- Add an optional explicit-workspace filename-only search with a fixed JSON tool schema and local `/find` command. No file contents, writes, shell, service configuration or model provisioning are added.
+- Add offline regressions and a usage guide. Real-model, supported-host and clean-host acceptance remain separate.
+- Preserve all existing `aceis-*` compatibility names; no installed unit/socket/connector is renamed.
