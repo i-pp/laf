@@ -48,8 +48,7 @@ include configuration and task examples, sample case data and a synthetic
 provenance test fixture. They retain valid JSON without comments, added license
 fields or individual sidecar notices; the first-party scope above still applies.
 NOTICE carries its own SPDX attribution. The two copies of the license
-instrument are reproduced unchanged. MANIFEST.sha256 is generated checksum
-metadata and makes no additional copyright or licensing determination.
+instrument are reproduced unchanged.
 
 ## External material
 
