@@ -178,3 +178,10 @@ failure/skip accounting. Move the hardware-free NPU probe decoding regression
 into `inference/laf_npu_service/tests/test_service.py`; it tests actual output
 handling rather than product spelling. No production runtime source, service,
 model, connection, license, original attribution or earlier change record changes.
+
+## Default conversation entry (2026-11-10)
+
+Open the existing interactive chat when no subcommand is supplied, including an
+explicit global socket override. Keep the canonical private socket, environment
+override, chat defaults, explicit subcommands, help and all socket safety checks.
+No installed command, PATH entry, service, model or permission is changed.

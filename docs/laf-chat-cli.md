@@ -28,29 +28,47 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 ## Busy-reader summary
 
-Use `laf chat` for a small, terminal conversation with an already configured LAF
-Router. It reuses the existing JSON job API and owner-only Unix socket. A
-checkout-local `laf` launcher saves typing the Python module path; it is not an
-installed package and does not provision a Router, engine or model.
+Run `laf` without a subcommand to open a small terminal conversation with an
+already configured LAF Router. It uses the existing JSON job API and owner-only
+Unix socket. The same conversation is available explicitly as `laf chat`.
 
-From the checkout root, this command exercises only local help and exit, with no
-model request or running Router needed:
+This checkout includes a local launcher, not an installed package. From its root,
+use `./laf`. If the command is installed or already on PATH, use `laf` instead.
+Starting the prompt does not install or start a Router, engine or model.
+
+This command exercises only local help and exit, with no model request or running
+Router needed:
 
 ```sh
-printf '/help\n/quit\n' | ./laf chat --model flash
+printf '/help\n/quit\n' | ./laf
 python3 -B scripts/check-laf.py --suite portable
 ```
 
-After an operator has accepted the existing service and its models, set its actual
-private socket path and start a conversation:
+With an accepted Router at the default private socket, no socket option is needed:
 
 ```sh
-SOCKET="$XDG_RUNTIME_DIR/laf-inference/service.sock"
-./laf --socket "$SOCKET" status
-./laf --socket "$SOCKET" chat --model flash
-# Optional: allow filename search inside this explicit, absolute workspace.
-./laf --socket "$SOCKET" chat --model flash --workspace "$PWD"
+./laf status
+./laf
+# Optional: choose a model and permit filename search in an explicit workspace.
+./laf chat --model flash --workspace "$PWD"
 ```
+
+The default is `/run/user/<uid>/laf-inference/service.sock`, using the client's
+current user ID. `LOCAL_INFERENCE_SOCKET` can select another existing private
+socket. An explicit `--socket` takes priority over that environment variable:
+
+```sh
+SOCKET=/ABSOLUTE/PRIVATE/service.sock  # Replace with the accepted existing socket.
+./laf --socket "$SOCKET"
+./laf --socket "$SOCKET" chat --model flash
+```
+
+The implicit conversation keeps the existing chat defaults: model
+`gpt-oss-120b`, at most 512 output tokens and a 180-second timeout. Use the explicit
+`chat` subcommand for its model, output, timeout and workspace options. `--help`
+and existing subcommands keep their previous behavior. Every request still uses
+the same absolute-path, ownership, non-symlink and private-permission checks;
+there is no fallback to another socket or TCP.
 
 These are client commands, not a clean-host runtime Quick Start. They do not
 start, replace or reconfigure a service. See the [Router prerequisites](../inference/laf_service/README.md#machine-specific-preparation).
