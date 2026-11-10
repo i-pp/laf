@@ -25,10 +25,9 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 # Local AI Fabric (LAF) client
 
 A standard-library-only client for LAF Router, the existing guarded local
-inference service. It does not need Codex CLI, Claude Code, a paid API, AceIS
-daemon or MCP. The existing module paths, endpoints and service units remain
-compatibility identifiers. See [naming and compatibility](naming.md) for the
-agreed names and the changes that still need separate rollout.
+inference service. It does not need Codex CLI, Claude Code, a paid API, an external
+daemon or MCP. See [naming and migration](naming.md) for the LAF module paths,
+service names and the source migration boundary.
 
 ## Busy-reader summary
 
@@ -39,12 +38,12 @@ agreed names and the changes that still need separate rollout.
 
 ## Run with an already accepted local service
 
-This client procedure assumes the [GPU service](../aceis_service/README.md) is
+This client procedure assumes the [GPU service](../laf_service/README.md) is
 already configured and healthy. It is not a fresh-host installation guide. Run
 from this repository root, with Python 3.11+ on Linux:
 
 ```sh
-SOCKET="$XDG_RUNTIME_DIR/aceis-inference/service.sock"
+SOCKET="$XDG_RUNTIME_DIR/laf-inference/service.sock"
 python3 -B -m inference.local_platform.cli --socket "$SOCKET" status
 python3 -B -m inference.local_platform.cli --socket "$SOCKET" models
 python3 -B -m inference.local_platform.cli --socket "$SOCKET" capabilities

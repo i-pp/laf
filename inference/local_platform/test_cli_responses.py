@@ -43,7 +43,7 @@ class WireResponseTests(unittest.TestCase):
                 response.read.assert_called_once_with(cli.MAX_RESPONSE + 1)
 
     def test_valid_utf8_object_remains_compatible(self):
-        self.assertEqual(self.invoke('{"content":"日本語","value":1.5}'.encode()), {'content': '日本語', 'value': 1.5})
+        self.assertEqual(self.invoke('{"content":"\u65e5\u672c\u8a9e","value":1.5}'.encode()), {'content': '\u65e5\u672c\u8a9e', 'value': 1.5})
 
     def test_top_level_duplicate_state_rejected(self):
         with self.assertRaises(cli.ClientError):

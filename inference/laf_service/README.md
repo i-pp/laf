@@ -25,27 +25,28 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 # LAF Router
 
 LAF Router is the guarded local inference service for Local AI Fabric (LAF).
-Its existing `inference.aceis_service` module path, `aceis-inference.service` unit
-and private socket remain compatibility identifiers. See
-[naming and compatibility](../local_platform/naming.md). This documentation
-does not rename installed units or reconfigure an MCP connector.
+Its Python module path is `inference.laf_service`; its example unit is
+`laf-inference.service` and its default socket is
+`$XDG_RUNTIME_DIR/laf-inference/service.sock`. See
+[naming and migration](../local_platform/naming.md). Updating this checkout does
+not rename installed units or reconfigure an MCP connector.
 
 This service keeps Strata Flash ready and admits at most one Ollama large model:
 Coder Next (48 requested GPU layers) or GPT-OSS 120B (28). It requires separately obtained offline
 assets and a pinned Ollama 0.40.15 image. It does not install packages, change
-drivers/BIOS, replace the existing Router, or alter AceIS daemon/auth/Tunnel settings.
+drivers/BIOS, replace the existing Router, or alter external daemon/auth/Tunnel settings.
 
 ## Busy-reader summary
 
 Use these commands only after configuring and accepting the service below:
 
 ```sh
-SOCKET="$XDG_RUNTIME_DIR/aceis-inference/service.sock"
+SOCKET="$XDG_RUNTIME_DIR/laf-inference/service.sock"
 curl --unix-socket "$SOCKET" http://localhost/health
 curl --unix-socket "$SOCKET" http://localhost/v1/models
 curl --unix-socket "$SOCKET" -H 'Content-Type: application/json' \
   http://localhost/v1/chat/completions -d '{"model":"coder-next","messages":[{"role":"user","content":"Explain integer overflow in C."}],"max_tokens":256}'
-systemctl --user stop aceis-inference.service
+systemctl --user stop laf-inference.service
 ```
 
 The response includes the job status, content, finish reason and token usage. A
@@ -74,8 +75,8 @@ state directory at historical evidence or the source model directory.
 2. From this checkout, run the unit/integration tests and monitored model import:
 
    ```sh
-   python3 -m unittest inference.aceis_service.test_service -v
-   python3 -B -m inference.aceis_service.server --config /ABSOLUTE/config.json --prepare-models
+   python3 -m unittest inference.laf_service.test_service -v
+   python3 -B -m inference.laf_service.server --config /ABSOLUTE/config.json --prepare-models
    ```
 
    Imports use a new labeled nonprivileged read-only-root container, existing
@@ -86,7 +87,7 @@ state directory at historical evidence or the source model directory.
 3. Run in the foreground first:
 
    ```sh
-   python3 -B -m inference.aceis_service.server --config /ABSOLUTE/config.json
+   python3 -B -m inference.laf_service.server --config /ABSOLUTE/config.json
    ```
 
    Check `/health`, a short Flash request, Next, 120B, then Next again. Record
@@ -144,8 +145,8 @@ curl --unix-socket "$SOCKET" -X DELETE http://localhost/v1/jobs/JOB_ID
 # Only after fixing a latched resource/telemetry/provider-stop cause:
 curl --unix-socket "$SOCKET" -H 'Content-Type: application/json' \
   http://localhost/v1/recover -d '{}'
-systemctl --user restart aceis-inference.service
-journalctl --user -u aceis-inference.service --no-pager -n 40
+systemctl --user restart laf-inference.service
+journalctl --user -u laf-inference.service --no-pager -n 40
 ```
 
 Cancellation/deadline closes the owned Ollama connection and stops owned providers
@@ -164,8 +165,8 @@ an independent, explicitly authorized cleanup operation.
 
 An optional `npu_socket` is read with a 0.5s timeout for independent health status.
 A missing/not-ready NPU never blocks GPU jobs. NPU inference belongs to
-`inference/aceis_npu_service`; it is not silently retried on CPU by this Router.
-Existing AceIS callers must opt into this Unix-socket client boundary. No
+`inference/laf_npu_service`; it is not silently retried on CPU by this Router.
+External callers must opt into this Unix-socket client boundary. No
 production daemon/MCP configuration is rewired by installing this service.
 
 ## Evidence and limits

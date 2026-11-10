@@ -71,7 +71,7 @@ class CoreBackendTest(unittest.TestCase):
                 CoreBackends({}, '/test/config', client)
     def test_namespace_change_never_sends_signal_and_requests_host_panic(self):
         backend, client = make(); backend.namespace_probe = lambda: 'pid:[333]'
-        with patch('inference.aceis_service.core_backends.os.killpg') as kill:
+        with patch('inference.laf_service.core_backends.os.killpg') as kill:
             with self.assertRaises(ServiceError): backend.abort()
         kill.assert_not_called(); self.assertEqual(client.calls, ['panic']); self.assertTrue(backend.stopping)
     def test_fixed_private_endpoint_only(self):
@@ -82,30 +82,30 @@ class CoreBackendTest(unittest.TestCase):
         backend, client = make(); backend.start_ollama(); self.assertEqual(backend.address, '172.31.0.2')
     def test_physical_samples_never_use_local_proc_fallback(self):
         backend, client = make()
-        with patch('inference.aceis_service.core.snapshot', side_effect=AssertionError('local snapshot forbidden')), \
-             patch('inference.aceis_service.core_backends.time.sleep'):
+        with patch('inference.laf_service.core.snapshot', side_effect=AssertionError('local snapshot forbidden')), \
+             patch('inference.laf_service.core_backends.time.sleep'):
             backend.wait_idle()
         self.assertEqual(client.samples, 2)
     def test_empty_model_list_does_not_bypass_host_vram_or_ram_release(self):
         for key, value in [('vram_used', 40 * GIB), ('mem_available', 16 * GIB)]:
             backend, client = make(); backend.active_model = 'coder-next'; backend.flash_base = sample()
             client.resources[key] = value; backend.api = lambda *a, **k: {'models': []}
-            with patch('inference.aceis_service.core_backends.time.monotonic', side_effect=[0, 0, 1, 31]), \
-                 patch('inference.aceis_service.core_backends.time.sleep'):
+            with patch('inference.laf_service.core_backends.time.monotonic', side_effect=[0, 0, 1, 31]), \
+                 patch('inference.laf_service.core_backends.time.sleep'):
                 with self.assertRaises(ServiceError): backend.unload(lambda: None)
             self.assertEqual(backend.active_model, 'coder-next'); self.assertGreater(client.samples, 0)
     def test_unload_requires_two_stable_host_readings(self):
         backend, client = make(); backend.active_model = 'coder-next'; backend.flash_base = sample()
         backend.api = lambda *a, **k: {'models': []}
-        with patch('inference.aceis_service.core_backends.time.sleep'): backend.unload(lambda: None)
+        with patch('inference.laf_service.core_backends.time.sleep'): backend.unload(lambda: None)
         self.assertEqual(client.samples, 2); self.assertIsNone(backend.active_model)
     def test_pid_reuse_does_not_signal_unrelated_group(self):
         backend, client = make(); process = Mock(pid=42); backend.wrapper_start = 1
         backend.engine_pid, backend.engine_start = 43, 2
         reused = {'state': 'S', 'pgid': 42, 'sid': 42, 'start': 999, 'uids': {os.getuid()}}
         backend._process = lambda pid: reused if pid == 42 else None
-        with patch('inference.aceis_service.core_backends.Path.glob', return_value=[Path('/proc/42/stat')]), \
-             patch('inference.aceis_service.core_backends.os.killpg') as kill:
+        with patch('inference.laf_service.core_backends.Path.glob', return_value=[Path('/proc/42/stat')]), \
+             patch('inference.laf_service.core_backends.os.killpg') as kill:
             with self.assertRaises(ServiceError): backend.stop_group(process)
         kill.assert_not_called()
     def test_unconfirmed_flash_stop_uses_host_panic_not_regular_stop(self):
@@ -185,14 +185,14 @@ class ConfigPackagingTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         dockerfile = (root / 'inference/core_container/Dockerfile').read_text()
         copied = [line.split()[1] for line in dockerfile.splitlines() if line.startswith('COPY ')]
-        self.assertNotIn('inference/aceis_service/backends.py', copied)
-        self.assertNotIn('inference/aceis_service/lifecycle_host.py', copied)
-        self.assertNotIn('inference/aceis_service/host_supervisor.py', copied)
+        self.assertNotIn('inference/laf_service/backends.py', copied)
+        self.assertNotIn('inference/laf_service/lifecycle_host.py', copied)
+        self.assertNotIn('inference/laf_service/host_supervisor.py', copied)
         with tempfile.TemporaryDirectory() as d:
             dest = Path(d)
             for item in copied:
                 (dest / item).parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(root / item, dest / item)
-            code = "import sys; sys.path.insert(0, '.'); import inference.aceis_service.core_server; assert 'inference.aceis_service.backends' not in sys.modules"
+            code = "import sys; sys.path.insert(0, '.'); import inference.laf_service.core_server; assert 'inference.laf_service.backends' not in sys.modules"
             subprocess.run([sys.executable, '-I', '-B', '-c', code], cwd=dest, check=True, capture_output=True, text=True)
     def test_build_context_contains_only_reviewed_core_sources(self):
         from inference.core_container.build import CORE_FILES, prepare_context
@@ -200,7 +200,7 @@ class ConfigPackagingTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             prepare_context(root, d)
             observed = {str(path.relative_to(d)) for path in Path(d).rglob('*') if path.is_file()}
-            expected = {'inference/aceis_service/' + name for name in CORE_FILES}
+            expected = {'inference/laf_service/' + name for name in CORE_FILES}
             expected.add('inference/core_container/Dockerfile')
             self.assertEqual(observed, expected)
             self.assertFalse(any('host_supervisor' in name or 'backends.py' == Path(name).name for name in observed))

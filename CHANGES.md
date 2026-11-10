@@ -122,3 +122,59 @@ LICENSING.md, THIRD_PARTY_NOTICES.md, this file and the matching `.license`
 notices. MANIFEST.sha256 records final file identities, excluding itself.
 Future distributed modifications must identify changed files or components as
 required by KOL section 4(c), while preserving applicable original notices.
+
+## Interactive CLI source changes (2026-11-09)
+
+- Add a checkout-local `laf` launcher and `chat` subcommand over existing bounded JSON jobs.
+- Retain recent conversation turns in memory, display replies as chat, and mark context/output limits.
+- Add an optional explicit-workspace filename-only search with a fixed JSON tool schema and local `/find` command. No file contents, writes, shell, service configuration or model provisioning are added.
+- Add offline regressions and a usage guide. Real-model, supported-host and clean-host acceptance remain separate.
+- Preserve all existing `aceis-*` compatibility names; no installed unit/socket/connector is renamed.
+
+## Chat provenance and history follow-up (2026-11-10)
+
+- Label every generated line as unverified, label actual file observations as local, and distinguish client notices. Generated prose remains capable of incorrect claims.
+- Keep client filename observations out of assistant-generated history and prune each search turn as one complete group.
+- Do not dispatch tools from length-capped output, retain truncated turns, or automatically continue them.
+- Add regressions for result-line impersonation, observation roles, complete-turn pruning, reset and truncation. No new file, shell, model, service or network capability is added.
+
+## LAF identifier unification (2026-11-10)
+
+- Rename the Router and NPU source directories to `inference/laf_service` and
+  `inference/laf_npu_service`, and update every active import, test inventory,
+  Docker COPY/entrypoint and document link to those paths.
+- Use `laf-inference` / `laf-npu` unit, socket, state/cache and example container
+  names; `laf.inference.owner` / `laf.core.owner` ownership labels; `laf-*`
+  backend model aliases; and the `LAF_JSON ` NPU worker protocol prefix.
+- Update the CLI defaults, model catalog references, configuration examples,
+  source/build tests and operational documentation as one breaking source change.
+  No previous-name aliases, automatic migration or dual ownership acceptance
+  are provided. Add regressions for canonical names and bounded historical exceptions.
+- Keep the HTTP v1 API, public model IDs, explicit socket override, existing
+  generation lock, permission checks and lifecycle/resource guards unchanged.
+  No installed unit, process, model, container, connector or permission is changed.
+- Preserve all earlier entries above and the original `NOTICE` attribution
+  verbatim. Their old paths and prior compatibility decisions are historical;
+  the naming policy in this source version supersedes those earlier decisions.
+
+Affected current components: `README.md`, `LICENSING.md`, `THIRD_PARTY_NOTICES.md`,
+`docs/laf-candidate-profiles.md`, `docs/laf-chat-cli.md`,
+`docs/laf-core-integration.md`, `docs/laf-host-supervisor.md`,
+`inference/laf_service/`, `inference/laf_npu_service/`, `inference/core_container/`,
+`inference/local_platform/{API.md,README.md,cli.py,model_management.py,naming.md,
+workspace-client.md,test_chat.py,examples/cli-regression-task.json}`,
+`scripts/{check-laf.py,laf_socket_test_ids.py,test_laf_checks.py,test_laf_naming.py}`
+and this change record. Unchanged third-party references retain their own terms.
+
+## Remove development-only source metadata checks (2026-11-10)
+
+Remove the two repository-metadata test modules under `scripts/` and their runner
+registrations. The runner no longer scans filenames or emits source-file SHA
+lists and internal release/deployment flags. Update the current README to describe
+its test-result summary instead.
+
+Keep the functional and safety suites, private-socket grouping and accurate
+failure/skip accounting. Move the hardware-free NPU probe decoding regression
+into `inference/laf_npu_service/tests/test_service.py`; it tests actual output
+handling rather than product spelling. No production runtime source, service,
+model, connection, license, original attribution or earlier change record changes.

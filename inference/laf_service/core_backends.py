@@ -37,7 +37,7 @@ import threading
 import time
 from .core import GIB, MODELS, ServiceError
 
-NAMES = {'coder-next': 'aceis-coder-next', 'gpt-oss-120b': 'aceis-gpt-oss-120b'}
+NAMES = {'coder-next': 'laf-coder-next', 'gpt-oss-120b': 'laf-gpt-oss-120b'}
 
 
 # Candidate-only owner configuration. It does not mutate the compatibility catalog.

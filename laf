@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # KISS Open License Version 1.0 (KOL-v1)
 #
 # SPDX-FileCopyrightText: 2026 I-plusplus Inc.
@@ -18,26 +19,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
-# TEMPLATE ONLY: not an installable default. Replace every /REPLACE/ path.
-# Prerequisites: separately acquired compatible SDK/XRT/model, built worker,
-# Python, device access, and a private existing RUN_PARENT directory.
-# Validate the foreground launch and resource budgets before installing.
-[Unit]
-Description=AceIS optional private RyzenAI classifier
-StartLimitIntervalSec=300
-StartLimitBurst=2
+# Modified 2026-11-09: checkout-local CLI launcher; no installation or service changes.
+from inference.local_platform.cli import main
 
-[Service]
-Type=simple
-WorkingDirectory=/REPLACE/CHECKOUT
-RuntimeDirectory=aceis-npu
-RuntimeDirectoryMode=0700
-UMask=0077
-# Use a fresh per-invocation run directory. The parent directory must already exist.
-ExecStart=/usr/bin/python3 -m inference.aceis_npu_service.service --worker /REPLACE/BUILT_WORKER --sdk /REPLACE/SDK_ROOT --xrt /REPLACE/XRT_ROOT --model /REPLACE/PINNED_MODEL.onnx --run-dir /REPLACE/RUN_PARENT/${INVOCATION_ID} --socket %t/aceis-npu/service.sock
-Restart=on-failure
-RestartSec=5
-KillMode=control-group
-TimeoutStopSec=8
-[Install]
-WantedBy=default.target
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -48,7 +48,7 @@ def prepare_context(root, destination):
     root, destination = Path(root), Path(destination)
     if destination.is_symlink() or not destination.is_dir() or any(destination.iterdir()):
         raise ValueError('fresh empty non-symlink build-context directory required')
-    allowed = [Path('inference/aceis_service') / name for name in CORE_FILES]
+    allowed = [Path('inference/laf_service') / name for name in CORE_FILES]
     dockerfile = Path('inference/core_container/Dockerfile')
     copies = [line.split()[1:] for line in (root / dockerfile).read_text().splitlines()
               if line.startswith('COPY ')]
@@ -78,7 +78,7 @@ def image_readability_probe(image):
     """Read/import code as runtime UID in a disposable, offline, device-free container."""
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', image):
         raise ValueError('immutable local image ID required for readability preflight')
-    paths = ['inference/aceis_service/' + name for name in CORE_FILES]
+    paths = ['inference/laf_service/' + name for name in CORE_FILES]
     script = """import hashlib,importlib,json,os,pathlib,signal,stat,sys
 signal.alarm(20)
 assert (os.getuid(),os.getgid()) == (1000,1000), 'runtime UID/GID required'
@@ -95,7 +95,7 @@ for row in rows:
     name=row['path'][:-3].replace('/','.')
     if name.endswith('.__init__'): name=name[:-9]
     importlib.import_module(name)
-assert not {'inference.aceis_service.backends','inference.aceis_service.lifecycle_host','inference.aceis_service.host_supervisor'} & set(sys.modules), 'host authority imported'
+assert not {'inference.laf_service.backends','inference.laf_service.lifecycle_host','inference.laf_service.host_supervisor'} & set(sys.modules), 'host authority imported'
 print(json.dumps({'uid':os.getuid(),'gid':os.getgid(),'files':rows,'imports_ok':True,'no_host_authority_imported':True}))
 """
     result = subprocess.run([
@@ -114,7 +114,7 @@ print(json.dumps({'uid':os.getuid(),'gid':os.getgid(),'files':rows,'imports_ok':
 def verify_probe_sources(value, root):
     if (value.get('uid'), value.get('gid')) != (1000, 1000) or value.get('imports_ok') is not True or value.get('no_host_authority_imported') is not True:
         raise ValueError('unprivileged import verification failed')
-    expected = {'inference/aceis_service/' + name for name in CORE_FILES}
+    expected = {'inference/laf_service/' + name for name in CORE_FILES}
     rows = value.get('files', [])
     if len(rows) != len(expected) or {row.get('path') for row in rows} != expected:
         raise ValueError('readability probe source set differs from reviewed Core')

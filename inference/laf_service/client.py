@@ -18,7 +18,7 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
-"""Explicit local client for AceIS callers; no fallback or arbitrary URL."""
+"""Explicit local client for LAF Router callers; no fallback or arbitrary URL."""
 import argparse
 import json
 import os
@@ -45,7 +45,7 @@ def request(socket_path, method, path, body=None, timeout=310):
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('--socket', default=str(Path(os.environ.get('XDG_RUNTIME_DIR','/run/user/'+str(os.getuid()))) / 'aceis-inference/service.sock'))
+    p.add_argument('--socket', default=str(Path(os.environ.get('XDG_RUNTIME_DIR','/run/user/'+str(os.getuid()))) / 'laf-inference/service.sock'))
     p.add_argument('--health', action='store_true')
     p.add_argument('--model',choices=['flash','coder-next','gpt-oss-120b'])
     p.add_argument('--prompt')

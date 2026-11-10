@@ -175,7 +175,7 @@ class TelemetryTest(unittest.TestCase):
 
 class HostAdapterTest(unittest.TestCase):
     def adapter(self):
-        with patch('inference.aceis_service.lifecycle_host.Backends') as ctor:
+        with patch('inference.laf_service.lifecycle_host.Backends') as ctor:
             backend = ctor.return_value; backend.cid = 'a' * 64
             return OwnedOllama({}, 'host-only-config'), backend
     def test_stop_verifies_ownership_before_and_state_after(self):

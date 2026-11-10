@@ -180,7 +180,7 @@ def read_catalog(path=None):
     if path is None:
         return validate_catalog([{
             'id': key, 'engine': 'strata' if key == 'flash' else 'ollama',
-            'reference': 'flash' if key == 'flash' else 'aceis-'+key+':latest',
+            'reference': 'flash' if key == 'flash' else 'laf-'+key+':latest',
             'source': None, 'license': None, 'license_url': None,
             'version': None, 'required_bytes': None, 'digest': None,
             'user_setup_required': True,

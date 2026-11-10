@@ -36,15 +36,15 @@ Run the focused checks from this candidate directory:
 
 ```sh
 LAF_TEST_LIVE_UDS=1 python3 -B -m unittest -v \
-  inference.aceis_service.test_acceptance_profiles
+  inference.laf_service.test_acceptance_profiles
 LAF_TEST_LIVE_UDS=1 python3 -B -m unittest -v \
-  inference.aceis_service.test_lifecycle \
-  inference.aceis_service.test_lifecycle_uds \
-  inference.aceis_service.test_lifecycle_uds_live \
-  inference.aceis_service.test_host_supervisor \
-  inference.aceis_service.test_core_integration \
-  inference.aceis_service.test_service \
-  inference.aceis_service.test_acceptance_profiles \
+  inference.laf_service.test_lifecycle \
+  inference.laf_service.test_lifecycle_uds \
+  inference.laf_service.test_lifecycle_uds_live \
+  inference.laf_service.test_host_supervisor \
+  inference.laf_service.test_core_integration \
+  inference.laf_service.test_service \
+  inference.laf_service.test_acceptance_profiles \
   inference.local_platform.test_models
 ```
 

@@ -162,7 +162,7 @@ class OwnedCoreStop:
         if (any(type(host.get(key)) is not int or host[key] != value
                 for key, value in self.limits.items())
                 or info['Name'] != '/' + p['container_name'] or info['Image'] != p['image']
-                or conf.get('Labels', {}).get('aceis.core.owner') != p['owner']
+                or conf.get('Labels', {}).get('laf.core.owner') != p['owner']
                 or conf.get('User') != f"{p['uid']}:{p['gid']}"
                 or host.get('Privileged') is not False or host.get('PortBindings')
                 or any(info['NetworkSettings'].get('Ports', {}).values())

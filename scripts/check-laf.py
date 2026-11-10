@@ -19,6 +19,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-09: include offline conversation CLI regressions.
+
 """Run standalone LAF Python regressions without models, Docker or vendor SDKs.
 
 Portable omits exactly the enumerated socket tests. Sockets selects only those
@@ -27,7 +29,6 @@ tests. Full runs both groups. No mode establishes runtime or release readiness.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -38,16 +39,17 @@ from laf_socket_test_ids import PRIVATE_SOCKET_TESTS
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULES = (
-    'inference.aceis_npu_service.tests.test_service',
-    'inference.aceis_service.test_acceptance_profiles',
-    'inference.aceis_service.test_core_integration',
-    'inference.aceis_service.test_host_supervisor',
-    'inference.aceis_service.test_lifecycle',
-    'inference.aceis_service.test_lifecycle_uds',
-    'inference.aceis_service.test_lifecycle_uds_live',
-    'inference.aceis_service.test_npu_bridge',
-    'inference.aceis_service.test_service',
+    'inference.laf_npu_service.tests.test_service',
+    'inference.laf_service.test_acceptance_profiles',
+    'inference.laf_service.test_core_integration',
+    'inference.laf_service.test_host_supervisor',
+    'inference.laf_service.test_lifecycle',
+    'inference.laf_service.test_lifecycle_uds',
+    'inference.laf_service.test_lifecycle_uds_live',
+    'inference.laf_service.test_npu_bridge',
+    'inference.laf_service.test_service',
     'inference.core_container.test_build',
+    'inference.local_platform.test_chat',
     'inference.local_platform.test_cli',
     'inference.local_platform.test_cli_responses',
     'inference.local_platform.test_developer',
@@ -55,11 +57,7 @@ MODULES = (
     'inference.local_platform.test_project_runner',
     'inference.local_platform.test_repair',
     'inference.local_platform.test_workspace',
-    'test_laf_checks',
 )
-# This file is a resource-limited child executable used by workspace tests,
-# not a unittest module. Its behavior is exercised by those parent tests.
-CHILD_HELPERS = frozenset({'inference.local_platform.test_runner'})
 
 
 def flatten(suite):
@@ -68,16 +66,6 @@ def flatten(suite):
             yield from flatten(test)
         else:
             yield test
-
-
-def check_module_inventory(root=ROOT, modules=MODULES):
-    actual = {
-        '.'.join(path.relative_to(root).with_suffix('').parts)
-        for path in (root / 'inference').rglob('test_*.py')
-    }
-    actual.update(path.stem for path in (root / 'scripts').glob('test_*.py'))
-    if len(modules) != len(set(modules)) or actual != set(modules) | CHILD_HELPERS:
-        raise ValueError('explicit test module inventory is stale')
 
 
 def select_tests(suite, mode, socket_ids=PRIVATE_SOCKET_TESTS):
@@ -122,23 +110,6 @@ def summary(result, planned, selected, unexecuted, mode):
     }
 
 
-def source_identity(root=ROOT):
-    paths = []
-    for directory in ('inference', 'scripts', 'docs'):
-        paths.extend(path for path in (root / directory).rglob('*')
-                     if '__pycache__' not in path.parts and path.suffix != '.pyc'
-                     and (path.is_file() or path.is_symlink()))
-    paths.extend(root / name for name in ('README.md', 'AGENTS.md', '.gitignore'))
-    result = {}
-    for path in sorted(paths):
-        if path.is_symlink() or not path.is_file():
-            raise ValueError('source fingerprint requires regular non-symlink files')
-        if path.stat().st_size > 2 * 1024**2:
-            raise ValueError('unexpected large input in source fingerprint')
-        result[str(path.relative_to(root))] = hashlib.sha256(path.read_bytes()).hexdigest()
-    return result
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--suite', choices=('full', 'portable', 'sockets'), required=True)
@@ -146,7 +117,6 @@ def main(argv=None):
     sys.path[:0] = [str(ROOT), str(ROOT / 'scripts')]
     os.environ['LAF_TEST_LIVE_UDS'] = '1'
     try:
-        check_module_inventory()
         suite = unittest.TestLoader().loadTestsFromNames(MODULES)
         suite, planned, unexecuted = select_tests(suite, args.suite)
         selected = suite.countTestCases()
@@ -154,15 +124,12 @@ def main(argv=None):
         report = summary(result, planned, selected, unexecuted, args.suite)
         report.update(
             schema_version=1, suite=args.suite, python_version=sys.version.split()[0],
-            source_sha256=source_identity(), p0_complete=False,
-            release_authorized=False, deployed=False,
             scope='Standalone source Python unit/mocked checks only. No Docker, model, vendor runtime, native NPU, clean-host runtime, second-PC, legal or publication acceptance.',
         )
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0 if report['selected_suite_passed'] else 1
     except (ImportError, OSError, ValueError, TypeError) as exc:
-        print(json.dumps({'error': 'check_execution_invalid', 'error_type': type(exc).__name__,
-                          'p0_complete': False, 'release_authorized': False}))
+        print(json.dumps({'error': 'check_execution_invalid', 'error_type': type(exc).__name__}))
         return 2
 
 

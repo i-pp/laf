@@ -22,12 +22,16 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
+<!-- Modified 2026-11-09: add the checkout-local interactive chat guide. -->
+
 # Local AI Fabric
 
 Local AI Fabric (LAF) provides a guarded local inference service, an opt-in Core
 and host-supervisor boundary, a scoped development client and model management.
-The `inference.aceis_service.*` module path and existing API/ownership names remain
-compatibility identifiers. The separate AceIS implementation is not included.
+The Router uses `inference.laf_service.*`; the optional NPU service uses
+`inference.laf_npu_service.*`. This source version uses LAF names throughout its
+active code, configuration and examples. See [naming and migration](inference/local_platform/naming.md)
+before using it with an older installation.
 
 ## Busy-reader summary
 
@@ -68,15 +72,26 @@ combines both groups. A denied socket is an error, never an automatically skippe
 or passing test. Native C++/ORT, real GPU/NPU, clean-host runtime and second-PC
 checks are separate and are not run by this Python suite.
 
+## Terminal conversation with an existing Router
+
+The checkout-local `laf` launcher adds an interactive `chat` command. It keeps
+recent conversation turns in memory, uses the existing JSON job API, and prints
+chat-like replies. Model text, client notices and actual filename observations
+have distinct labels; these do not guarantee that generated prose is correct. An explicit workspace enables a bounded filename-only search
+requested by the model or `/find`. It cannot read file contents, write files or
+run a shell. Start with [the chat CLI guide](docs/laf-chat-cli.md) for practical
+commands, privacy boundaries and the real-model acceptance work still required.
+This client does not install models or turn this preview into a clean-host runtime.
+
 ## Code map
 
-- [Router and existing-assets operation](inference/aceis_service/README.md)
+- [Router and existing-assets operation](inference/laf_service/README.md)
 - [Opt-in Core and image source boundary](docs/laf-core-integration.md)
 - [Fixed host supervisor](docs/laf-host-supervisor.md)
 - [Model catalog, management and provenance](docs/laf-model-management.md)
 - [Scoped development client](inference/local_platform/README.md)
-- [Optional fixed-shape NPU service](inference/aceis_npu_service/README.md)
-- [NPU runtime rights and distribution gates](inference/aceis_npu_service/DISTRIBUTION.md)
+- [Optional fixed-shape NPU service](inference/laf_npu_service/README.md)
+- [NPU runtime rights and distribution gates](inference/laf_npu_service/DISTRIBUTION.md)
 
 ## Runtime prerequisites and current limits
 
@@ -93,7 +108,7 @@ Configuration and systemd examples are templates. Replace every placeholder
 path, UID, container name and network with inspected local values. JSON does not
 expand `~`, `$HOME` or environment variables. A generation lock must refer to the
 same existing owner-controlled lock used by other local model workloads. Keep
-compatibility labels and ownership checks intact. No example authorizes replacing
+the LAF ownership labels and ownership checks intact. No example authorizes replacing
 an existing service, changing device permissions or exposing a network port.
 
 Default model catalog entries intentionally lack verified acquisition, license,
@@ -104,9 +119,9 @@ accept legal terms, authenticate to providers or obtain redistribution rights.
 ## Evidence and release boundary
 
 Historical private host reports remain outside this source draft. Their previous
-test counts and binary hashes are not acceptance of this tree. The new runner
-records its exact source/fixture fingerprints and current result scope. Preserve
-failed and unexecuted stages when reproducing it on another executor.
+test counts and binary hashes are not acceptance of this tree. The Python runner
+reports the selected tests, failures and unexecuted groups. Preserve failed and
+unexecuted stages when reproducing it on another executor.
 
 The Owner approved this bounded first-party source import and KOL v1 licensing.
 The top-level LICENSE covers the project's first-party material throughout
@@ -119,9 +134,8 @@ exhaustive security, patent or legal clearance. KOL is a custom license, not a
 claim of OSI approval. Preserve applicable notices and identify distributed
 changes as required by the full license.
 
-The Python runner records its source/fixture fingerprints and selected test
-scope; its fixed `p0_complete`, `release_authorized` and `deployed` flags remain
-false because tests do not grant runtime-release or deployment approval.
+A passing Python suite does not establish hardware support, a complete runtime
+release or deployment readiness.
 
 A runtime or image release additionally needs the exact external dependency
 inventory/SBOM, redistribution assessment, clean-host behavior and real

@@ -283,7 +283,7 @@ class CoreStopTest(unittest.TestCase):
                            uid=os.getuid(), gid=os.getgid(), network='laf-private', mounts=[], devices=[],
                            memory=8 * 1024**3, memory_swap=8 * 1024**3, nano_cpus=2_000_000_000, pids_limit=128)
         self.info = dict(Name='/laf-core', Image=self.policy['image'],
-                         Config={'Labels': {'aceis.core.owner': 'test-owner'}, 'User': f'{os.getuid()}:{os.getgid()}'},
+                         Config={'Labels': {'laf.core.owner': 'test-owner'}, 'User': f'{os.getuid()}:{os.getgid()}'},
                          HostConfig=dict(Privileged=False, PortBindings={}, ReadonlyRootfs=True,
                                          CapDrop=['ALL'], SecurityOpt=['no-new-privileges:true'],
                                          PidMode='', IpcMode='private', NetworkMode='laf-private', Devices=[],

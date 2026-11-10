@@ -25,10 +25,10 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 # LAF Router v1 API contract
 
 This documents the GPU/NPU API used by Local AI Fabric (LAF). The display name is
-LAF Router; [naming and compatibility](naming.md) records the unchanged technical
-identifiers. The wire contract covers GPU generation, capability discovery and
-independent NPU classification. Existing `aceis-*` deployment names
-are compatibility identifiers. Codex, OpenAI and MCP emulation is not required.
+LAF Router; [naming and migration](naming.md) records its LAF identifiers and
+the source migration boundary. The wire contract covers GPU generation, capability
+discovery and independent NPU classification. Codex, OpenAI and MCP emulation is
+not required.
 The `/v1/chat/completions` compatibility route is not the standard client path and
 is not a complete OpenAI API. No native Ollama endpoint is exposed to clients.
 

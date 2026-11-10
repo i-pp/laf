@@ -31,20 +31,20 @@ This is a local P0 implementation, not an installed service or a verified deploy
 From this checkout, run the deterministic tests:
 
 ```sh
-PYTHONPATH=inference python3 -B -m unittest aceis_service.test_host_supervisor -v
+PYTHONPATH=inference python3 -B -m unittest laf_service.test_host_supervisor -v
 ```
 
 On an authorized Linux test host that permits temporary AF_UNIX sockets, the same fake-provider suite can additionally exercise actual owner-only endpoint creation and cleanup:
 
 ```sh
-LAF_TEST_LIVE_UDS=1 PYTHONPATH=inference python3 -B -m unittest aceis_service.test_host_supervisor -v
+LAF_TEST_LIVE_UDS=1 PYTHONPATH=inference python3 -B -m unittest laf_service.test_host_supervisor -v
 ```
 
 The deterministic checks use injected lane doubles. Actual socket tests require an executor that permits private AF_UNIX sockets and Linux peer-UID queries. Use the explicit portable/socket/full groups in [the root README](../README.md) for aggregate results; these focused checks do not establish production readiness, GPU performance or behavior of a deployed Docker daemon.
 
 ## Host configuration contract
 
-The explicit entrypoint is `python3 -B -m aceis_service.host_supervisor --config /absolute/host-config.json`, with `inference` on `PYTHONPATH`. This is only an entrypoint, **not a complete Quick Start**. Before using it, the operator must separately establish the pinned images, model files, historical lock, private runtime/state directories, existing internal bridge network, GPU/device mappings, and an authorized stopped Core container. No provisioning or service installation is provided here.
+The explicit entrypoint is `python3 -B -m laf_service.host_supervisor --config /absolute/host-config.json`, with `inference` on `PYTHONPATH`. This is only an entrypoint, **not a complete Quick Start**. Before using it, the operator must separately establish the pinned images, model files, historical lock, private runtime/state directories, existing internal bridge network, GPU/device mappings, and an authorized stopped Core container. No provisioning or service installation is provided here.
 
 The config must be an owner-only regular file with no symlink path components. The generation lock must already exist as an owner-only regular file; it is locked without truncation. Runtime and state directories must already exist, owner-only mode 0700. The private `supervisor.lock` is created if absent and deliberately retained after release to prevent split lock domains. Existing socket entries are never replaced.
 
@@ -79,7 +79,7 @@ Illustrative structure only; placeholders deliberately fail validation and must 
 }
 ```
 
-The nested `ollama` configuration is the legacy fixed backend policy, not client input. Its image remains the backend's fixed reviewed digest. Core's owner label key is `aceis.core.owner`; its UID/GID must match the supervisor's current host UID/GID. Mounts must enumerate every observed mount as `{"Source":"/absolute/existing/source","Destination":"/container/path","RW":false}`. Devices must enumerate exact Docker inspect objects with `PathOnHost`, `PathInContainer`, and `CgroupPermissions`; only `/dev/kfd` and `/dev/dri/renderD128` with matching container paths and `rwm` are permitted. No Docker socket, known Docker-socket ancestor directory, or symlink mount source is permitted. An empty mounts/devices list is valid only when inspect also reports no mounts/devices; it is not a working GPU Core configuration.
+The nested `ollama` configuration is the legacy fixed backend policy, not client input. Its image remains the backend's fixed reviewed digest. Core's owner label key is `laf.core.owner`; its UID/GID must match the supervisor's current host UID/GID. Mounts must enumerate every observed mount as `{"Source":"/absolute/existing/source","Destination":"/container/path","RW":false}`. Devices must enumerate exact Docker inspect objects with `PathOnHost`, `PathInContainer`, and `CgroupPermissions`; only `/dev/kfd` and `/dev/dri/renderD128` with matching container paths and `rwm` are permitted. No Docker socket, known Docker-socket ancestor directory, or symlink mount source is permitted. An empty mounts/devices list is valid only when inspect also reports no mounts/devices; it is not a working GPU Core configuration.
 
 Core resource policy must explicitly provide positive integer `memory` and `memory_swap` in bytes, `nano_cpus` in billionths of a CPU, and `pids_limit`. Each must fit Docker's signed 64-bit representation. `memory_swap` must equal `memory`, allowing no extra swap. Docker inspect must report exactly those values in `Memory`, `MemorySwap`, `NanoCpus`, and `PidsLimit`; missing values, zero/unlimited values, booleans, and mismatches are rejected before any stop. The example zeros deliberately fail closed. Actual limits must be chosen for the approved workload and host capacity; this module supplies no hardware-tuning defaults.
 

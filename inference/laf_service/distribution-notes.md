@@ -27,10 +27,9 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 Local AI Fabric (LAF) is the agreed name for the independent local-LLM-plus-NPU
 development platform intended for future free Docker Hub distribution. The
 agreed service and MCP display names are LAF Router and LAF MCP; see
-[naming and compatibility](../local_platform/naming.md). This is not publication
-of AceIS itself. The current
-AceIS implementation continues separately. This change neither
-publishes an image nor grants release approval. Separate GPU and NPU services
+[naming and migration](../local_platform/naming.md). This source preview neither
+publishes an image nor grants release approval. External daemon implementations
+and their deployment settings remain outside this repository. Separate GPU and NPU services
 remain the intended boundary, with a private Router client contract and no public
 API by default. The user-service template requires a preprovisioned machine; it is not a portable
 container release. Strata, Ollama, SDKs and models must be obtained separately.

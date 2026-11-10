@@ -145,14 +145,14 @@ class ClassificationHTTPTest(unittest.TestCase):
         self.assertFalse(out['npu']['application_accuracy_verified'])
         self.assertFalse(out['npu']['configured'])
     def test_classification_success_separate_from_gpu_lane(self):
-        with patch('inference.aceis_service.server.npu_classify',return_value=ready()) as call:
+        with patch('inference.laf_service.server.npu_classify',return_value=ready()) as call:
             code,result=self.request('POST','/v1/classify',{'input':[0]*3072})
             self.assertEqual(code,200);self.assertEqual(result['class_index'],9)
             self.assertEqual(call.call_count,1)
             self.assertEqual(self.ctl.backend.calls,[])
             self.assertEqual(self.ctl.queue.qsize(),0)
     def test_npu_outage_keeps_gpu_ready_and_serving(self):
-        with patch('inference.aceis_service.server.npu_classify',side_effect=NPUUnavailable()):
+        with patch('inference.laf_service.server.npu_classify',side_effect=NPUUnavailable()):
             self.assertEqual(self.request('POST','/v1/classify',{'input':[0]*3072})[0],503)
         self.assertEqual(self.request('GET','/health')[0],200)
         self.assertEqual(self.request('POST','/v1/chat/completions',body())[1]['status'],'completed')
@@ -162,7 +162,7 @@ class ClassificationHTTPTest(unittest.TestCase):
         try:self.assertEqual(self.request('POST','/v1/classify',{'input':[0]*3072})[0],429)
         finally:self.srv.npu_slot.release()
     def test_only_classification_gets_larger_body(self):
-        with patch('inference.aceis_service.server.npu_classify',return_value=ready()):
+        with patch('inference.laf_service.server.npu_classify',return_value=ready()):
             self.assertEqual(self.request('POST','/v1/classify',{'input':[1.23456789012345e20]*3072})[0],200)
         self.assertEqual(self.request('POST','/v1/jobs',body(content='x'*40000))[0],400)
     def test_empty_origin_is_rejected(self):

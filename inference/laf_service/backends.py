@@ -32,7 +32,7 @@ import time
 from .core import GIB, ServiceError, snapshot
 
 IMAGE = 'sha256:d4ae7c574945c7432c8c02ae63fa81ad555854d9fcbc29d02542a4dd69833a85'
-NAMES = {'coder-next': 'aceis-coder-next', 'gpt-oss-120b': 'aceis-gpt-oss-120b'}
+NAMES = {'coder-next': 'laf-coder-next', 'gpt-oss-120b': 'laf-gpt-oss-120b'}
 
 
 class Backends:
@@ -63,7 +63,7 @@ class Backends:
         if not self.cid:
             return None
         info = json.loads(self.docker('inspect', self.cid))[0]
-        if info['Config'].get('Labels', {}).get('aceis.inference.owner') != self.owner or info['Image'] != IMAGE:
+        if info['Config'].get('Labels', {}).get('laf.inference.owner') != self.owner or info['Image'] != IMAGE:
             raise ServiceError('container ownership or image identity changed')
         host = info['HostConfig']
         expected_network = self.config['docker_network']
@@ -123,7 +123,7 @@ class Backends:
                      'gpt-oss-120b': 'gpt-oss-120b/gpt-oss-120b-MXFP4.gguf'}
             for model, path in files.items():
                 (state / 'input' / (model + '.Modelfile')).write_text('FROM /weights/' + path + '\n')
-            args = ['create', '--pull=never', '--name', name, '--label', 'aceis.inference.owner=' + self.owner,
+            args = ['create', '--pull=never', '--name', name, '--label', 'laf.inference.owner=' + self.owner,
                     '--memory', '32g', '--memory-swap', '32g', '--cpus', '8', '--pids-limit', '512',
                     '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=512m', '--ipc', 'private',
                     '--network', network, '--user', f'{os.getuid()}:{os.getgid()}', '--device', '/dev/kfd',

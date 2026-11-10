@@ -35,7 +35,7 @@ Private hardware acceptance records are omitted from this source candidate;
 no hardware or deployment result is claimed for this checkout.
 
 ```bash
-python3 -B -m unittest discover -s inference/aceis_npu_service/tests -v
+python3 -B -m unittest discover -s inference/laf_npu_service/tests -v
 ```
 
 This regression command needs permission to create Unix-domain sockets. For
@@ -54,7 +54,7 @@ The production C++ input parser also has a device-free boundary fixture:
 
 ```bash
 c++ -std=c++17 -O2 -Wall -Wextra -Werror -I"$SDK/cpp-test/include" \
-  inference/aceis_npu_service/tests/test_parser.cpp \
+  inference/laf_npu_service/tests/test_parser.cpp \
   -L"$SDK/cpp-test/sdk/onnxruntime/lib" -lonnxruntime -o "$PRIVATE_BUILD/test-parser"
 LD_LIBRARY_PATH="$SDK/cpp-test/sdk/onnxruntime/lib" "$PRIVATE_BUILD/test-parser"
 ```
@@ -76,23 +76,23 @@ This fixture checks the smallest positive float32 subnormal and maximum finite f
 
 Obtain and provision these prerequisites separately: Ryzen AI SDK 1.8.0, its ONNX Runtime 1.27.0 C headers/libraries, its matching Peano, local XRT 2.25.37, an accessible `/dev/accel/accel0`, and a compiler. The commands below do not install or validate that stack. Do not substitute another XRT version merely because its SONAME matches.
 
-From the repository root, with no conflicting NPU workload. Replace the SDK placeholder with your authorized local SDK path. Stop only your own existing `aceis-npu.service`, if installed, before a foreground experiment; do not start two copies:
+From the repository root, with no conflicting NPU workload. If adopting this source over an older installation, first inspect the previously named unit and follow [naming and migration](../local_platform/naming.md); a renamed checkout does not stop it. Replace the SDK placeholder with your authorized local SDK path. Stop only your own existing `laf-npu.service`, if installed, before a foreground experiment; do not start two copies:
 
 ```bash
 SDK="/ABSOLUTE/authorized-ryzen-ai-1.8.0"
-PRIVATE_BUILD="$HOME/.cache/aceis-npu-build"
+PRIVATE_BUILD="$HOME/.cache/laf-npu-build"
 install -d -m 700 "$PRIVATE_BUILD"
-bash inference/aceis_npu_service/build.sh "$SDK" "$PRIVATE_BUILD/worker"
+bash inference/laf_npu_service/build.sh "$SDK" "$PRIVATE_BUILD/worker"
 # worker must be a NEW filename. Rebuild with a different filename; existing output is preserved.
-RUN_PARENT="$HOME/.cache/aceis-npu-runs"
+RUN_PARENT="$HOME/.cache/laf-npu-runs"
 install -d -m 700 "$RUN_PARENT"
 RUN="$RUN_PARENT/run-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 # RUN must not exist; the service creates it with mode 0700.
-python3 -m inference.aceis_npu_service.service \
+python3 -m inference.laf_npu_service.service \
   --worker "$PRIVATE_BUILD/worker" --sdk "$SDK" \
   --xrt "$SDK/xrt-2.25.37/opt/xilinx/xrt" \
   --model "$SDK/cpp-test/samples/quicktest/test_model.onnx" \
-  --run-dir "$RUN" --socket "$XDG_RUNTIME_DIR/aceis-npu/service.sock"
+  --run-dir "$RUN" --socket "$XDG_RUNTIME_DIR/laf-npu/service.sock"
 ```
 
 Leave this foreground process in an owned terminal, or use the optional user-unit template after reviewing its paths. Ctrl-C or SIGTERM to **this service PID** stops its worker process group and removes its own socket. Do not use broad `pkill` commands. Startup has one warmup and a 180-second timeout. Startup failure closes the owned worker and exits instead of switching to CPU. A dead worker after startup returns not-ready; the process exits nonzero so an external supervisor can apply a bounded restart policy.
@@ -106,7 +106,7 @@ python3 - <<'PY' > "$RUN/input.json"
 import json
 print(json.dumps({"model":"ryzenai-quicktest-10class", "input":[float(i%251)/250 for i in range(3072)]}))
 PY
-curl --max-time 12 --unix-socket "$XDG_RUNTIME_DIR/aceis-npu/service.sock" \
+curl --max-time 12 --unix-socket "$XDG_RUNTIME_DIR/laf-npu/service.sock" \
   -H 'Content-Type: application/json' --data-binary "@$RUN/input.json" \
   http://localhost/v1/classify
 ```
@@ -120,16 +120,16 @@ the SDK-relative model/XRT layout shown above. It is a hardware check on an
 already provisioned host, not an installation procedure:
 
 ```bash
-python3 -m inference.aceis_npu_service.probe_hardware \
+python3 -m inference.laf_npu_service.probe_hardware \
   --worker "$PRIVATE_BUILD/worker" --sdk "$SDK" \
-  --output "$HOME/.cache/aceis-npu-probe-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+  --output "$HOME/.cache/laf-npu-probe-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 ```
 
 It needs an already installed `strace`, direct NPU access, and a fresh output directory. It runs once on CPU and once on NPU, with one warmup and one request per mode. Its acceptance threshold is exact equality for this synthetic probe, not a general model tolerance. No retry is performed.
 
 1. Run one warmup and one synthetic inference under `strace -f -yy -e trace=ioctl -o PRIVATE/ioctl.trace`, with a 180-second timeout. Trace only a newly owned worker, not unrelated processes. The trace contains only ioctl metadata for this synthetic test. Do not commit raw traces.
 2. Inspect the fresh ORT profile with `profile_evidence`: it must contain executed `VitisAIExecutionProvider` node events and no ORT CPU-provider events. Check compiler partitions separately; CPU work internal to VitisAI does not appear as CPU EP events.
-3. Run `python3 -m inference.aceis_npu_service.verify_trace PRIVATE/ioctl.trace`. It requires successful `DRM_IOCTL_AMDXDNA_EXEC_CMD` and successful `DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT` on `/dev/accel/accel0`.
+3. Run `python3 -m inference.laf_npu_service.verify_trace PRIVATE/ioctl.trace`. It requires successful `DRM_IOCTL_AMDXDNA_EXEC_CMD` and successful `DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT` on `/dev/accel/accel0`.
 4. Compare all ten finite output logits to an explicit CPU-mode run with the same serialized input and model hash. Use an application-justified tolerance for other models/inputs. One matching synthetic sample is not model accuracy validation.
 
 Do not bypass missing device access, relax kernel tracing/security settings, install a different driver, or reset the NPU to make the probe pass. Report the blocked stage instead. An open accelerator file descriptor alone is not execution proof.
@@ -149,7 +149,7 @@ See [distribution requirements](DISTRIBUTION.md) for runtime and rights gates.
 
 ## Optional supervision
 
-The [user-unit template](systemd/aceis-npu.service.example) requires replacement
+The [user-unit template](systemd/laf-npu.service.example) requires replacement
 of all placeholder paths and a separately built worker. It is not installed by
 this source tree. Its bounded restart policy allows at most two starts in five
 minutes; investigate a failure rather than repeatedly resetting the limit.

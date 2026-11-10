@@ -18,10 +18,12 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-09: reuse bounded JSON jobs for interactive chat.
+
 """Bounded standalone CLI for a private local inference service.
 
-It does not depend on AceIS daemon/MCP and does not expose a network listener.
-The current compatibility transport is the existing owner-only Router socket.
+It does not depend on an external daemon/MCP and exposes no network listener.
+The transport is the owner-only LAF Router socket.
 """
 import argparse
 import http.client
@@ -160,8 +162,20 @@ def ask(path, model, text, max_tokens=512, timeout=180, call=request, sleep=time
         raise ClientError('input must be1..8192 UTF-8 bytes and fit the server context budget')
     if len(text.encode("utf-8")) + 64 + max_tokens + 256 > 8192:
         raise ClientError('input exceeds server context budget')
-    body = {'model':model,'messages':[{'role':'user','content':text}],
+    return converse(path, model, [{'role':'user','content':text}], max_tokens,
+                    timeout, call=call, sleep=sleep)
+
+
+def converse(path, model, messages, max_tokens=512, timeout=180, call=None, sleep=time.sleep):
+    """One bounded JSON chat job. Never replay an uncertain submission."""
+    from inference.laf_service.core import validate_request
+    body = {'model':model,'messages':messages,
             'max_tokens':max_tokens,'timeout_seconds':timeout}
+    try:
+        validate_request(body)
+    except (ValueError, UnicodeError) as exc:
+        raise ClientError(str(exc)) from None
+    call = request if call is None else call
     # A submission failure might follow accepted work. Never replay it.
     try:
         submitted = call(path,'POST','/v1/jobs',body)
@@ -208,7 +222,7 @@ def main(argv=None):
         return model_main(actual[1:])
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--socket',default=os.environ.get('LOCAL_INFERENCE_SOCKET',
-        '/run/user/'+str(os.getuid())+'/aceis-inference/service.sock'),
+        '/run/user/'+str(os.getuid())+'/laf-inference/service.sock'),
         help='operator-chosen existing private UDS; no TCP or credentials created')
     sub=p.add_subparsers(dest='command',required=True)
     model=sub.add_parser('model',help='persistent catalog/install/list/remove/inspect; use model --help',add_help=False)
@@ -228,7 +242,15 @@ def main(argv=None):
     source=q.add_mutually_exclusive_group(required=True);source.add_argument('--prompt');source.add_argument('--input',help='UTF-8 file, or - for stdin')
     q.add_argument('--max-tokens',type=int,default=512);q.add_argument('--timeout',type=int,default=180)
     q.add_argument('--output',help='create a new JSON file; never overwrite')
+    chat=sub.add_parser('chat',help='interactive conversation; optional bounded workspace filename search')
+    chat.add_argument('--model',choices=MODELS,default='gpt-oss-120b')
+    chat.add_argument('--max-tokens',type=int,default=512)
+    chat.add_argument('--timeout',type=int,default=180)
+    chat.add_argument('--workspace',help='absolute owned directory; permits filename-only search, no shell or file contents')
     args=p.parse_args(argv)
+    if args.command=='chat':
+        from .chat import run_chat
+        return run_chat(args.socket,args.model,args.max_tokens,args.timeout,args.workspace)
     if args.command=='model':
         from .model_management import main as model_main
         return model_main(args.model_args)
@@ -252,7 +274,7 @@ def main(argv=None):
         elif args.command=='classify':
             with open(args.input,'rb') as f:data=f.read(100001)
             if len(data)>100000:raise ClientError('classification input exceeds bound')
-            from inference.aceis_service.npu_bridge import validate_input, validate_result, NPUUnavailable
+            from inference.laf_service.npu_bridge import validate_input, validate_result, NPUUnavailable
             payload=validate_input(json.loads(data))
             try:out=validate_result(request(args.socket,'POST','/v1/classify',payload,timeout=13))
             except NPUUnavailable:raise ClientError('classification identity/output invalid; not retried') from None

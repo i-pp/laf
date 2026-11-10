@@ -140,7 +140,7 @@ class FramingTest(unittest.TestCase):
         original = stream.recv
         def slow(count): clock[0] += .06; return original(min(count, 2))
         stream.recv = slow
-        with patch('inference.aceis_service.lifecycle_uds.time.monotonic', side_effect=lambda: clock[0]):
+        with patch('inference.laf_service.lifecycle_uds.time.monotonic', side_effect=lambda: clock[0]):
             with self.assertRaises(TimeoutError): read_frame(stream, MAX_REQUEST, .1)
         self.assertEqual(stream.reads, 2)
     def test_private_directory_rejects_public_and_symlink(self):
