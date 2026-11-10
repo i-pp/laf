@@ -28,8 +28,10 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 Local AI Fabric (LAF) provides a guarded local inference service, an opt-in Core
 and host-supervisor boundary, a scoped development client and model management.
-The `inference.aceis_service.*` module path and existing API/ownership names remain
-compatibility identifiers. The separate AceIS implementation is not included.
+The Router uses `inference.laf_service.*`; the optional NPU service uses
+`inference.laf_npu_service.*`. This source version uses LAF names throughout its
+active code, configuration and examples. See [naming and migration](inference/local_platform/naming.md)
+before using it with an older installation.
 
 ## Busy-reader summary
 
@@ -83,13 +85,13 @@ This client does not install models or turn this preview into a clean-host runti
 
 ## Code map
 
-- [Router and existing-assets operation](inference/aceis_service/README.md)
+- [Router and existing-assets operation](inference/laf_service/README.md)
 - [Opt-in Core and image source boundary](docs/laf-core-integration.md)
 - [Fixed host supervisor](docs/laf-host-supervisor.md)
 - [Model catalog, management and provenance](docs/laf-model-management.md)
 - [Scoped development client](inference/local_platform/README.md)
-- [Optional fixed-shape NPU service](inference/aceis_npu_service/README.md)
-- [NPU runtime rights and distribution gates](inference/aceis_npu_service/DISTRIBUTION.md)
+- [Optional fixed-shape NPU service](inference/laf_npu_service/README.md)
+- [NPU runtime rights and distribution gates](inference/laf_npu_service/DISTRIBUTION.md)
 
 ## Runtime prerequisites and current limits
 
@@ -106,7 +108,7 @@ Configuration and systemd examples are templates. Replace every placeholder
 path, UID, container name and network with inspected local values. JSON does not
 expand `~`, `$HOME` or environment variables. A generation lock must refer to the
 same existing owner-controlled lock used by other local model workloads. Keep
-compatibility labels and ownership checks intact. No example authorizes replacing
+the LAF ownership labels and ownership checks intact. No example authorizes replacing
 an existing service, changing device permissions or exposing a network port.
 
 Default model catalog entries intentionally lack verified acquisition, license,

@@ -89,7 +89,7 @@ def job(model='test-qwen-small-1'):
 class CatalogTest(unittest.TestCase):
     def test_default_constants_validation_and_profiles_unchanged(self):
         self.assertEqual(MODELS, {'flash', 'coder-next', 'gpt-oss-120b'})
-        self.assertEqual(NAMES, {'coder-next': 'aceis-coder-next', 'gpt-oss-120b': 'aceis-gpt-oss-120b'})
+        self.assertEqual(NAMES, {'coder-next': 'laf-coder-next', 'gpt-oss-120b': 'laf-gpt-oss-120b'})
         backend, _ = make()
         self.assertTrue(backend.requires_flash); self.assertEqual(backend.models, MODELS)
         for key in MODELS: validate_request(body(key))
@@ -162,7 +162,7 @@ class CatalogTest(unittest.TestCase):
 class OllamaOnlyTest(unittest.TestCase):
     def start(self, backend):
         backend.abort(); backend.start_ollama(); backend.verify_models()
-        with patch('inference.aceis_service.core_backends.time.sleep'): backend.capture_idle_baseline(lambda: None)
+        with patch('inference.laf_service.core_backends.time.sleep'): backend.capture_idle_baseline(lambda: None)
 
     def test_start_switch_and_shutdown_never_launch_flash(self):
         backend, client, api = candidate(); self.start(backend)
@@ -171,7 +171,7 @@ class OllamaOnlyTest(unittest.TestCase):
         self.assertTrue(backend.health()['ready']); self.assertFalse(backend.health()['flash_resident'])
         self.assertEqual(backend.generate(job(), lambda: None)['content'], 'fake candidate')
         before = client.samples
-        with patch('inference.aceis_service.core_backends.time.sleep'):
+        with patch('inference.laf_service.core_backends.time.sleep'):
             backend.generate(job('test-qwen-small-2'), lambda: None)
         self.assertEqual(client.samples - before, 2)
         requests = [body for path, body in api.calls if path == '/api/chat']
@@ -196,7 +196,7 @@ class OllamaOnlyTest(unittest.TestCase):
 
     def test_missing_configured_reference_prevents_readiness(self):
         backend, _, _ = candidate(); backend.start_ollama()
-        backend.api = lambda *args, **kwargs: {'models': [{'name': 'aceis-coder-next:latest'}]}
+        backend.api = lambda *args, **kwargs: {'models': [{'name': 'laf-coder-next:latest'}]}
         with self.assertRaises(ServiceError): backend.verify_models()
         self.assertFalse(backend.health()['ready'])
 
@@ -211,8 +211,8 @@ class OllamaOnlyTest(unittest.TestCase):
             if case == 'loaded': api.loaded = 'unowned:tag'
             if case == 'vram': client.resources['vram_used'] = 4 * GIB
             if case == 'ram': client.resources['mem_available'] = 7 * GIB
-            with self.subTest(case=case), patch('inference.aceis_service.core_backends.time.monotonic', side_effect=[0, 0, 1, 31]), \
-                 patch('inference.aceis_service.core_backends.time.sleep'):
+            with self.subTest(case=case), patch('inference.laf_service.core_backends.time.monotonic', side_effect=[0, 0, 1, 31]), \
+                 patch('inference.laf_service.core_backends.time.sleep'):
                 with self.assertRaises(ServiceError): backend.capture_idle_baseline(lambda: None)
             self.assertIsNone(backend.idle_base)
 
@@ -221,8 +221,8 @@ class OllamaOnlyTest(unittest.TestCase):
             backend, client, api = candidate(); self.start(backend)
             backend.active_model = 'test-qwen-small-1'; api.loaded = 'qwen2.5:0.5b'
             client.resources[key] = value
-            with self.subTest(key=key), patch('inference.aceis_service.core_backends.time.monotonic', side_effect=[0, 0, 1, 31]), \
-                 patch('inference.aceis_service.core_backends.time.sleep'):
+            with self.subTest(key=key), patch('inference.laf_service.core_backends.time.monotonic', side_effect=[0, 0, 1, 31]), \
+                 patch('inference.laf_service.core_backends.time.sleep'):
                 with self.assertRaises(ServiceError): backend.unload(lambda: None)
             self.assertEqual(backend.active_model, 'test-qwen-small-1')
             self.assertFalse(any(path == '/api/chat' for path, _ in api.calls))
@@ -235,7 +235,7 @@ class OllamaOnlyTest(unittest.TestCase):
     def test_abort_then_new_generation_recaptures_idle_baseline(self):
         backend, client, api = candidate(); self.start(backend); backend.abort()
         before = client.samples
-        with patch('inference.aceis_service.core_backends.time.sleep'): backend.generate(job(), lambda: None)
+        with patch('inference.laf_service.core_backends.time.sleep'): backend.generate(job(), lambda: None)
         self.assertEqual(client.samples - before, 2); self.assertTrue(backend.health()['ready'])
         backend.close()
 
@@ -244,7 +244,7 @@ class OllamaOnlyTest(unittest.TestCase):
         def check():
             calls.append(1)
             if len(calls) == 3: backend.abort()
-        with patch('inference.aceis_service.core_backends.time.sleep'):
+        with patch('inference.laf_service.core_backends.time.sleep'):
             with self.assertRaises(ServiceError): backend.capture_idle_baseline(check)
         self.assertIsNone(backend.idle_base); self.assertFalse(backend.health()['ready'])
 

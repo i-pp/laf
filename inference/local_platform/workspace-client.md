@@ -48,8 +48,8 @@ access and a fixed unittest selection:
     {"path":"inference/local_platform/__init__.py","access":"read"},
     {"path":"inference/local_platform/test_cli.py","access":"read"},
     {"path":"inference/local_platform/bounded_patch.py","access":"read"},
-    {"path":"inference/aceis_service/__init__.py","access":"read"},
-    {"path":"inference/aceis_service/npu_bridge.py","access":"read"}
+    {"path":"inference/laf_service/__init__.py","access":"read"},
+    {"path":"inference/laf_service/npu_bridge.py","access":"read"}
   ],
   "test": {
     "kind":"python-unittest",
@@ -70,7 +70,7 @@ with its immutable image ID and confirm the interpreter path inside that image:
 ```sh
 IMAGE=sha256:REPLACE_WITH_REVIEWED_LOCAL_IMAGE_ID
 python3 -B -m inference.local_platform.developer \
-  --socket "$XDG_RUNTIME_DIR/aceis-inference/service.sock" \
+  --socket "$XDG_RUNTIME_DIR/laf-inference/service.sock" \
   --source /ABSOLUTE/approved-project --manifest /ABSOLUTE/task.json \
   --workdir /NEW/private-task --model coder-next --max-turns 6 --deadline 300 \
   --test-image "$IMAGE" --reviewed-test-image "$IMAGE" --test-python /usr/bin/python3

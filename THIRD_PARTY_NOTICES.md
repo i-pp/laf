@@ -45,7 +45,7 @@ preserved if third-party material is included in a later distribution.
 - The optional NPU worker includes the external ONNX Runtime C API by name at
   build time. Its build/launch path requires separately obtained Ryzen AI SDK,
   ORT, Peano, XRT/XDNA and model assets. The repository includes none of their
-  headers, libraries, wheels or models. The retained [distribution assessment](inference/aceis_npu_service/DISTRIBUTION.md)
+  headers, libraries, wheels or models. The retained [distribution assessment](inference/laf_npu_service/DISTRIBUTION.md)
   explains unresolved exact-version license and redistribution questions.
 - Docker, a chosen pinned base image, host drivers and hardware are separate
   prerequisites. This source snapshot includes a Dockerfile/build script,

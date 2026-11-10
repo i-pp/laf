@@ -18,26 +18,34 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
-# TEMPLATE ONLY: not an installable default. Replace every /REPLACE/ path.
-# Prerequisites: separately acquired compatible SDK/XRT/model, built worker,
-# Python, device access, and a private existing RUN_PARENT directory.
-# Validate the foreground launch and resource budgets before installing.
+# TEMPLATE ONLY: replace all /REPLACE/ paths before installation.
+# Requires separately provisioned Docker, GPU access, internal network, pinned
+# Ollama image, models, Strata and tokenizer runtime; see ../README.md.
+# Review the private configuration and validate foreground operation first.
+# Resource limits below require acceptance on the intended host.
 [Unit]
-Description=AceIS optional private RyzenAI classifier
-StartLimitIntervalSec=300
+Description=LAF Router (guarded local GPU inference)
+After=docker.service
+StartLimitIntervalSec=600
 StartLimitBurst=2
 
 [Service]
 Type=simple
+# Substitute CHECKOUT and CONFIG with confirmed absolute local paths.
 WorkingDirectory=/REPLACE/CHECKOUT
-RuntimeDirectory=aceis-npu
-RuntimeDirectoryMode=0700
+ExecStart=/usr/bin/python3 -B -m inference.laf_service.server --config /REPLACE/PRIVATE_CONFIG.json
 UMask=0077
-# Use a fresh per-invocation run directory. The parent directory must already exist.
-ExecStart=/usr/bin/python3 -m inference.aceis_npu_service.service --worker /REPLACE/BUILT_WORKER --sdk /REPLACE/SDK_ROOT --xrt /REPLACE/XRT_ROOT --model /REPLACE/PINNED_MODEL.onnx --run-dir /REPLACE/RUN_PARENT/${INVOCATION_ID} --socket %t/aceis-npu/service.sock
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=HF_HUB_OFFLINE=1
+Environment=TRANSFORMERS_OFFLINE=1
 Restart=on-failure
-RestartSec=5
+RestartSec=10
+TimeoutStartSec=150
+TimeoutStopSec=60
 KillMode=control-group
-TimeoutStopSec=8
+NoNewPrivileges=true
+TasksMax=768
+MemoryMax=40G
+
 [Install]
 WantedBy=default.target

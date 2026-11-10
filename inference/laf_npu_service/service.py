@@ -134,8 +134,8 @@ class Worker:
                     break
                 if len(line) > MAX_BODY:
                     raise ValueError("oversized worker response")
-                if line.startswith("ACEIS_JSON "):
-                    self.responses.put_nowait(json.loads(line[11:]))
+                if line.startswith("LAF_JSON "):
+                    self.responses.put_nowait(json.loads(line[len("LAF_JSON "):]))
                 else:
                     self.log.write(line)
                     self.log.flush()

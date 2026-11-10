@@ -165,33 +165,33 @@ class HTTPTest(unittest.TestCase):
 class BackendTest(unittest.TestCase):
     def make(self):
         from .backends import Backends
-        return Backends({'state_dir':'/tmp/aceis-test','docker_network':'private', 'weights':'/tmp/weights'}, '/tmp/config')
+        return Backends({'state_dir':'/tmp/laf-test','docker_network':'private', 'weights':'/tmp/weights'}, '/tmp/config')
     def test_ps_empty_does_not_prove_physical_release(self):
         b=self.make(); b.active_model='coder-next'; b.flash_base=good()
         b.api=lambda *a,**kw: {'models':[]}
         high=good();high['vram_used']=40*GIB
-        with patch('inference.aceis_service.backends.snapshot',return_value=high), \
-             patch('inference.aceis_service.backends.time.monotonic',side_effect=[0,0,1,31]), \
-             patch('inference.aceis_service.backends.time.sleep'):
+        with patch('inference.laf_service.backends.snapshot',return_value=high), \
+             patch('inference.laf_service.backends.time.monotonic',side_effect=[0,0,1,31]), \
+             patch('inference.laf_service.backends.time.sleep'):
             with self.assertRaises(ServiceError):b.unload(lambda:None)
         self.assertEqual(b.active_model,'coder-next')
     def test_ram_release_is_also_required(self):
         b=self.make();b.active_model='coder-next';b.flash_base=good();b.api=lambda *a,**kw:{'models':[]}
         low=good();low['mem_available']=16*GIB
-        with patch('inference.aceis_service.backends.snapshot',return_value=low), \
-             patch('inference.aceis_service.backends.time.monotonic',side_effect=[0,0,1,31]), \
-             patch('inference.aceis_service.backends.time.sleep'):
+        with patch('inference.laf_service.backends.snapshot',return_value=low), \
+             patch('inference.laf_service.backends.time.monotonic',side_effect=[0,0,1,31]), \
+             patch('inference.laf_service.backends.time.sleep'):
             with self.assertRaises(ServiceError):b.unload(lambda:None)
     def test_two_stable_physical_readings_allow_switch(self):
         b=self.make();b.active_model='coder-next';b.flash_base=good();b.api=lambda *a,**kw:{'models':[]}
-        with patch('inference.aceis_service.backends.snapshot',return_value=good()), \
-             patch('inference.aceis_service.backends.time.sleep'):
+        with patch('inference.laf_service.backends.snapshot',return_value=good()), \
+             patch('inference.laf_service.backends.time.sleep'):
             b.unload(lambda:None)
         self.assertIsNone(b.active_model)
     def test_host_network_container_rejected_before_start(self):
         from .backends import IMAGE
         b=self.make();b.cid='owned'
-        info={'Config':{'Labels':{'aceis.inference.owner':b.owner}},'Image':IMAGE,
+        info={'Config':{'Labels':{'laf.inference.owner':b.owner}},'Image':IMAGE,
               'HostConfig':{'Privileged':False,'PortBindings':{},'NetworkMode':'host'},
               'NetworkSettings':{'Networks':{'host':{}}}}
         b.docker=lambda *a:json.dumps([info])
@@ -240,9 +240,9 @@ class FaultTest(unittest.TestCase):
         from unittest.mock import Mock
         process=Mock();process.pid=12345;process.poll.return_value=0
         with patch.object(Backends,'group_alive',side_effect=[True,True,True,True,False,False]), \
-             patch('inference.aceis_service.backends.time.monotonic',side_effect=[0,1,6,6]), \
-             patch('inference.aceis_service.backends.time.sleep'), \
-             patch('inference.aceis_service.backends.os.killpg') as kill:
+             patch('inference.laf_service.backends.time.monotonic',side_effect=[0,1,6,6]), \
+             patch('inference.laf_service.backends.time.sleep'), \
+             patch('inference.laf_service.backends.os.killpg') as kill:
             Backends.stop_group(process)
         import signal
         self.assertEqual([c.args[1] for c in kill.call_args_list],[signal.SIGTERM,signal.SIGKILL])
@@ -252,13 +252,13 @@ class EngineHealthTest(unittest.TestCase):
         from .backends import Backends
         from unittest.mock import Mock
         b=Backends({'state_dir':'/tmp/test'},'/tmp/config');b.flash=Mock();b.flash.pid=12345;b.flash.poll.return_value=None;b.engine_pid=23456
-        with patch('inference.aceis_service.backends.Path.read_text',side_effect=FileNotFoundError()):
+        with patch('inference.laf_service.backends.Path.read_text',side_effect=FileNotFoundError()):
             self.assertFalse(b.health()['flash_resident'])
     def test_zombie_engine_not_ready(self):
         from .backends import Backends
         from unittest.mock import Mock
         b=Backends({'state_dir':'/tmp/test'},'/tmp/config');b.flash=Mock();b.flash.pid=12345;b.flash.poll.return_value=None;b.engine_pid=23456
-        with patch('inference.aceis_service.backends.Path.read_text',return_value='23456 (strata) Z 12345 12345 12345 0'):
+        with patch('inference.laf_service.backends.Path.read_text',return_value='23456 (strata) Z 12345 12345 12345 0'):
             self.assertFalse(b.flash_alive())
 
 if __name__=='__main__':

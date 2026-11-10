@@ -22,8 +22,8 @@
 
 """Bounded standalone CLI for a private local inference service.
 
-It does not depend on AceIS daemon/MCP and does not expose a network listener.
-The current compatibility transport is the existing owner-only Router socket.
+It does not depend on an external daemon/MCP and exposes no network listener.
+The transport is the owner-only LAF Router socket.
 """
 import argparse
 import http.client
@@ -168,7 +168,7 @@ def ask(path, model, text, max_tokens=512, timeout=180, call=request, sleep=time
 
 def converse(path, model, messages, max_tokens=512, timeout=180, call=None, sleep=time.sleep):
     """One bounded JSON chat job. Never replay an uncertain submission."""
-    from inference.aceis_service.core import validate_request
+    from inference.laf_service.core import validate_request
     body = {'model':model,'messages':messages,
             'max_tokens':max_tokens,'timeout_seconds':timeout}
     try:
@@ -222,7 +222,7 @@ def main(argv=None):
         return model_main(actual[1:])
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--socket',default=os.environ.get('LOCAL_INFERENCE_SOCKET',
-        '/run/user/'+str(os.getuid())+'/aceis-inference/service.sock'),
+        '/run/user/'+str(os.getuid())+'/laf-inference/service.sock'),
         help='operator-chosen existing private UDS; no TCP or credentials created')
     sub=p.add_subparsers(dest='command',required=True)
     model=sub.add_parser('model',help='persistent catalog/install/list/remove/inspect; use model --help',add_help=False)
@@ -274,7 +274,7 @@ def main(argv=None):
         elif args.command=='classify':
             with open(args.input,'rb') as f:data=f.read(100001)
             if len(data)>100000:raise ClientError('classification input exceeds bound')
-            from inference.aceis_service.npu_bridge import validate_input, validate_result, NPUUnavailable
+            from inference.laf_service.npu_bridge import validate_input, validate_result, NPUUnavailable
             payload=validate_input(json.loads(data))
             try:out=validate_result(request(args.socket,'POST','/v1/classify',payload,timeout=13))
             except NPUUnavailable:raise ClientError('classification identity/output invalid; not retried') from None

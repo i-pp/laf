@@ -31,8 +31,8 @@ import time
 import unittest
 from unittest.mock import patch
 
-from inference.aceis_npu_service import service
-from inference.aceis_npu_service.verify_trace import verify
+from inference.laf_npu_service import service
+from inference.laf_npu_service.verify_trace import verify
 
 
 class InputTests(unittest.TestCase):
@@ -205,7 +205,7 @@ class WorkerTests(unittest.TestCase):
                     f"open({str(root / 'child.pid')!r},'w').write(str(child.pid))\n" +
                     f"deadline=time.monotonic()+2\nwhile not os.path.exists({str(root / 'child.ready')!r}):\n if time.monotonic()>deadline: raise RuntimeError('child not ready')\n time.sleep(.001)\np=sys.argv[3]+'.json'\n" +
                     "open(p,'w').write(json.dumps([{'cat':'Node','args':{'provider':'CPUExecutionProvider'}}]))\n" +
-                    "print('ACEIS_JSON '+json.dumps({'profile':p,'ort_version':'fixture'}),flush=True)\nos._exit(0)\n")
+                    "print('LAF_JSON '+json.dumps({'profile':p,'ort_version':'fixture'}),flush=True)\nos._exit(0)\n")
                 executable.chmod(0o700)
                 run = root / "run"; run.mkdir()
                 with patch.object(service, "MODEL_SHA256", hashlib.sha256(b"fixture").hexdigest()):
@@ -230,7 +230,7 @@ class WorkerTests(unittest.TestCase):
             executable = root / "fake"
             executable.write_text("#!/usr/bin/python3\nimport json,sys,time\np=sys.argv[3]+'.json'\n" +
                 "open(p,'w').write(json.dumps([{'cat':'Node','args':{'provider':'CPUExecutionProvider'}}]))\n" +
-                "print('ACEIS_JSON '+json.dumps({'profile':p,'ort_version':'fixture'}),flush=True)\ntime.sleep(60)\n")
+                "print('LAF_JSON '+json.dumps({'profile':p,'ort_version':'fixture'}),flush=True)\ntime.sleep(60)\n")
             executable.chmod(0o700)
             run = root / "run"; run.mkdir()
             with patch.object(service, "MODEL_SHA256", hashlib.sha256(b"fixture").hexdigest()):
@@ -253,10 +253,10 @@ import json,sys,time,os
 assert "SECRET_FIXTURE" not in os.environ
 p=sys.argv[3]+".json"
 open(p,"w").write(json.dumps([{"cat":"Node","args":{"provider":"CPUExecutionProvider"}}]))
-print("ACEIS_JSON "+json.dumps({"ready":True,"profile":p,"ort_version":"fixture"}),flush=True)
+print("LAF_JSON "+json.dumps({"ready":True,"profile":p,"ort_version":"fixture"}),flush=True)
 for line in sys.stdin:
  if line.startswith("1 "): time.sleep(2)
- print('ACEIS_JSON {"logits":[0,0,0,0,0,0,0,0,0,0],"class_index":0,"latency_ms":1}',flush=True)
+ print('LAF_JSON {"logits":[0,0,0,0,0,0,0,0,0,0],"class_index":0,"latency_ms":1}',flush=True)
 ''')
             executable.chmod(0o700)
             run = root / "run"; run.mkdir()

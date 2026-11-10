@@ -19,11 +19,11 @@
       "access": "read"
     },
     {
-      "path": "inference/aceis_service/__init__.py",
+      "path": "inference/laf_service/__init__.py",
       "access": "read"
     },
     {
-      "path": "inference/aceis_service/npu_bridge.py",
+      "path": "inference/laf_service/npu_bridge.py",
       "access": "read"
     }
   ],

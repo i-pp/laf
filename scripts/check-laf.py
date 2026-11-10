@@ -40,15 +40,15 @@ from laf_socket_test_ids import PRIVATE_SOCKET_TESTS
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULES = (
-    'inference.aceis_npu_service.tests.test_service',
-    'inference.aceis_service.test_acceptance_profiles',
-    'inference.aceis_service.test_core_integration',
-    'inference.aceis_service.test_host_supervisor',
-    'inference.aceis_service.test_lifecycle',
-    'inference.aceis_service.test_lifecycle_uds',
-    'inference.aceis_service.test_lifecycle_uds_live',
-    'inference.aceis_service.test_npu_bridge',
-    'inference.aceis_service.test_service',
+    'inference.laf_npu_service.tests.test_service',
+    'inference.laf_service.test_acceptance_profiles',
+    'inference.laf_service.test_core_integration',
+    'inference.laf_service.test_host_supervisor',
+    'inference.laf_service.test_lifecycle',
+    'inference.laf_service.test_lifecycle_uds',
+    'inference.laf_service.test_lifecycle_uds_live',
+    'inference.laf_service.test_npu_bridge',
+    'inference.laf_service.test_service',
     'inference.core_container.test_build',
     'inference.local_platform.test_chat',
     'inference.local_platform.test_cli',
@@ -59,6 +59,7 @@ MODULES = (
     'inference.local_platform.test_repair',
     'inference.local_platform.test_workspace',
     'test_laf_checks',
+    'test_laf_naming',
 )
 # This file is a resource-limited child executable used by workspace tests,
 # not a unittest module. Its behavior is exercised by those parent tests.

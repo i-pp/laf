@@ -18,4 +18,4 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
-"""Owned, local-only AceIS inference service."""
+"""Owned, local-only LAF inference service."""

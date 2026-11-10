@@ -88,7 +88,7 @@ class ConversationTests(unittest.TestCase):
     def test_natural_request_dispatches_only_filename_search(self):
         with tempfile.TemporaryDirectory() as folder:
             (Path(folder)/'sample.py').write_text('PRIVATE_FILE_CONTENT')
-            code, out, err, calls = self.invoke('Pythonのファイルを探して\nwhat did you find?\n/quit\n',
+            code, out, err, calls = self.invoke('Python\u306e\u30d5\u30a1\u30a4\u30eb\u3092\u63a2\u3057\u3066\nwhat did you find?\n/quit\n',
                 ['{"tool":"find_files","pattern":"*.py"}', 'one Python file'], workspace=folder)
         self.assertEqual(code, 0)
         self.assertIn('Files [local]> *.py', out)
@@ -210,7 +210,7 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_utf8_bound_and_context_overflow_never_submit(self):
-        code, out, err, calls = self.invoke('語' * 3000 + '\n' + 'x' * 8000 + '\n/quit\n')
+        code, out, err, calls = self.invoke('\u8a9e' * 3000 + '\n' + 'x' * 8000 + '\n/quit\n')
         self.assertEqual(code, 0)
         self.assertEqual(calls, [])
         self.assertIn('no request submitted', out)
@@ -244,7 +244,7 @@ class ContextAndDisplayTests(unittest.TestCase):
         self.assertEqual(kept[-1][-1]['role'], 'assistant')
         self.assertEqual(messages[-1], current)
         self.assertEqual(history[0][0]['content'], '0'+'x'*900)
-        from inference.aceis_service.core import validate_request
+        from inference.laf_service.core import validate_request
         validate_request({'model':'flash','messages':messages,'max_tokens':512})
 
     def test_message_count_is_also_bounded(self):
@@ -254,9 +254,9 @@ class ContextAndDisplayTests(unittest.TestCase):
         self.assertGreater(dropped, 0)
 
     def test_terminal_controls_and_bidi_are_escaped(self):
-        text = '日本語\x1b[2J\r\x00\x7f\x9b\u202e\nnext'
+        text = '\u65e5\u672c\u8a9e\x1b[2J\r\x00\x7f\x9b\u202e\nnext'
         safe = chat.display(text)
-        self.assertIn('日本語', safe)
+        self.assertIn('\u65e5\u672c\u8a9e', safe)
         self.assertIn('\nnext', safe)
         for value in ('\x1b','\r','\x00','\x7f','\x9b','\u202e'):
             self.assertNotIn(value, safe)
@@ -399,7 +399,7 @@ class JSONJobCompatibilityTests(unittest.TestCase):
         from unittest.mock import Mock
         response = Mock(status=200); response.read.return_value = b'{"status":"ready"}'
         connection = Mock(); connection.getresponse.return_value = response
-        body = {'model':'flash','messages':[{'role':'user','content':'日本語'}]}
+        body = {'model':'flash','messages':[{'role':'user','content':'\u65e5\u672c\u8a9e'}]}
         with patch.object(cli, 'checked_socket', return_value='/unused'), patch.object(cli, 'Connection', return_value=connection):
             self.assertEqual(cli.request('/unused', 'POST', '/v1/jobs', body), {'status':'ready'})
         args = connection.request.call_args.args

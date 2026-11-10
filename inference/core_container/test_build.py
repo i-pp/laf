@@ -36,13 +36,13 @@ class BuildTests(unittest.TestCase):
     def probe_result(self):
         rows=[]
         for name in m.CORE_FILES:
-            relative='inference/aceis_service/'+name
+            relative='inference/laf_service/'+name
             raw=(ROOT/relative).read_bytes()
             rows.append({'path':relative,'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'mode':'0o644'})
         return {'uid':1000,'gid':1000,'imports_ok':True,'no_host_authority_imported':True,'files':rows}
 
     def test_context_modes_and_hashes_are_independent_of_umask(self):
-        originals={str(p):stat.S_IMODE(p.stat().st_mode) for p in (ROOT/'inference/aceis_service').glob('*.py')}
+        originals={str(p):stat.S_IMODE(p.stat().st_mode) for p in (ROOT/'inference/laf_service').glob('*.py')}
         for mask in (0o022,0o077,0o027):
             with self.subTest(umask=oct(mask)), tempfile.TemporaryDirectory() as d:
                 root=Path(d);before=stat.S_IMODE(root.stat().st_mode);old=os.umask(mask)
@@ -56,7 +56,7 @@ class BuildTests(unittest.TestCase):
                     self.assertEqual(p.read_bytes(),(ROOT/p.relative_to(root)).read_bytes())
                 for p in root.rglob('*'):
                     if p.is_dir():self.assertEqual(stat.S_IMODE(p.stat().st_mode),0o755)
-        self.assertEqual(originals,{str(p):stat.S_IMODE(p.stat().st_mode) for p in (ROOT/'inference/aceis_service').glob('*.py')})
+        self.assertEqual(originals,{str(p):stat.S_IMODE(p.stat().st_mode) for p in (ROOT/'inference/laf_service').glob('*.py')})
 
     def test_context_refuses_existing_content_and_symlink_destination(self):
         with tempfile.TemporaryDirectory() as d:

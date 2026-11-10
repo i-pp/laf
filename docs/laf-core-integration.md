@@ -41,20 +41,20 @@ source root with Python 3.10 or later:
 
 ```sh
 python3 -B -m unittest \
-  inference.aceis_service.test_lifecycle \
-  inference.aceis_service.test_lifecycle_uds \
-  inference.aceis_service.test_host_supervisor \
-  inference.aceis_service.test_core_integration -v
+  inference.laf_service.test_lifecycle \
+  inference.laf_service.test_lifecycle_uds \
+  inference.laf_service.test_host_supervisor \
+  inference.laf_service.test_core_integration -v
 
 # On an executor allowed to create private Unix sockets, include both opt-in
 # supervisor/Core-entry tests, the kernel-credential suite and legacy Router:
 LAF_TEST_LIVE_UDS=1 python3 -B -m unittest \
-  inference.aceis_service.test_lifecycle \
-  inference.aceis_service.test_lifecycle_uds \
-  inference.aceis_service.test_lifecycle_uds_live \
-  inference.aceis_service.test_host_supervisor \
-  inference.aceis_service.test_core_integration \
-  inference.aceis_service.test_service -v
+  inference.laf_service.test_lifecycle \
+  inference.laf_service.test_lifecycle_uds \
+  inference.laf_service.test_lifecycle_uds_live \
+  inference.laf_service.test_host_supervisor \
+  inference.laf_service.test_core_integration \
+  inference.laf_service.test_service -v
 ```
 
 These are stdlib fake-provider tests. They do not run Docker or load model assets.
@@ -66,8 +66,8 @@ are not a runtime Quick Start or evidence of container/model acceptance.
 
 ## Selection and compatibility
 
-`inference.aceis_service.core_server` is the new explicit entrypoint. The existing
-`inference.aceis_service.server` still selects its legacy host backend. Its only
+`inference.laf_service.core_server` is the new explicit entrypoint. The existing
+`inference.laf_service.server` still selects its legacy host backend. Its only
 integration includes moving that backend import into its host-only `main`, so the
 Core image can reuse the public HTTP handler without shipping direct Docker code.
 The candidate also adds explicit model catalogs and optional Flash behavior to

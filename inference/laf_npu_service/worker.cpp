@@ -90,7 +90,7 @@ int main(int argc,char** argv) {
     const std::string provider=argv[2];
     if (provider!="CPU" && provider!="VitisAI") throw std::runtime_error("invalid provider");
     Runtime r; if (!r.api) throw std::runtime_error("ORT API version mismatch");
-    r.check(r.api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,"aceis-npu",&r.env));
+    r.check(r.api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,"laf-npu",&r.env));
     r.check(r.api->CreateSessionOptions(&r.opts));
     r.check(r.api->SetIntraOpNumThreads(r.opts,1)); r.check(r.api->SetInterOpNumThreads(r.opts,1));
     if (provider=="VitisAI") {
@@ -112,13 +112,13 @@ int main(int argc,char** argv) {
     // PROFILE_PREFIX is operator-controlled; reject JSON control/escape characters.
     std::string path(profile); r.alloc->Free(r.alloc,profile);
     if (path.find_first_of("\"\\\n\r")!=std::string::npos) throw std::runtime_error("unsafe profile path");
-    std::cout<<"ACEIS_JSON {\"ready\":true,\"profile\":\""<<path<<"\",\"ort_version\":\""<<OrtGetApiBase()->GetVersionString()<<"\"}"<<std::endl;
+    std::cout<<"LAF_JSON {\"ready\":true,\"profile\":\""<<path<<"\",\"ort_version\":\""<<OrtGetApiBase()->GetVersionString()<<"\"}"<<std::endl;
     std::string line;
     while (std::getline(std::cin,line)) {
       parse_input(line,r.values);
       const auto begin=std::chrono::steady_clock::now(); auto out=r.run();
       double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();
-      std::cout<<std::setprecision(9)<<"ACEIS_JSON {\"logits\":[";
+      std::cout<<std::setprecision(9)<<"LAF_JSON {\"logits\":[";
       for(size_t i=0;i<out.size();++i) std::cout<<(i?",":"")<<out[i];
       std::cout<<"],\"class_index\":"<<std::distance(out.begin(),std::max_element(out.begin(),out.end()))<<",\"latency_ms\":"<<ms<<"}"<<std::endl;
     }

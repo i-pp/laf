@@ -56,7 +56,7 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for what is referenced but
 not bundled. No vendor SDK, runtime, firmware, model, tokenizer payload or base
 image becomes KOL-licensed through these source notices. A JSON field describing
 an external model's license describes that model, not this metadata wrapper.
-The [NPU assessment](inference/aceis_npu_service/DISTRIBUTION.md) preserves the
+The [NPU assessment](inference/laf_npu_service/DISTRIBUTION.md) preserves the
 open SDK, runtime and model redistribution questions. Source licensing does not
 resolve them or authorize publication of a runtime image.
 

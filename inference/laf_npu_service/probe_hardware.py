@@ -54,7 +54,7 @@ def run(worker: Path, sdk: Path, target: Path, provider: str) -> dict:
                                    input=serialized, stdout=out, stderr=err, text=True, cwd=target, env=env, check=False)
     if completed.returncode:
         raise RuntimeError(f"{provider} probe exited {completed.returncode}; inspect private logs")
-    records = [json.loads(line[11:]) for line in (target / "stdout.log").read_text().splitlines() if line.startswith("ACEIS_JSON ")]
+    records = [json.loads(line[len("LAF_JSON "):]) for line in (target / "stdout.log").read_text().splitlines() if line.startswith("LAF_JSON ")]
     if len(records) != 2:
         raise RuntimeError("expected exactly warmup readiness and one inference result")
     profile = Path(records[0]["profile"]).resolve(strict=True)

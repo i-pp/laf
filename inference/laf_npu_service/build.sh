@@ -24,7 +24,7 @@ set -euo pipefail
 SDK=$(realpath -e "$1"); OUT=$(realpath -m "$2")
 [[ ! -e "$OUT" && ! -L "$OUT" ]] || { echo 'Refusing existing output' >&2; exit 2; }
 [[ -d $(dirname "$OUT") ]] || { echo 'Output parent must exist' >&2; exit 2; }
-TEMP=$(mktemp "$(dirname "$OUT")/.aceis-worker-XXXXXX")
+TEMP=$(mktemp "$(dirname "$OUT")/.laf-worker-XXXXXX")
 trap 'rm -f "$TEMP"' EXIT
 c++ -std=c++17 -O2 -Wall -Wextra -Werror -I"$SDK/cpp-test/include" \
  "$(dirname "$0")/worker.cpp" -L"$SDK/cpp-test/sdk/onnxruntime/lib" -lonnxruntime \

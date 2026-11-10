@@ -112,8 +112,8 @@ class CheckTests(unittest.TestCase):
                      'scripts/laf_socket_test_ids.py',
                      'inference/local_platform/fixtures/provenance-synthetic.json',
                      'inference/core_container/Dockerfile',
-                     'inference/aceis_npu_service/worker.cpp',
-                     'inference/aceis_npu_service/build.sh', 'README.md', 'laf'):
+                     'inference/laf_npu_service/worker.cpp',
+                     'inference/laf_npu_service/build.sh', 'README.md', 'laf'):
             self.assertRegex(values[name], r'^[0-9a-f]{64}$')
 
     def test_source_has_no_private_home_or_original_repository_reference(self):

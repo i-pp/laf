@@ -45,7 +45,7 @@ After an operator has accepted the existing service and its models, set its actu
 private socket path and start a conversation:
 
 ```sh
-SOCKET="$XDG_RUNTIME_DIR/aceis-inference/service.sock"
+SOCKET="$XDG_RUNTIME_DIR/laf-inference/service.sock"
 ./laf --socket "$SOCKET" status
 ./laf --socket "$SOCKET" chat --model flash
 # Optional: allow filename search inside this explicit, absolute workspace.
@@ -53,39 +53,49 @@ SOCKET="$XDG_RUNTIME_DIR/aceis-inference/service.sock"
 ```
 
 These are client commands, not a clean-host runtime Quick Start. They do not
-start, replace or reconfigure a service. See the [Router prerequisites](../inference/aceis_service/README.md#machine-specific-preparation).
+start, replace or reconfigure a service. See the [Router prerequisites](../inference/laf_service/README.md#machine-specific-preparation).
 If the executable bit was lost during transfer, use `python3 -B laf` with the same
 arguments. The existing `python3 -B -m inference.local_platform.cli` form and its
 JSON-oriented `ask`, `get` and `cancel` commands remain available.
 
 ## A short session
 
-With workspace access enabled, ask in ordinary language, for example
-`Pythonのファイルを探して`. The client gives the model a single filename-search
-tool. When the model returns the exact supported JSON request, the client searches
-locally and displays actual relative names:
+Start in English with a simple greeting. These examples illustrate the interface;
+they are not recorded model replies or guaranteed response strings.
 
 ```text
-You> Pythonのファイルを探して
-Files [local]> *.py
-  src/example.py
-You> さっき見つけたファイル名は？
-LAF [unverified]> ...
+You> Hello
+LAF [unverified]> Hello!
 ```
 
-This is an illustrative transcript, not a real-model acceptance result. Whether a
-particular model emits the supported tool JSON must still be checked on the
-accepted host. If it answers in prose instead of calling the tool, no search takes
-place. `Files [local]>` marks actual client search results. Every line of ordinary
-model text has `LAF [unverified]>`; in-session notices use `Client>`. These labels
-distinguish the source, not the truth of generated text. Model prose can still
-make incorrect claims or invent filenames. A search turn displays the tool result
-directly, without a second inference, arbitrary tools or an agent loop.
+With workspace access enabled, ask in ordinary language, for example
+`Find Python files in this workspace.` The client gives the model a single
+filename-search tool. When the model returns the exact supported JSON request,
+the client searches locally and displays actual relative names:
+
+```text
+You> Find Python files in this workspace.
+Files [local]> *.py
+  src/example.py
+```
+
+Whether a particular model emits the supported tool JSON must still be checked
+on the accepted host. If it answers in prose instead of calling the tool, no
+search takes place. `Files [local]>` marks actual client search results. Every
+line of ordinary model text has `LAF [unverified]>`; in-session notices use
+`Client>`. These labels distinguish the source, not the truth of generated text.
+Model prose can still make incorrect claims or invent filenames. A search turn
+displays the tool result directly, without a second inference, arbitrary tools
+or an agent loop.
 
 Ordinary conversation turns use JSON messages with `user` and `assistant` roles.
 The terminal shows the assistant text rather than the job envelope. Replies are
 printed after completion, not streamed token by token. All replies are generated
 advice, not executed code or verified facts.
+
+An optional Japanese example can follow the English examples: the greeting
+"こんにちは" might receive "こんにちは！". This is illustrative too; exact replies depend
+on the selected model.
 
 ## Commands and privacy
 
@@ -186,8 +196,8 @@ Router on the supported host. Then complete the existing model acquisition,
 license/provenance, packaging and clean-host runtime gates. Web UI can build on
 the same API later.
 
-Keep existing `aceis-inference` / `aceis-npu` names as compatibility identifiers
-for now. A later staged rename needs new canonical LAF names, explicit legacy
-configuration compatibility, restart/rollback tests and separate authorization for
-running services or connector destinations. This change does not rename any unit,
-socket directory, running process or NPU connection.
+This source version uses `laf-inference` and `laf-npu` names without aliases
+for older installations. Follow [naming and migration](../inference/local_platform/naming.md)
+before adopting it. A checkout update does not rename an installed unit, socket
+directory, running process or NPU connection; those operational changes require
+separate authorization and supported-host validation.

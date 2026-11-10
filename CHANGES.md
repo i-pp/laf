@@ -137,3 +137,31 @@ required by KOL section 4(c), while preserving applicable original notices.
 - Keep client filename observations out of assistant-generated history and prune each search turn as one complete group.
 - Do not dispatch tools from length-capped output, retain truncated turns, or automatically continue them.
 - Add regressions for result-line impersonation, observation roles, complete-turn pruning, reset and truncation. No new file, shell, model, service or network capability is added.
+
+## LAF identifier unification (2026-11-10)
+
+- Rename the Router and NPU source directories to `inference/laf_service` and
+  `inference/laf_npu_service`, and update every active import, test inventory,
+  Docker COPY/entrypoint and document link to those paths.
+- Use `laf-inference` / `laf-npu` unit, socket, state/cache and example container
+  names; `laf.inference.owner` / `laf.core.owner` ownership labels; `laf-*`
+  backend model aliases; and the `LAF_JSON ` NPU worker protocol prefix.
+- Update the CLI defaults, model catalog references, configuration examples,
+  source/build tests and operational documentation as one breaking source change.
+  No previous-name aliases, automatic migration or dual ownership acceptance
+  are provided. Add regressions for canonical names and bounded historical exceptions.
+- Keep the HTTP v1 API, public model IDs, explicit socket override, existing
+  generation lock, permission checks and lifecycle/resource guards unchanged.
+  No installed unit, process, model, container, connector or permission is changed.
+- Preserve all earlier entries above and the original `NOTICE` attribution
+  verbatim. Their old paths and prior compatibility decisions are historical;
+  the naming policy in this source version supersedes those earlier decisions.
+
+Affected current components: `README.md`, `LICENSING.md`, `THIRD_PARTY_NOTICES.md`,
+`docs/laf-candidate-profiles.md`, `docs/laf-chat-cli.md`,
+`docs/laf-core-integration.md`, `docs/laf-host-supervisor.md`,
+`inference/laf_service/`, `inference/laf_npu_service/`, `inference/core_container/`,
+`inference/local_platform/{API.md,README.md,cli.py,model_management.py,naming.md,
+workspace-client.md,test_chat.py,examples/cli-regression-task.json}`,
+`scripts/{check-laf.py,laf_socket_test_ids.py,test_laf_checks.py,test_laf_naming.py}`
+and this change record. Unchanged third-party references retain their own terms.

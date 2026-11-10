@@ -21,7 +21,7 @@
  */
 
 // Test the production worker parser without creating an ORT session/device.
-#define main aceis_worker_main
+#define main laf_worker_main
 #include "../worker.cpp"
 #undef main
 #include <limits>
