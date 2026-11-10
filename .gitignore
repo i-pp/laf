@@ -44,3 +44,8 @@ runtime/
 *.pem
 *.p12
 *.pfx
+
+# Added 2026-11-10: local Python packaging output.
+build/
+dist/
+*.egg-info/
