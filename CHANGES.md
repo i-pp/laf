@@ -165,3 +165,16 @@ Affected current components: `README.md`, `LICENSING.md`, `THIRD_PARTY_NOTICES.m
 workspace-client.md,test_chat.py,examples/cli-regression-task.json}`,
 `scripts/{check-laf.py,laf_socket_test_ids.py,test_laf_checks.py,test_laf_naming.py}`
 and this change record. Unchanged third-party references retain their own terms.
+
+## Remove development-only source metadata checks (2026-11-10)
+
+Remove the two repository-metadata test modules under `scripts/` and their runner
+registrations. The runner no longer scans filenames or emits source-file SHA
+lists and internal release/deployment flags. Update the current README to describe
+its test-result summary instead.
+
+Keep the functional and safety suites, private-socket grouping and accurate
+failure/skip accounting. Move the hardware-free NPU probe decoding regression
+into `inference/laf_npu_service/tests/test_service.py`; it tests actual output
+handling rather than product spelling. No production runtime source, service,
+model, connection, license, original attribution or earlier change record changes.

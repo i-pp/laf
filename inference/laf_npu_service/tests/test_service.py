@@ -79,6 +79,24 @@ class InputTests(unittest.TestCase):
             self.assertEqual(verify(p)["successful_exec_commands"], 1)
 
 
+class ProbeTests(unittest.TestCase):
+    def test_probe_decodes_worker_records_without_hardware(self):
+        from types import SimpleNamespace
+        from inference.laf_npu_service import probe_hardware
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / 'probe'
+            def fake_run(*args, **kwargs):
+                profile = target / 'profile.json'
+                profile.write_text(json.dumps([{'cat': 'Node', 'args': {'provider': 'CPUExecutionProvider'}}]))
+                for record in ({'profile': str(profile)}, {'logits': [0] * 10, 'class_index': 0}):
+                    kwargs['stdout'].write('LAF_JSON ' + json.dumps(record) + '\n')
+                return SimpleNamespace(returncode=0)
+            with patch.object(probe_hardware.subprocess, 'run', side_effect=fake_run):
+                result = probe_hardware.run(Path('/fake/worker'), Path('/fake/sdk'), target, 'CPU')
+            self.assertEqual(result['logits'], [0] * 10)
+            self.assertTrue(result['execution_verified'])
+
+
 class UnixConnection(http.client.HTTPConnection):
     def __init__(self, path):
         super().__init__("localhost", timeout=2)

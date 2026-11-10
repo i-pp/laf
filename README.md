@@ -119,9 +119,9 @@ accept legal terms, authenticate to providers or obtain redistribution rights.
 ## Evidence and release boundary
 
 Historical private host reports remain outside this source draft. Their previous
-test counts and binary hashes are not acceptance of this tree. The new runner
-records its exact source/fixture fingerprints and current result scope. Preserve
-failed and unexecuted stages when reproducing it on another executor.
+test counts and binary hashes are not acceptance of this tree. The Python runner
+reports the selected tests, failures and unexecuted groups. Preserve failed and
+unexecuted stages when reproducing it on another executor.
 
 The Owner approved this bounded first-party source import and KOL v1 licensing.
 The top-level LICENSE covers the project's first-party material throughout
@@ -134,9 +134,8 @@ exhaustive security, patent or legal clearance. KOL is a custom license, not a
 claim of OSI approval. Preserve applicable notices and identify distributed
 changes as required by the full license.
 
-The Python runner records its source/fixture fingerprints and selected test
-scope; its fixed `p0_complete`, `release_authorized` and `deployed` flags remain
-false because tests do not grant runtime-release or deployment approval.
+A passing Python suite does not establish hardware support, a complete runtime
+release or deployment readiness.
 
 A runtime or image release additionally needs the exact external dependency
 inventory/SBOM, redistribution assessment, clean-host behavior and real
