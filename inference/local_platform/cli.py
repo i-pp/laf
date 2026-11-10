@@ -18,12 +18,13 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
-# Modified 2026-11-09: reuse bounded JSON jobs for interactive chat.
+# Modified 2026-11-10: open the existing chat command for an empty invocation.
 
 """Bounded standalone CLI for a private local inference service.
 
 It does not depend on an external daemon/MCP and exposes no network listener.
 The transport is the owner-only LAF Router socket.
+Run without a subcommand to open an interactive chat.
 """
 import argparse
 import http.client
@@ -224,7 +225,7 @@ def main(argv=None):
     p.add_argument('--socket',default=os.environ.get('LOCAL_INFERENCE_SOCKET',
         '/run/user/'+str(os.getuid())+'/laf-inference/service.sock'),
         help='operator-chosen existing private UDS; no TCP or credentials created')
-    sub=p.add_subparsers(dest='command',required=True)
+    sub=p.add_subparsers(dest='command')
     model=sub.add_parser('model',help='persistent catalog/install/list/remove/inspect; use model --help',add_help=False)
     model.add_argument('model_args',nargs=argparse.REMAINDER)
     sub.add_parser('status')
@@ -247,7 +248,9 @@ def main(argv=None):
     chat.add_argument('--max-tokens',type=int,default=512)
     chat.add_argument('--timeout',type=int,default=180)
     chat.add_argument('--workspace',help='absolute owned directory; permits filename-only search, no shell or file contents')
-    args=p.parse_args(argv)
+    args=p.parse_args(actual)
+    if args.command is None:
+        args=p.parse_args(actual+['chat'])
     if args.command=='chat':
         from .chat import run_chat
         return run_chat(args.socket,args.model,args.max_tokens,args.timeout,args.workspace)

@@ -23,6 +23,8 @@ import io
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -30,6 +32,83 @@ from unittest.mock import patch
 from . import chat, cli
 
 JOB = 'a' * 32
+
+
+class DefaultEntryTests(unittest.TestCase):
+    def test_no_arguments_use_existing_chat_defaults_and_default_socket(self):
+        argv = []
+        with patch.dict(os.environ, {}, clear=True), patch.object(chat, 'run_chat', return_value=0) as run, patch.object(cli, 'request') as request:
+            self.assertEqual(cli.main(argv), 0)
+        run.assert_called_once_with('/run/user/'+str(os.getuid())+'/laf-inference/service.sock',
+                                    'gpt-oss-120b', 512, 180, None)
+        request.assert_not_called()
+        self.assertEqual(argv, [])
+
+    def test_process_argv_without_arguments_enters_chat(self):
+        with patch.object(sys, 'argv', ['laf']), patch.object(chat, 'run_chat', return_value=0) as run:
+            self.assertEqual(cli.main(), 0)
+        self.assertEqual(run.call_count, 1)
+
+    def test_bare_entry_preserves_environment_socket_override(self):
+        with patch.dict(os.environ, {'LOCAL_INFERENCE_SOCKET':'/explicit/private/service.sock'}), patch.object(chat, 'run_chat', return_value=0) as run:
+            self.assertEqual(cli.main([]), 0)
+        self.assertEqual(run.call_args.args[0], '/explicit/private/service.sock')
+
+    def test_explicit_socket_and_chat_options_still_override_defaults(self):
+        with patch.dict(os.environ, {'LOCAL_INFERENCE_SOCKET':'/ignored/service.sock'}), patch.object(chat, 'run_chat', return_value=0) as run:
+            self.assertEqual(cli.main(['--socket','/explicit/private/service.sock','chat',
+                                      '--model','flash','--max-tokens','64','--timeout','40']), 0)
+        run.assert_called_once_with('/explicit/private/service.sock', 'flash', 64, 40, None)
+
+    def test_global_socket_override_without_a_subcommand_enters_chat(self):
+        with patch.dict(os.environ, {'LOCAL_INFERENCE_SOCKET':'/ignored/service.sock'}), patch.object(chat, 'run_chat', return_value=0) as run:
+            self.assertEqual(cli.main(['--socket','/explicit/private/service.sock']), 0)
+        run.assert_called_once_with('/explicit/private/service.sock', 'gpt-oss-120b', 512, 180, None)
+
+    def test_help_and_invalid_commands_never_enter_chat(self):
+        for argv, expected in [(['--help'],0), (['not-a-command'],2)]:
+            with self.subTest(argv=argv), patch.object(chat, 'run_chat') as run, patch('sys.stdout',new_callable=io.StringIO), patch('sys.stderr',new_callable=io.StringIO):
+                with self.assertRaises(SystemExit) as caught:
+                    cli.main(argv)
+                self.assertEqual(caught.exception.code, expected)
+                run.assert_not_called()
+
+    def test_explicit_subcommands_remain_explicit(self):
+        with patch.object(chat, 'run_chat') as run, patch.object(cli, 'request', return_value={'status':'fixture'}) as request, patch('sys.stdout',new_callable=io.StringIO):
+            self.assertEqual(cli.main(['capabilities']), 0)
+        request.assert_called_once()
+        self.assertEqual(request.call_args.args[1:3], ('GET','/v1/capabilities'))
+        run.assert_not_called()
+        from . import model_management
+        with patch.object(model_management, 'main', return_value=0) as model, patch.object(chat, 'run_chat') as run:
+            self.assertEqual(cli.main(['model','catalog']), 0)
+        model.assert_called_once_with(['catalog'])
+        run.assert_not_called()
+
+    def test_checkout_launcher_without_arguments_exits_without_a_router(self):
+        root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as directory:
+            env = {'PATH':os.environ.get('PATH',os.defpath), 'HOME':directory,
+                   'LOCAL_INFERENCE_SOCKET':str(Path(directory)/'not-created.sock'),
+                   'PYTHONDONTWRITEBYTECODE':'1'}
+            result = subprocess.run([sys.executable,'-B',str(root/'laf')],input='/help\n/quit\n',
+                                    text=True,capture_output=True,env=env,timeout=10)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('LAF chat', result.stdout)
+        self.assertIn('You> ', result.stdout)
+        self.assertEqual(result.stderr, '')
+
+    def test_path_invocation_uses_process_local_path_not_an_installation(self):
+        root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as directory:
+            env = {'PATH':str(root)+os.pathsep+os.environ.get('PATH',os.defpath),
+                   'HOME':directory,'LOCAL_INFERENCE_SOCKET':str(Path(directory)/'not-created.sock'),
+                   'PYTHONDONTWRITEBYTECODE':'1'}
+            result = subprocess.run(['laf'],input='/quit\n',text=True,capture_output=True,
+                                    env=env,cwd=directory,timeout=10)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('LAF chat', result.stdout)
+        self.assertEqual(result.stderr, '')
 
 
 class ConversationTests(unittest.TestCase):
