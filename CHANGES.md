@@ -24,6 +24,16 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## 2026-11-10: isolated terminal-client package
+
+Added `pyproject.toml` with a standard `laf` console entrypoint and no third-party
+runtime Python dependencies. Added an offline wheel/temporary-venv regression
+gate in `scripts/test_client_install.py` and a bounded client installation guide
+in `docs/client-install.md`, linked from `docs/laf-chat-cli.md` and `README.md`.
+The README distinguishes client packaging from pending runtime provisioning.
+Updated build output ignores. Runtime source, services, model profiles and socket checks are
+unchanged. This is not a complete fresh-host runtime installer.
+
 ## 2026-11-09: remove repository-wide checksum manifest
 
 Removed the root `MANIFEST.sha256` and its current descriptions from `README.md`

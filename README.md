@@ -26,6 +26,8 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 <!-- Modified 2026-11-10: redesign the landing page, document the default chat entrypoint, and move source-preview and test details into docs. -->
 
+<!-- Modified 2026-11-10: link client-only packaging while retaining the separate runtime-provisioning boundary. -->
+
 # Local AI Fabric
 
 **Your hardware. Your models. Your AI.**
@@ -129,9 +131,10 @@ for custom-socket commands, filename-only workspace search, privacy and cancella
 These client commands do not install or start a Router, engine or model. Chat
 replies are unverified model output.
 
-The launcher is not an installed package: bare `laf` requires separate
-installation or a PATH entry. If its executable bit was lost during transfer,
-use `python3 -B laf` with the same arguments. `./laf --help` shows the CLI reference
+For `laf` outside the checkout, [install the client in a dedicated virtual
+environment](docs/client-install.md) and activate it. This installs only the
+client, not a Router or model. If the checkout launcher's executable bit was lost
+during transfer, use `python3 -B laf` with the same arguments. `./laf --help` shows the CLI reference
 without contacting a Router.
 
 ## Testing (optional)
@@ -157,12 +160,13 @@ Neither command establishes runtime or hardware readiness. See
 
 - **Implemented in source:** guarded Router and JSON job API; Strata/Ollama
   adapters; terminal chat; bounded repair and scoped project tools; model catalog,
-  registry and guarded Ollama management operations.
+  registry and guarded Ollama management operations; isolated Python client
+  packaging.
 - **Opt-in source paths:** Core/host-supervisor separation and a fixed-shape NPU
   classifier. Real runtime, GPU/NPU and clean-host acceptance remain separate
   from software tests. Model acquisition and management also need verified
   operator inputs; the bundled catalog is not install-ready.
-- **Future work:** packaged installation and complete runtime provisioning,
+- **Future work:** complete runtime provisioning,
   distributable images, broader hardware acceptance, remote/multi-PC workflows,
   and a web UI. These are not shipped capabilities or promised release dates.
 
@@ -173,6 +177,7 @@ selecting a runtime configuration or distributing external assets.
 
 - [Router setup, model switching and recovery](inference/laf_service/README.md)
 - [Terminal conversation and filename search](docs/laf-chat-cli.md)
+- [Isolated terminal-client installation](docs/client-install.md)
 - [Development client](inference/local_platform/README.md) and
   [scoped project tools](inference/local_platform/workspace-client.md)
 - [Model management and provenance](docs/laf-model-management.md)

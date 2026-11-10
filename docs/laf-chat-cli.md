@@ -32,9 +32,9 @@ Run `laf` without a subcommand to open a small terminal conversation with an
 already configured LAF Router. It uses the existing JSON job API and owner-only
 Unix socket. The same conversation is available explicitly as `laf chat`.
 
-This checkout includes a local launcher, not an installed package. From its root,
-use `./laf`. If the command is installed or already on PATH, use `laf` instead.
-Starting the prompt does not install or start a Router, engine or model.
+From a checkout, use `./laf`. To put `laf` on a dedicated virtual environment's
+PATH, follow the [client installation guide](client-install.md). Starting the
+prompt does not install or start a Router, engine or model.
 
 This command exercises only local help and exit, with no model request or running
 Router needed:
