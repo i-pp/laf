@@ -52,9 +52,9 @@ switches models and handles recovery on your machine.
 
 **Current stage: source preview.** The control paths and clients are implemented,
 with unit/mocked checks. This checkout does not ship model weights, vendor SDKs
-or a ready-to-run runtime image, and does not establish hardware support. Start
-with the offline path below, or follow the component guides for an already
-provisioned host. See [source-preview limits and release gates](docs/source-preview.md).
+or a ready-to-run runtime image, and does not establish hardware support.
+Getting started assumes an already provisioned host; the optional checks can run
+without models. See [source-preview limits and release gates](docs/source-preview.md).
 
 ## Architecture
 
@@ -99,42 +99,24 @@ emulator. See [Router behavior and limits](inference/laf_service/README.md).
 
 ## Getting started
 
-### Explore the source without models
+### Chat with an existing Router
+
+This path requires an already configured and accepted LAF Router, with the model
+assets for the default `gpt-oss-120b` profile prepared. Complete the
+[Router prerequisites and host acceptance](inference/laf_service/README.md#machine-specific-preparation)
+first. This source preview does not provide a complete fresh-host installation.
 
 Use an existing Linux Python 3.10+ with `fcntl`, `resource` and Unix-process
-support. This checkout includes a local launcher, not an installed package. From
-the repository root, run:
-
-```sh
-./laf --help
-./laf model catalog
-printf '/help\n/quit\n' | ./laf
-python3 -B scripts/check-laf.py --suite portable
-```
-
-These commands need no package installation, Docker, model download, vendor SDK
-or running Router. They show the CLI, inspect the bundled catalog, exercise local
-chat help/exit and run the portable unit/mocked checks. The catalog's default
-entries intentionally cannot be installed until their metadata is verified.
-The portable result accounts for socket tests as **unexecuted**, not passed;
-see [test groups and result accounting](docs/testing.md).
-
-Use `./laf` from the checkout; bare `laf` requires separate installation or a PATH
-entry. If the launcher loses its executable bit during transfer, use
-`python3 -B laf` with the same arguments.
-
-### Connect to an existing Router
-
-First complete the [Router prerequisites and host acceptance](inference/laf_service/README.md#machine-specific-preparation).
-With that service at the client's default private socket, run:
+support. From the repository root, use the checkout-local launcher:
 
 ```sh
 ./laf status
 ./laf
 ```
 
-Running `./laf` without a subcommand opens chat using `gpt-oss-120b`. To choose
-Flash explicitly, use:
+`status` checks the running Router. `./laf` opens the chat prompt using
+`gpt-oss-120b`; type a message to request inference, or `/quit` to exit. To choose
+Flash instead, use:
 
 ```sh
 ./laf chat --model flash
@@ -146,6 +128,30 @@ socket; an explicit `--socket` takes priority. See [the chat guide](docs/laf-cha
 for custom-socket commands, filename-only workspace search, privacy and cancellation.
 These client commands do not install or start a Router, engine or model. Chat
 replies are unverified model output.
+
+The launcher is not an installed package: bare `laf` requires separate
+installation or a PATH entry. If its executable bit was lost during transfer,
+use `python3 -B laf` with the same arguments. `./laf --help` shows the CLI reference
+without contacting a Router.
+
+## Testing (optional)
+
+These checks are not required to start a conversation. Run them from the
+repository root with the Python prerequisites above:
+
+```sh
+# Print the client's built-in help, then exit without querying a model.
+printf '/help\n/quit\n' | ./laf
+
+# Run the portable Python unit/mocked checks without models or Docker.
+python3 -B scripts/check-laf.py --suite portable
+```
+
+The first command automatically enters `/help` and `/quit`; it is an offline
+launcher check, not an AI conversation. The test suite uses temporary files and
+owned fake subprocesses, and lists socket tests as **unexecuted**, not passed.
+Neither command establishes runtime or hardware readiness. See
+[test groups and result accounting](docs/testing.md) for details.
 
 ## Project status
 
