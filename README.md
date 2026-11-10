@@ -24,127 +24,170 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 <!-- Modified 2026-11-09: add the checkout-local interactive chat guide. -->
 
+<!-- Modified 2026-11-10: redesign the landing page, document the default chat entrypoint, and move source-preview and test details into docs. -->
+
 # Local AI Fabric
 
-Local AI Fabric (LAF) provides a guarded local inference service, an opt-in Core
-and host-supervisor boundary, a scoped development client and model management.
-The Router uses `inference.laf_service.*`; the optional NPU service uses
-`inference.laf_npu_service.*`. This source version uses LAF names throughout its
-active code, configuration and examples. See [naming and migration](inference/local_platform/naming.md)
-before using it with an older installation.
+**Your hardware. Your models. Your AI.**
 
-## Busy-reader summary
+Local AI Fabric (LAF) coordinates local inference engines and development tools
+through one private API. Use your own model assets while LAF checks resources,
+switches models and handles recovery on your machine.
 
-This repository contains a source-only LAF preview. It includes no model weights,
-SDK binaries, compiled runtime, private host acceptance harness or private
-repository history. Its identified first-party source is licensed under
-[KISS Open License Version 1.0](LICENSE); see [the licensing scope](LICENSING.md)
-and [third-party boundaries](THIRD_PARTY_NOTICES.md). This is not a supported
-runtime or image release.
+[Getting started](#getting-started) · [Architecture](#architecture) ·
+[Project status](#project-status) · [Documentation](#documentation)
 
-For offline development, use an existing Linux Python 3.10 or later with standard
-library support for `fcntl`, `resource` and Unix processes. No package installation,
-Docker, model download, running Router or vendor SDK is needed for these commands.
-From the extracted source root:
+## Why LAF?
+
+- **Local-first inference.** Talk to a Router through an owner-only Unix socket,
+  without a cloud control plane or an exposed TCP listener.
+- **Multiple execution engines.** Use Strata Flash and Ollama-backed large-model
+  profiles through the same client and job API.
+- **Resource-aware orchestration.** Check memory before admission, limit queued
+  GPU work and confirm resources are released before switching models.
+- **GPU and NPU integration.** Keep GPU generation separate from an optional,
+  fixed-shape NPU classification service. An unavailable NPU does not block GPU jobs.
+- **Development workflows.** Chat in the terminal, inspect or cancel jobs, and use
+  opt-in, scoped repair and project tools with explicit file and execution limits.
+
+**Current stage: source preview.** The control paths and clients are implemented,
+with unit/mocked checks. This checkout does not ship model weights, vendor SDKs
+or a ready-to-run runtime image, and does not establish hardware support. Start
+with the offline path below, or follow the component guides for an already
+provisioned host. See [source-preview limits and release gates](docs/source-preview.md).
+
+## Architecture
+
+```mermaid
+flowchart TD
+    Client["Terminal chat / JSON CLI / scoped development tools"]
+    Router["LAF Router · owner-only Unix socket"]
+    Guards["Resource admission · bounded GPU queue · release checks"]
+    Flash["Strata Flash"]
+    Ollama["Ollama · one large-model profile at a time"]
+    NPU["Optional NPU service · fixed-shape classification"]
+    Core["Opt-in Core entrypoint"]
+    Host["Fixed host supervisor · owned provider lifecycle"]
+
+    Client --> Router
+    Router --> Guards
+    Guards --> Flash
+    Guards --> Ollama
+    Router --> NPU
+    Client -. "alternative deployment path" .-> Core
+    Core -. "private lifecycle / resource protocol" .-> Host
+```
+
+The default Router manages the host-backed inference path. The opt-in Core
+entrypoint separates inference control from fixed host lifecycle operations.
+See [Core integration](docs/laf-core-integration.md) and
+[the API contract](inference/local_platform/API.md) for those boundaries.
+
+## How is this different from Ollama?
+
+Ollama is an inference runtime used by LAF for its large-model profiles. LAF adds
+a coordination layer across engines: a shared request API, resource admission,
+model-switch and shutdown checks, an independent NPU lane, and bounded developer
+clients. It uses Ollama rather than replacing it.
+
+Start with standalone Ollama if you only need its model runtime. LAF is for
+coordinating engines and guarded development workflows.
+
+The current Router exposes three fixed generation profiles: `flash`, `coder-next`
+and `gpt-oss-120b`. It is not an arbitrary-model launcher or a complete OpenAI API
+emulator. See [Router behavior and limits](inference/laf_service/README.md).
+
+## Getting started
+
+### Explore the source without models
+
+Use an existing Linux Python 3.10+ with `fcntl`, `resource` and Unix-process
+support. This checkout includes a local launcher, not an installed package. From
+the repository root, run:
 
 ```sh
+./laf --help
+./laf model catalog
+printf '/help\n/quit\n' | ./laf
 python3 -B scripts/check-laf.py --suite portable
-python3 -B -m inference.local_platform.cli --help
-python3 -B -m inference.local_platform.cli model --help
-python3 -B -m inference.local_platform.cli model catalog
 ```
 
-The portable runner executes unit/mocked checks, temporary-file operations and
-owned fake subprocesses. It omits exactly 39 enumerated private Unix-socket tests,
-lists each unexecuted ID, and cannot report a full regression pass. Exit 0 means
-the selected group passed with complete accounting and no skips; exit 1 means
-test failure/error, and exit 2 means invalid execution or test inventory.
+These commands need no package installation, Docker, model download, vendor SDK
+or running Router. They show the CLI, inspect the bundled catalog, exercise local
+chat help/exit and run the portable unit/mocked checks. The catalog's default
+entries intentionally cannot be installed until their metadata is verified.
+The portable result accounts for socket tests as **unexecuted**, not passed;
+see [test groups and result accounting](docs/testing.md).
 
-On an authorized executor where private Unix sockets and peer-UID queries work:
+Use `./laf` from the checkout; bare `laf` requires separate installation or a PATH
+entry. If the launcher loses its executable bit during transfer, use
+`python3 -B laf` with the same arguments.
+
+### Connect to an existing Router
+
+First complete the [Router prerequisites and host acceptance](inference/laf_service/README.md#machine-specific-preparation).
+With that service at the client's default private socket, run:
 
 ```sh
-python3 -B scripts/check-laf.py --suite sockets
-python3 -B scripts/check-laf.py --suite full
+./laf status
+./laf
 ```
 
-The socket group uses fake providers, not Docker or real models. The full group
-combines both groups. A denied socket is an error, never an automatically skipped
-or passing test. Native C++/ORT, real GPU/NPU, clean-host runtime and second-PC
-checks are separate and are not run by this Python suite.
+Running `./laf` without a subcommand opens chat using `gpt-oss-120b`. To choose
+Flash explicitly, use:
 
-## Terminal conversation with an existing Router
+```sh
+./laf chat --model flash
+```
 
-The checkout-local `laf` launcher adds an interactive `chat` command. It keeps
-recent conversation turns in memory, uses the existing JSON job API, and prints
-chat-like replies. Model text, client notices and actual filename observations
-have distinct labels; these do not guarantee that generated prose is correct. An explicit workspace enables a bounded filename-only search
-requested by the model or `/find`. It cannot read file contents, write files or
-run a shell. Start with [the chat CLI guide](docs/laf-chat-cli.md) for practical
-commands, privacy boundaries and the real-model acceptance work still required.
-This client does not install models or turn this preview into a clean-host runtime.
+The default socket is `/run/user/<uid>/laf-inference/service.sock`, using your
+current user ID. `LOCAL_INFERENCE_SOCKET` can select another existing private
+socket; an explicit `--socket` takes priority. See [the chat guide](docs/laf-chat-cli.md)
+for custom-socket commands, filename-only workspace search, privacy and cancellation.
+These client commands do not install or start a Router, engine or model. Chat
+replies are unverified model output.
 
-## Code map
+## Project status
 
-- [Router and existing-assets operation](inference/laf_service/README.md)
-- [Opt-in Core and image source boundary](docs/laf-core-integration.md)
-- [Fixed host supervisor](docs/laf-host-supervisor.md)
-- [Model catalog, management and provenance](docs/laf-model-management.md)
-- [Scoped development client](inference/local_platform/README.md)
-- [Optional fixed-shape NPU service](inference/laf_npu_service/README.md)
-- [NPU runtime rights and distribution gates](inference/laf_npu_service/DISTRIBUTION.md)
+- **Implemented in source:** guarded Router and JSON job API; Strata/Ollama
+  adapters; terminal chat; bounded repair and scoped project tools; model catalog,
+  registry and guarded Ollama management operations.
+- **Opt-in source paths:** Core/host-supervisor separation and a fixed-shape NPU
+  classifier. Real runtime, GPU/NPU and clean-host acceptance remain separate
+  from software tests. Model acquisition and management also need verified
+  operator inputs; the bundled catalog is not install-ready.
+- **Future work:** packaged installation and complete runtime provisioning,
+  distributable images, broader hardware acceptance, remote/multi-PC workflows,
+  and a web UI. These are not shipped capabilities or promised release dates.
 
-## Runtime prerequisites and current limits
+See [the full preview and release boundary](docs/source-preview.md) before
+selecting a runtime configuration or distributing external assets.
 
-The test commands above are a software-check path, not a runtime Quick Start.
-Runtime operation needs separately obtained and verified engines, assets and
-host configuration. The legacy backend expects a fixed local Ollama image ID;
-that value is not a downloadable registry reference. Flash depends on separately
-provisioned Strata executable/source/tokenizer assets. Optional NPU operation
-needs a matching vendor SDK, ORT/XRT/compiler stack, pinned model and compatible
-host driver/device access. These dependencies are neither installed nor licensed
-by this checkout. The Core image builder packages ten named source files only.
+## Documentation
 
-Configuration and systemd examples are templates. Replace every placeholder
-path, UID, container name and network with inspected local values. JSON does not
-expand `~`, `$HOME` or environment variables. A generation lock must refer to the
-same existing owner-controlled lock used by other local model workloads. Keep
-the LAF ownership labels and ownership checks intact. No example authorizes replacing
-an existing service, changing device permissions or exposing a network port.
+- [Router setup, model switching and recovery](inference/laf_service/README.md)
+- [Terminal conversation and filename search](docs/laf-chat-cli.md)
+- [Development client](inference/local_platform/README.md) and
+  [scoped project tools](inference/local_platform/workspace-client.md)
+- [Model management and provenance](docs/laf-model-management.md)
+- [Core integration](docs/laf-core-integration.md) and
+  [fixed host supervisor](docs/laf-host-supervisor.md)
+- [Optional NPU service](inference/laf_npu_service/README.md) and
+  [NPU distribution requirements](inference/laf_npu_service/DISTRIBUTION.md)
+- [Tests](docs/testing.md), [source-preview limits](docs/source-preview.md) and
+  [naming/migration](inference/local_platform/naming.md)
 
-Default model catalog entries intentionally lack verified acquisition, license,
-version, manifest and capacity metadata, so installation is blocked. Synthetic
-regression fixtures are not real model provenance. Model management does not
-accept legal terms, authenticate to providers or obtain redistribution rights.
+## Contributing
 
-## Evidence and release boundary
+Start with [the development rules](AGENTS.md) and [the offline checks](docs/testing.md).
+Keep changes small, preserve the ownership and resource guards, and report what
+you verified and what remains untested. Do not commit model data, credentials,
+caches or logs.
 
-Historical private host reports remain outside this source draft. Their previous
-test counts and binary hashes are not acceptance of this tree. The Python runner
-reports the selected tests, failures and unexecuted groups. Preserve failed and
-unexecuted stages when reproducing it on another executor.
+## License
 
-The Owner approved this bounded first-party source import and KOL v1 licensing.
-The top-level LICENSE covers the project's first-party material throughout
-this repository and its subdirectories; see [LICENSING.md](LICENSING.md).
-Markdown carries embedded license comments, while JSON examples and fixtures
-remain unmodified. External assets retain their separate terms; this approval
-does not license or authorize their redistribution. The source review found no obvious
-credentials or private host paths in the selected tree, but does not establish
-exhaustive security, patent or legal clearance. KOL is a custom license, not a
-claim of OSI approval. Preserve applicable notices and identify distributed
-changes as required by the full license.
-
-A passing Python suite does not establish hardware support, a complete runtime
-release or deployment readiness.
-
-A runtime or image release additionally needs the exact external dependency
-inventory/SBOM, redistribution assessment, clean-host behavior and real
-runtime/hardware acceptance for its supported configuration. These runtime gates
-do not block a separately approved source-only snapshot that contains none of
-those external assets. Source publication, registry upload, merge and deployment
-are separate actions.
-
-For an initial infra integration, prefer a README reference to the verified LAF
-repository and tested immutable release/commit once those exist. Do not make this
-source depend on private infra history or its host directories. A commit-pinned
-submodule is an optional later integration choice.
+Identified first-party source is licensed under [KISS Open License v1.0](LICENSE)
+(KOL-v1), a custom license with no claim of OSI approval. Read [the licensing
+scope](LICENSING.md) and [third-party notices](THIRD_PARTY_NOTICES.md). External
+engines, models and SDKs retain their own terms; this source license does not
+grant rights to redistribute them.
