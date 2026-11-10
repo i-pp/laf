@@ -22,7 +22,7 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
-<!-- Modified 2026-11-09: document interactive CLI and its verified scope. -->
+<!-- Modified 2026-11-10: distinguish client observations, generated text and truncated turns. -->
 
 # Talk to an existing local Router
 
@@ -67,17 +67,19 @@ locally and displays actual relative names:
 
 ```text
 You> Pythonのファイルを探して
-Files> *.py
+Files [local]> *.py
   src/example.py
 You> さっき見つけたファイル名は？
-LAF> ...
+LAF [unverified]> ...
 ```
 
 This is an illustrative transcript, not a real-model acceptance result. Whether a
 particular model emits the supported tool JSON must still be checked on the
 accepted host. If it answers in prose instead of calling the tool, no search takes
-place. `Files>` marks actual client search results; ordinary model prose is
-unverified and can make incorrect claims. A search turn displays the tool result
+place. `Files [local]>` marks actual client search results. Every line of ordinary
+model text has `LAF [unverified]>`; in-session notices use `Client>`. These labels
+distinguish the source, not the truth of generated text. Model prose can still
+make incorrect claims or invent filenames. A search turn displays the tool result
 directly, without a second inference, arbitrary tools or an agent loop.
 
 Ordinary conversation turns use JSON messages with `user` and `assistant` roles.
@@ -111,8 +113,11 @@ and control characters are rejected. Searches stop at 4,096 directory entries,
 unreadable directories produce an explicit incomplete result. Results are sorted
 only within the visited subset; an incomplete search is not proof of absence.
 
-Model-requested search results join the in-memory conversation and may be sent to
-the selected local model on a subsequent message. Only relative names are included,
+Model-requested search results join the in-memory conversation as clearly marked
+user-role observations, separate from the assistant's JSON request. The Router
+accepts text roles rather than generic tool messages. Names are untrusted data,
+not user instructions, and may be sent to the selected local model on a
+subsequent message. Only relative names are included,
 not source contents or the workspace's absolute path. Prompts and conversation
 history are not saved by this client. The existing Router and engine retention
 rules still apply. Do not use secrets in prompts or choose a sensitive workspace.
@@ -127,16 +132,20 @@ Unknown tools, extra fields and unsafe patterns do not execute. Markdown-fenced,
 malformed or ambiguous JSON is displayed as text and does not execute. Model
 output, file names and search results are untrusted data. They are never passed
 to a shell, Python interpreter or OS command, and cannot create new capabilities.
-Terminal controls and bidirectional overrides are escaped before display.
+Terminal controls, bidirectional overrides and Unicode line/paragraph separators
+are escaped before display. Every generated line receives the model label, so a
+multiline reply cannot create an unlabeled client-result line.
 
 ## Limits and failures
 
 The session retains recent completed turns within the Router's conservative
-8,192-token-equivalent byte budget and 32-message cap. Whole oldest turns are
-dropped when necessary, with a visible notice; the new user message is never
+8,192-token-equivalent byte budget and 32-message cap. Whole oldest turns, including their client observations, are
+dropped together when necessary, with a visible notice; the new user message is never
 silently shortened. Input, output tokens and timeout keep the existing bounds.
 Use `--max-tokens 256` or `--timeout 120` if appropriate. A length-capped reply is
-marked as possibly incomplete. `/reset` is useful when changing topics.
+marked as possibly incomplete, cannot execute a tool, and its entire turn is
+omitted from future context. It is never automatically continued. `/reset` is
+useful when changing topics.
 
 Every ordinary turn submits at most one job and only polls its returned ID.
 Submission or polling failures stop the chat and never automatically resend it.
@@ -165,7 +174,8 @@ and is not used by this chat.
 
 Offline checks cover conversation history, JSON job compatibility, fixed tool
 schemas, local versus model-requested search, symlink and directory-swap refusal,
-limits, terminal display, interrupted/uncertain requests and existing CLI behavior.
+limits, all-line provenance labels, truncated-tool refusal, complete-turn pruning,
+terminal display, interrupted/uncertain requests and existing CLI behavior.
 They use fake model replies and do not establish real-model search compliance or
 runtime readiness. Socket checks require an executor that permits private Unix
 sockets. No denied socket test is treated as passed or automatically skipped.

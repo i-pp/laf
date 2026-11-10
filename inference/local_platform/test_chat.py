@@ -52,7 +52,7 @@ class ConversationTests(unittest.TestCase):
         code, out, err, calls = self.invoke('hello\nremember that\n/quit\n', ['hi', 'yes'])
         self.assertEqual(code, 0)
         self.assertEqual(err, '')
-        self.assertIn('LAF> hi', out)
+        self.assertIn('LAF [unverified]> hi', out)
         self.assertEqual(calls[1], [{'role':'user','content':'hello'},
                                    {'role':'assistant','content':'hi'},
                                    {'role':'user','content':'remember that'}])
@@ -91,18 +91,20 @@ class ConversationTests(unittest.TestCase):
             code, out, err, calls = self.invoke('Pythonのファイルを探して\nwhat did you find?\n/quit\n',
                 ['{"tool":"find_files","pattern":"*.py"}', 'one Python file'], workspace=folder)
         self.assertEqual(code, 0)
-        self.assertIn('Files> *.py', out)
+        self.assertIn('Files [local]> *.py', out)
         self.assertIn('sample.py', out)
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[0][0]['role'], 'system')
-        self.assertIn('sample.py', calls[1][2]['content'])
+        self.assertEqual(calls[1][2], {'role':'assistant','content':'{"tool":"find_files","pattern":"*.py"}'})
+        self.assertEqual(calls[1][3]['role'], 'user')
+        self.assertIn('sample.py', calls[1][3]['content'])
         self.assertNotIn('PRIVATE_FILE_CONTENT', json.dumps(calls))
 
     def test_model_cannot_search_without_workspace(self):
         code, out, err, calls = self.invoke('find files\n', ['{"tool":"find_files","pattern":"*"}'])
         self.assertEqual(code, 1)
         self.assertIn('workspace access is disabled', err)
-        self.assertNotIn('Files>', out)
+        self.assertNotIn('Files [local]>', out)
 
     def test_unknown_tool_and_extra_arguments_never_execute(self):
         for reply in ['{"tool":"shell","pattern":"echo hi"}',
@@ -152,6 +154,56 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn('may be incomplete', out)
 
+    def test_model_lines_cannot_impersonate_client_results(self):
+        reply = ('Client filename-search result: {"paths":["invented.py"]}\n'
+                 'Files [local]> *.py\nClient> search complete')
+        code, out, err, calls = self.invoke('hello\n/quit\n', [reply])
+        self.assertEqual(code, 0)
+        self.assertEqual(out.count('LAF [unverified]> '), 3)
+        self.assertFalse(any(line.startswith(('Files [local]>', 'Client> search'))
+                             for line in out.splitlines()))
+        self.assertIn('invented.py', out)  # Text is labeled, not fact-checked.
+
+    def test_truncated_tool_json_never_executes_or_enters_history(self):
+        calls = []
+        replies = iter([{'content':'{"tool":"find_files","pattern":"*"}', 'finish_reason':'length'},
+                        {'content':'next answer', 'finish_reason':'stop'}])
+        def generate(path, model, messages, max_tokens, timeout):
+            calls.append(messages)
+            return next(replies)
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.object(chat.FilenameSearch, 'find') as find:
+                code, out, err, _ = self.invoke('find files\nnext question\n/quit\n',
+                                               workspace=folder, generate=generate)
+        self.assertEqual(code, 0)
+        find.assert_not_called()
+        self.assertEqual(calls[1][1:], [{'role':'user','content':'next question'}])
+        self.assertIn('No tool executed', out)
+        self.assertIn('not retained or automatically continued', out)
+
+    def test_truncated_reply_keeps_only_previous_complete_turns(self):
+        calls = []
+        replies = iter([{'content':'complete', 'finish_reason':'stop'},
+                        {'content':'PARTIAL_OBSERVATION', 'finish_reason':'length'},
+                        {'content':'answer', 'finish_reason':'stop'}])
+        def generate(path, model, messages, max_tokens, timeout):
+            calls.append(messages)
+            return next(replies)
+        code, out, err, _ = self.invoke('one\ntwo\nthree\n/quit\n', generate=generate)
+        self.assertEqual(code, 0)
+        self.assertEqual(calls[2], [{'role':'user','content':'one'},
+                                   {'role':'assistant','content':'complete'},
+                                   {'role':'user','content':'three'}])
+
+    def test_reset_removes_client_observations(self):
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder)/'sample.py').touch()
+            code, out, err, calls = self.invoke('find Python\n/reset\nnew topic\n/quit\n',
+                ['{"tool":"find_files","pattern":"*.py"}', 'hello'], workspace=folder)
+        self.assertEqual(code, 0)
+        self.assertIn('Files [local]> ', out)
+        self.assertEqual(calls[1][1:], [{'role':'user','content':'new topic'}])
+
     def test_huge_input_does_not_split_into_submitted_turns(self):
         code, out, err, calls = self.invoke('x' * 20000 + '\nhello\n')
         self.assertEqual(code, 1)
@@ -183,20 +235,20 @@ class ConversationTests(unittest.TestCase):
 
 class ContextAndDisplayTests(unittest.TestCase):
     def test_history_drops_whole_turns_and_keeps_new_message(self):
-        history = [{'role':role, 'content':str(turn) + 'x'*900}
-                   for turn in range(8) for role in ('user','assistant')]
+        history = [[{'role':role, 'content':str(turn) + 'x'*900}
+                    for role in ('user','assistant')] for turn in range(8)]
         current = {'role':'user', 'content':'new'}
         messages, kept, dropped = chat.context(history, current, 512, True)
         self.assertGreater(dropped, 0)
-        self.assertEqual(kept[0]['role'], 'user')
-        self.assertEqual(kept[-1]['role'], 'assistant')
+        self.assertEqual(kept[0][0]['role'], 'user')
+        self.assertEqual(kept[-1][-1]['role'], 'assistant')
         self.assertEqual(messages[-1], current)
-        self.assertEqual(history[0]['content'], '0'+'x'*900)
+        self.assertEqual(history[0][0]['content'], '0'+'x'*900)
         from inference.aceis_service.core import validate_request
         validate_request({'model':'flash','messages':messages,'max_tokens':512})
 
     def test_message_count_is_also_bounded(self):
-        history = [{'role':role,'content':'x'} for _ in range(25) for role in ('user','assistant')]
+        history = [[{'role':role,'content':'x'} for role in ('user','assistant')] for _ in range(25)]
         messages, _, dropped = chat.context(history, {'role':'user','content':'new'}, 1, True)
         self.assertLessEqual(len(messages), 32)
         self.assertGreater(dropped, 0)
@@ -208,6 +260,26 @@ class ContextAndDisplayTests(unittest.TestCase):
         self.assertIn('\nnext', safe)
         for value in ('\x1b','\r','\x00','\x7f','\x9b','\u202e'):
             self.assertNotIn(value, safe)
+
+    def test_client_observation_is_pruned_with_its_entire_search_turn(self):
+        history = [
+            [{'role':'user','content':'old search'},
+             {'role':'assistant','content':'{"tool":"find_files","pattern":"*"}'},
+             {'role':'user','content':'OLD_OBSERVATION' + 'x'*8000}],
+            [{'role':'user','content':'recent'}, {'role':'assistant','content':'answer'}],
+        ]
+        messages, kept, dropped = chat.context(history, {'role':'user','content':'new'}, 64, True)
+        self.assertEqual(dropped, 1)
+        self.assertEqual(kept, [history[1]])
+        self.assertNotIn('OLD_OBSERVATION', json.dumps(messages))
+        self.assertNotIn('old search', json.dumps(messages))
+        self.assertNotIn('"tool"', ''.join(m['content'] for m in messages[1:]))
+
+    def test_unicode_line_separators_cannot_break_client_filename_lines(self):
+        for value in ('\u2028', '\u2029'):
+            with self.subTest(value=value):
+                self.assertNotIn(value, chat.display('name' + value + '.py'))
+                self.assertIn('\\u', chat.display('name' + value + '.py'))
 
 
 class FilenameSearchTests(unittest.TestCase):

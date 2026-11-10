@@ -74,7 +74,8 @@ checks are separate and are not run by this Python suite.
 
 The checkout-local `laf` launcher adds an interactive `chat` command. It keeps
 recent conversation turns in memory, uses the existing JSON job API, and prints
-chat-like replies. An explicit workspace enables a bounded filename-only search
+chat-like replies. Model text, client notices and actual filename observations
+have distinct labels; these do not guarantee that generated prose is correct. An explicit workspace enables a bounded filename-only search
 requested by the model or `/find`. It cannot read file contents, write files or
 run a shell. Start with [the chat CLI guide](docs/laf-chat-cli.md) for practical
 commands, privacy boundaries and the real-model acceptance work still required.

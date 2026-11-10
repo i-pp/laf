@@ -130,3 +130,10 @@ required by KOL section 4(c), while preserving applicable original notices.
 - Add an optional explicit-workspace filename-only search with a fixed JSON tool schema and local `/find` command. No file contents, writes, shell, service configuration or model provisioning are added.
 - Add offline regressions and a usage guide. Real-model, supported-host and clean-host acceptance remain separate.
 - Preserve all existing `aceis-*` compatibility names; no installed unit/socket/connector is renamed.
+
+## Chat provenance and history follow-up (2026-11-10)
+
+- Label every generated line as unverified, label actual file observations as local, and distinguish client notices. Generated prose remains capable of incorrect claims.
+- Keep client filename observations out of assistant-generated history and prune each search turn as one complete group.
+- Do not dispatch tools from length-capped output, retain truncated turns, or automatically continue them.
+- Add regressions for result-line impersonation, observation roles, complete-turn pruning, reset and truncation. No new file, shell, model, service or network capability is added.
