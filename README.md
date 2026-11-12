@@ -66,7 +66,7 @@ flowchart TD
     Router["LAF Router · owner-only Unix socket"]
     Guards["Resource admission · bounded GPU queue · release checks"]
     Flash["Strata Flash"]
-    Ollama["Ollama · one large-model profile at a time"]
+    Ollama["Ollama · one model profile at a time"]
     NPU["Optional NPU service · fixed-shape classification"]
     Core["Opt-in Core entrypoint"]
     Host["Fixed host supervisor · owned provider lifecycle"]
@@ -95,16 +95,18 @@ clients. It uses Ollama rather than replacing it.
 Start with standalone Ollama if you only need its model runtime. LAF is for
 coordinating engines and guarded development workflows.
 
-The current Router exposes three fixed generation profiles: `flash`, `coder-next`
-and `gpt-oss-120b`. It is not an arbitrary-model launcher or a complete OpenAI API
-emulator. See [Router behavior and limits](inference/laf_service/README.md).
+The legacy Router exposes `flash`, `coder-next` and `gpt-oss-120b`. The opt-in
+Core can instead use [configured profiles and optional Flash](docs/laf-configured-models.md),
+with a pinned operator catalog and explicit default. It is not an arbitrary-model
+launcher or a complete OpenAI API emulator. See
+[Router behavior and limits](inference/laf_service/README.md).
 
 ## Getting started
 
 ### Chat with an existing Router
 
-This path requires an already configured and accepted LAF Router, with the model
-assets for the default `gpt-oss-120b` profile prepared. Complete the
+This path requires an already configured and accepted LAF Router, with its
+declared default model prepared (`gpt-oss-120b` for the legacy profile). Complete the
 [Router prerequisites and host acceptance](inference/laf_service/README.md#machine-specific-preparation)
 first. This source preview does not provide a complete fresh-host installation.
 
@@ -116,9 +118,10 @@ support. From the repository root, use the checkout-local launcher:
 ./laf
 ```
 
-`status` checks the running Router. `./laf` opens the chat prompt using
-`gpt-oss-120b`; type a message to request inference, or `/quit` to exit. To choose
-Flash instead, use:
+`status` checks the running Router and its selected catalog. `./laf` opens the
+prompt without contacting it; the first ordinary message uses the Router's
+declared default. Type `/quit` to exit. If Flash belongs to that catalog, choose
+it explicitly with:
 
 ```sh
 ./laf chat --model flash
@@ -174,6 +177,9 @@ See [the full preview and release boundary](docs/source-preview.md) before
 selecting a runtime configuration or distributing external assets.
 
 ## Documentation
+
+- [Local stdio MCP source candidate](docs/laf-mcp.md): five Router-job tools,
+  owned receipts and separate runtime/dependency acceptance gates.
 
 - [Router setup, model switching and recovery](inference/laf_service/README.md)
 - [Terminal conversation and filename search](docs/laf-chat-cli.md)

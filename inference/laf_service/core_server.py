@@ -29,7 +29,7 @@ import signal
 import stat
 import threading
 from .core import Controller, ServiceError
-from .core_backends import CoreBackends, acceptance_profiles
+from .core_backends import CoreBackends, acceptance_profiles, configured_selection
 from .lifecycle_client import LifecycleClient
 from .lifecycle_uds import FramedExchange, UnixConnector, decode
 from .server import Handler, Server, private_dir
@@ -45,16 +45,24 @@ def load_config(path):
             or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1 or info.st_size > 32768):
         raise ServiceError('owned mode-0600 Core configuration required')
     config = decode(path.read_bytes())
+    # Changed 2026-11-11: normal owner-selected catalogs explicitly include/exclude Flash.
     candidate = type(config) is dict and 'acceptance_ollama_profiles' in config
-    required = {'state_dir', 'runtime_dir', 'lifecycle_runtime_dir', 'acceptance_ollama_profiles'} if candidate else REQUIRED
+    normal = type(config) is dict and any(key in config for key in ('ollama_profiles', 'flash_enabled', 'default_model'))
+    if normal:
+        _, flash, _ = configured_selection(config)
+        required = {'state_dir', 'runtime_dir', 'lifecycle_runtime_dir', 'ollama_profiles', 'flash_enabled', 'default_model'}
+        if flash:
+            required |= {'strata_source', 'tokenizer_python', 'strata_command'}
+    else:
+        required = {'state_dir', 'runtime_dir', 'lifecycle_runtime_dir', 'acceptance_ollama_profiles'} if candidate else REQUIRED
     if type(config) is not dict or not required <= set(config) or set(config) - required - {'npu_socket'}:
         raise ServiceError('explicit Core configuration fields required')
     if candidate:
         acceptance_profiles(config['acceptance_ollama_profiles'])
-    for name in required - {'strata_command', 'acceptance_ollama_profiles'}:
+    for name in required - {'strata_command', 'acceptance_ollama_profiles', 'ollama_profiles', 'flash_enabled', 'default_model'}:
         if type(config[name]) is not str or not Path(config[name]).is_absolute():
             raise ServiceError('absolute container-native Core paths required')
-    if not candidate:
+    if 'strata_command' in required:
         command = config['strata_command']
         if (type(command) is not list or not command or len(command) > 128
                 or any(type(x) is not str or not x or len(x) > 4096 for x in command)

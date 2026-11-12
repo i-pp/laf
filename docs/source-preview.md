@@ -46,8 +46,11 @@ retain their additional component-specific restrictions.
 
 The offline test commands are a software-check path, not a runtime Quick Start.
 Runtime operation needs separately obtained and verified engines, assets and
-host configuration. The legacy backend expects a fixed local Ollama image ID;
-that value is not a downloadable registry reference. Flash depends on separately
+host configuration. The legacy backend defaults to a fixed local Ollama image ID;
+that value is not a downloadable registry reference. An opt-in
+[host provider policy](laf-provider-portability.md) can select another explicitly
+installed immutable image/version and bounded resources without editing source;
+it does not provision an image or establish compatibility. Flash depends on separately
 provisioned Strata executable/source/tokenizer assets. Optional NPU operation
 needs a matching vendor SDK, ORT/XRT/compiler stack, pinned model and compatible
 host driver/device access. These dependencies are neither installed nor licensed

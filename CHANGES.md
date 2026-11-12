@@ -24,6 +24,66 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## 2026-11-11: exact MCP SDK 1.30.0 source selection
+
+Changed the adapter startup guard and package dependency from 1.29.0 to 1.30.0,
+and recorded the official SDK wheel/sdist identities. Added mocked wrong/missing
+SDK startup regressions and real launcher initialization coverage; real protocol
+and integration tests now reject any SDK other than 1.30.0. Updated operator,
+license-boundary and SDK-only installer descriptions. Historical 1.29.0 evidence
+is retained separately from user-reported 1.30.0 installation checks. No Router,
+receipt, lifecycle, provider, resource, authority, dependency-installer behavior,
+or model code changed. All 29 installer pins remain unchanged. No installed
+environment, host configuration, service or catalog was modified. The initial
+source freeze does not claim native 1.30.0 protocol or live-runtime acceptance.
+
+## 2026-11-11: combined catalog and MCP source checks
+
+Combined the reviewed configured-catalog/provider-policy source and standalone
+MCP source without changing their production modules. Added
+`mcp/tests/integrated_router_fixture.py` and `test_integrated_router.py` to check
+real Handler/Controller/CoreBackends behavior with synthetic lifecycle/provider
+inputs. Checks cover exact configured IDs, Flash-off catalogs, legacy metadata,
+caller-owned attempt recovery, readiness, completion and cancellation, including
+an actual SDK stdio session. The bridge replaces HTTP/socket transport and peer
+authentication. These are local source checks, not live UDS, model, hardware,
+clean-host or install-ready acceptance. Added `mcp/MANIFEST.in` and an offline
+sdist-content regression so the source package retains SDK pin/audit metadata,
+launcher, notices and test helpers. Integration and full package tests still
+require the complete LAF source tree. Existing source-change notices remain.
+
+## 2026-11-11: normal configured model catalogs and optional Flash
+
+Added a strict normal Core catalog with pinned Ollama manifest identities, an
+explicit selected default and `flash_enabled`. Flash-free mode omits Strata
+paths/process recovery; mixed mode retains the existing Flash lifecycle while
+using configured small-model options. Legacy and isolated acceptance catalogs
+remain separate. Core inventory/loaded-manifest checks reject identity drift;
+empty-engine evidence now requires an actual list, and cancellation/provider
+generation is checked before chat. Model/capabilities responses include default
+and Flash metadata.
+
+The CLI discovers and validates the catalog before each job, supports selected
+IDs consistently across chat/ask/get/status/repair/development, and separates
+known no-submit failures/interrupts from uncertain submissions. A conversation
+resolves its default lazily and keeps its selected model. Added focused Core and
+client regressions and updated existing fixtures, aggregate registration, API,
+README and operator/client guides. No model acquisition, runtime deployment,
+hardware suitability or public-source publication is implied.
+
+## 2026-11-11: explicit host Ollama provider policy
+
+Added an opt-in host-only `ollama_provider` policy in `backends.py` for an already-
+installed immutable image, explicit version and bounded RAM/CPU/PID limits.
+Repository digests are resolved by local image inspection; no image pull/build,
+mutable tag fallback or new client/lifecycle authority is added. Legacy defaults
+and physical safety guards remain. Container inspection now checks CPU/PID limits,
+exact existing AMD devices and no added capabilities/device requests, and runs
+before a newly created container starts. Added deterministic provider tests and
+runner registration, a portability/smaller-VRAM acceptance guide, and updates to
+the existing supervisor/source-preview guides. No installed configuration,
+service, model or hardware acceptance changed.
+
 ## 2026-11-10: isolated terminal-client package
 
 Added `pyproject.toml` with a standard `laf` console entrypoint and no third-party
@@ -195,3 +255,44 @@ Open the existing interactive chat when no subcommand is supplied, including an
 explicit global socket override. Keep the canonical private socket, environment
 override, chat defaults, explicit subcommands, help and all socket safety checks.
 No installed command, PATH entry, service, model or permission is changed.
+
+## 2026-11-11: independent public Router MCP source candidate
+
+Added root plugin manifests, the separate `mcp/` Python adapter package and tests,
+`skills/laf-router/SKILL.md`, `docs/laf-mcp.md` and source/package checks. The five
+local stdio tools use only the public Router API and owned receipts. No private
+orchestrator source was imported. Existing Router, Core, host lifecycle, CLI and
+resource limits are unchanged. SDK/dependency licenses remain separate from KOL.
+This local candidate does not authorize installation, live switching or publication.
+
+## 2026-11-12: native SDK 1.30.0 evidence and general installer guide
+
+Record the recovered native SDK 1.30.0 stdio/fake-provider checks and remaining
+live-client, hardware, distribution and deployment gates. Preserve the missing
+full-suite command and package-log limitations without rerunning completed work.
+Replace operator-specific SDK retry paths and review hash with the generic
+inspect/prepare/printed-command workflow. Runtime source, tests, dependency pins,
+SDK installation and services are unchanged. No public release is made.
+
+## 2026-11-12: align the local candidate with Minimum CI
+
+Integrate public main 963133b's source/license CI and upstream oversized-request
+test race fix without changing production runtime. Classify the added candidate
+paths explicitly, preserve the external MIT SDK license, and separate generated
+dependency metadata from first-party licensing. Record rebased-tree static checks
+without presenting the earlier native 513/86 results as a rerun of this tree.
+SDK installation, services, models, catalog and public branches are unchanged.
+
+## 2026-11-12: explicit SDK-free CI coverage
+
+Integrate main03ddf8b's reviewed shared license Action and test-only early-Origin
+rejection race fix. Add explicit Minimum CI steps for 74 MCP source/mock/manifest
+cases and 56 installer regressions without SDK/dependency acquisition or install.
+Keep 12 actual SDK cases and two package-build cases as separate gates. Check
+the added commands locally and preserve scoped results without claiming native
+SDK, live client, hardware, deployment or public-release acceptance.
+
+The SDK-free CI steps also reject empty/duplicate selections, incomplete run
+counts, skips, expected failures and unexpected successes. Actual 74/56 runs
+passed; synthetic pass/skip/xfail/error/early-stop witnesses checked fail-closed
+result accounting without installing SDK packages or starting real providers.

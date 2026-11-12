@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-11: allow configured bounded model IDs without expanding workflow capabilities.
+
 """Bounded local pure-function repair loop. No arbitrary commands or repository writes."""
 import argparse
 import ast
@@ -29,7 +31,7 @@ import subprocess
 import sys
 import time
 from .bounded_patch import canonical_source, validated_replacement
-from .cli import ask, ClientError, MODELS
+from .cli import ask, ClientError, ClientNotSubmitted, ClientPreflightInterrupted, is_model_id
 
 
 def checked_cases(cases, source):
@@ -79,7 +81,7 @@ def run_cases(root, label):
 
 
 def repair(socket_path, source, cases, workdir, model='gpt-oss-120b', attempts=2, adviser=ask):
-    if model not in MODELS or type(attempts) is not int or not 1 <= attempts <= 3:
+    if not is_model_id(model) or type(attempts) is not int or not 1 <= attempts <= 3:
         raise ValueError('model and attempts1..3 required')
     source = canonical_source(source)
     cases = checked_cases(cases, source)
@@ -124,6 +126,9 @@ def repair(socket_path, source, cases, workdir, model='gpt-oss-120b', attempts=2
         except (ValueError,ClientError,OSError) as exc:
             attempt.update({'accepted_by_grammar':False,'error':type(exc).__name__,
                             'job_id':getattr(exc,'job_id',None) or attempt.get('job_id')})
+            if isinstance(exc, ClientNotSubmitted):
+                attempt['error_detail'] = str(exc)
+                attempt['submission_attempted'] = False
             # An uncertain transport outcome must not cause another generation.
             result['attempts'].append(attempt)
             if isinstance(exc,(ClientError,OSError)): break
@@ -141,7 +146,7 @@ def main(argv=None):
     p.add_argument('--source',required=True,help='pure-function UTF-8 source; never overwritten')
     p.add_argument('--cases',required=True,help='JSON list of function/args/expected cases; no executable tests')
     p.add_argument('--workdir',required=True,help='new private output directory')
-    p.add_argument('--model',choices=MODELS,default='gpt-oss-120b')
+    p.add_argument('--model',default='gpt-oss-120b')
     p.add_argument('--attempts',type=int,default=2)
     args=p.parse_args(argv)
     try:
@@ -151,6 +156,10 @@ def main(argv=None):
         out=repair(args.socket,source,json.loads(cases_raw),args.workdir,args.model,args.attempts)
         print(json.dumps(out,ensure_ascii=False,indent=2))
         return 0 if out['tests_passed'] else 1
+    except ClientPreflightInterrupted as exc:
+        print(json.dumps({'status':'client_wait_interrupted', 'error':str(exc),
+                          'job_id':None, 'submission_attempted':False, 'automatic_retry':False}),file=sys.stderr)
+        return 130
     except KeyboardInterrupt as exc:
         print(json.dumps({'status':'cancellation_requested_or_uncertain',
                           'job_id':getattr(exc,'job_id',None),'stop_confirmed':False}),file=sys.stderr)

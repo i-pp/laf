@@ -1,0 +1,7 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "laf",
+  "version": "0.1.0",
+  "description": "Local AI Fabric source package with a bounded local Router-job MCP interface.",
+  "author": {"name": "I-plusplus Inc."}
+}

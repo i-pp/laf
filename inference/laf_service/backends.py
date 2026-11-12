@@ -25,6 +25,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import signal
 import subprocess
 import threading
@@ -34,10 +35,34 @@ from .core import GIB, ServiceError, snapshot
 IMAGE = 'sha256:d4ae7c574945c7432c8c02ae63fa81ad555854d9fcbc29d02542a4dd69833a85'
 NAMES = {'coder-next': 'laf-coder-next', 'gpt-oss-120b': 'laf-gpt-oss-120b'}
 
+# Changed 2026-11-11: optional fixed host policy; no client-supplied image or limits.
+_IMAGE_ID = re.compile(r'sha256:[0-9a-f]{64}\Z')
+_IMAGE_REF = re.compile(r'[a-z0-9][a-z0-9._-]*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*){0,2}@sha256:[0-9a-f]{64}\Z')
+
+
+def provider_policy(value):
+    fields = {'image', 'version', 'memory_bytes', 'cpus', 'pids_limit'}
+    if type(value) is not dict or set(value) != fields:
+        raise ServiceError('exact fixed Ollama provider policy required')
+    image, version = value['image'], value['version']
+    if (type(image) is not str or len(image) > 512
+            or not (_IMAGE_ID.fullmatch(image) or _IMAGE_REF.fullmatch(image))):
+        raise ServiceError('installed immutable Ollama image identity required')
+    if type(version) is not str or not re.fullmatch(r'[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}', version):
+        raise ServiceError('explicit numeric Ollama version required')
+    for key, minimum, maximum in (('memory_bytes', GIB, 128 * GIB), ('cpus', 1, 32), ('pids_limit', 64, 4096)):
+        if type(value[key]) is not int or not minimum <= value[key] <= maximum:
+            raise ServiceError('bounded integer Ollama resource limits required')
+    return dict(value)
+
 
 class Backends:
     def __init__(self, config, config_path):
         self.config, self.config_path = config, str(config_path)
+        self.custom_provider = 'ollama_provider' in config
+        self.provider = provider_policy(config['ollama_provider']) if self.custom_provider else {
+            'image': IMAGE, 'version': '0.40.15', 'memory_bytes': 32 * GIB, 'cpus': 8, 'pids_limit': 512}
+        self.provider_image_id = None if self.custom_provider else IMAGE
         self.owner = str(Path(config['state_dir']).resolve())
         self.cid = None
         self.address = None
@@ -51,6 +76,35 @@ class Backends:
         self.closing = False
         self.lifecycle_lock = threading.RLock()
 
+    def resolve_provider_image(self):
+        if self.provider_image_id is not None:
+            return self.provider_image_id
+        # GET-only local image inspection. Never pull, build, infer a tag or stop a provider.
+        reference = self.provider['image']
+        try:
+            objects = json.loads(self.docker('image', 'inspect', '--', reference))
+            if type(objects) is not list or len(objects) != 1 or type(objects[0]) is not dict:
+                raise ValueError()
+            image = objects[0]
+            identifier = image['Id']
+            if (type(identifier) is not str or not _IMAGE_ID.fullmatch(identifier)
+                    or image.get('Os') != 'linux' or type(image.get('Config')) is not dict):
+                raise ValueError()
+            volumes = image['Config'].get('Volumes')
+            if volumes is not None and (type(volumes) is not dict or volumes):
+                raise ValueError()
+            if _IMAGE_ID.fullmatch(reference):
+                if identifier != reference:
+                    raise ValueError()
+            else:
+                digests = image.get('RepoDigests')
+                if type(digests) is not list or not all(type(item) is str for item in digests) or reference not in digests:
+                    raise ValueError()
+        except (ValueError, TypeError, KeyError):
+            raise ServiceError('installed Ollama image identity or implicit mounts rejected') from None
+        self.provider_image_id = identifier
+        return identifier
+
     def docker(self, *args, timeout=30):
         p = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', *args],
                            capture_output=True, text=True, timeout=timeout)
@@ -63,7 +117,7 @@ class Backends:
         if not self.cid:
             return None
         info = json.loads(self.docker('inspect', self.cid))[0]
-        if info['Config'].get('Labels', {}).get('laf.inference.owner') != self.owner or info['Image'] != IMAGE:
+        if info['Config'].get('Labels', {}).get('laf.inference.owner') != self.owner or info['Image'] != self.resolve_provider_image():
             raise ServiceError('container ownership or image identity changed')
         host = info['HostConfig']
         expected_network = self.config['docker_network']
@@ -72,9 +126,15 @@ class Backends:
                 or not host.get('ReadonlyRootfs') or set(host.get('CapDrop') or []) != {'ALL'}
                 or 'no-new-privileges:true' not in (host.get('SecurityOpt') or [])
                 or info['Config'].get('User') != f'{os.getuid()}:{os.getgid()}'
-                or host.get('Memory') != 32 * GIB or host.get('MemorySwap') != 32 * GIB
+                or host.get('Memory') != self.provider['memory_bytes'] or host.get('MemorySwap') != self.provider['memory_bytes']
+                or host.get('NanoCpus') != self.provider['cpus'] * 10**9 or host.get('PidsLimit') != self.provider['pids_limit']
+                or host.get('CapAdd') or host.get('DeviceRequests')
                 or host.get('IpcMode') != 'private' or host.get('PidMode', '') != ''):
             raise ServiceError('owned container security configuration changed')
+        devices = [{'PathOnHost': path, 'PathInContainer': path, 'CgroupPermissions': 'rwm'}
+                   for path in ('/dev/kfd', '/dev/dri/renderD128')]
+        if host.get('Devices') != devices:
+            raise ServiceError('owned container device configuration changed')
         expected_mounts = {
             '/weights': (str(Path(self.config['weights']).resolve()), False),
             '/input': (str(Path(self.config['state_dir']).resolve() / 'input'), False),
@@ -96,6 +156,7 @@ class Backends:
     def _start_ollama(self, check):
         if self.closing:
             raise ServiceError('service closing')
+        image = self.resolve_provider_image()
         if self.cid:
             info = self.inspect_owned()
             if not info['State']['Running']:
@@ -124,7 +185,8 @@ class Backends:
             for model, path in files.items():
                 (state / 'input' / (model + '.Modelfile')).write_text('FROM /weights/' + path + '\n')
             args = ['create', '--pull=never', '--name', name, '--label', 'laf.inference.owner=' + self.owner,
-                    '--memory', '32g', '--memory-swap', '32g', '--cpus', '8', '--pids-limit', '512',
+                    '--memory', str(self.provider['memory_bytes']), '--memory-swap', str(self.provider['memory_bytes']),
+                    '--cpus', str(self.provider['cpus']), '--pids-limit', str(self.provider['pids_limit']),
                     '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=512m', '--ipc', 'private',
                     '--network', network, '--user', f'{os.getuid()}:{os.getgid()}', '--device', '/dev/kfd',
                     '--device', '/dev/dri/renderD128', '--group-add', str(os.stat('/dev/kfd').st_gid),
@@ -139,7 +201,9 @@ class Backends:
                    'OLLAMA_KEEP_ALIVE': '-1', 'OLLAMA_NO_CLOUD': '1', 'OLLAMA_NOPRUNE': '1', 'OLLAMA_NOHISTORY': '1'}
             for key, value in env.items():
                 args += ['--env', key + '=' + value]
-            self.cid = self.docker(*args, IMAGE, 'serve')
+            self.cid = self.docker(*args, image, 'serve')
+        # Reconcile the stopped container before it can execute a new image.
+        self.inspect_owned()
         self.wait_idle(check)
         check()
         self.docker('start', self.cid)
@@ -152,7 +216,7 @@ class Backends:
         while time.monotonic() < until:
             check()
             try:
-                if self.api('/api/version', timeout=2).get('version') == '0.40.15':
+                if self.api('/api/version', timeout=2).get('version') == self.provider['version']:
                     return
             except (OSError, ServiceError, ValueError):
                 time.sleep(.3)

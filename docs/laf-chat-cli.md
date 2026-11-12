@@ -63,12 +63,18 @@ SOCKET=/ABSOLUTE/PRIVATE/service.sock  # Replace with the accepted existing sock
 ./laf --socket "$SOCKET" chat --model flash
 ```
 
-The implicit conversation keeps the existing chat defaults: model
-`gpt-oss-120b`, at most 512 output tokens and a 180-second timeout. Use the explicit
+The implicit conversation uses the selected Router's declared default, resolved
+on the first ordinary message. The legacy default remains `gpt-oss-120b`.
+It keeps at most 512 output tokens and a 180-second timeout. Use the explicit
 `chat` subcommand for its model, output, timeout and workspace options. `--help`
 and existing subcommands keep their previous behavior. Every request still uses
 the same absolute-path, ownership, non-symlink and private-permission checks;
 there is no fallback to another socket or TCP.
+
+Each submission validates the current model catalog. Once selected, the model
+stays fixed for this conversation, including after `/reset`; a changed default
+does not silently switch it. See [configured models](laf-configured-models.md)
+for ordinary small-model IDs and optional Flash. Help/quit remains offline.
 
 These are client commands, not a clean-host runtime Quick Start. They do not
 start, replace or reconfigure a service. See the [Router prerequisites](../inference/laf_service/README.md#machine-specific-preparation).
@@ -195,8 +201,9 @@ the session running.
 There is no arbitrary file read/write, shell, tool chaining, background autonomy,
 remote-machine access, session persistence, image input, generic OpenAI tool-call
 compatibility, installed packaging, model download or new runtime setup in this
-change. Models remain the existing three fixed Router choices. NPU is optional
-and is not used by this chat.
+change. Models must belong to the selected Router catalog, including configured
+IDs and optional Flash. There is no client-selected provider or arbitrary
+backend option. NPU is optional and is not used by this chat.
 
 ## Verification and next steps
 

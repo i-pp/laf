@@ -148,6 +148,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif self.path == '/v1/capabilities':
                 self.response(200, {'api_version':1, 'transport':'owner-only Unix socket',
                     'gpu':{'models':sorted(ctl.models),'max_concurrent_generation':1,
+                           'default_model':getattr(ctl.backend, 'default_model', 'gpt-oss-120b'),
+                           'flash_enabled':ctl.requires_flash,
                            'context_limit':8192,'max_output_tokens':1024},
                     'npu':{'configured':bool(self.server.config.get('npu_socket')),
                            'model':NPU_MODEL,'input_shape':[1,3,32,32],'input_elements':3072,
@@ -155,6 +157,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                            'max_request_bytes':NPU_MAX_BODY,'application_accuracy_verified':False}})
             elif self.path == '/v1/models':
                 self.response(200, {'models': sorted(ctl.models), 'context_limit': 8192,
+                                    'default_model':getattr(ctl.backend, 'default_model', 'gpt-oss-120b'),
+                                    'flash_enabled':ctl.requires_flash,
                                     'max_output_tokens': 1024, 'max_large_models_loaded': 1})
             elif self.path.startswith('/v1/jobs/'):
                 with ctl.lock:

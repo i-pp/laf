@@ -4,6 +4,10 @@
     "LicenseRef-KOL-v1": {
       "path": "LICENSE",
       "sha256": "df951a913ed6f5fe319b9e1b1a3cc2b6e396ea65b9d1687b9f735bd8f117ea9c"
+    },
+    "MIT": {
+      "path": "mcp/licenses/MCP-SDK-LICENSE.txt",
+      "sha256": "5e13dbbc1d120fc2a03cecde7c91424ae2d7de11b63d58ded2f4431e261ee50d"
     }
   },
   "notice": {
@@ -105,7 +109,43 @@
         "scripts/check-laf.py",
         "scripts/laf_socket_test_ids.py",
         "scripts/test_client_install.py",
-        "docs/license-evidence-scope.md"
+        "docs/license-evidence-scope.md",
+        "docs/laf-configured-models.md",
+        "docs/laf-mcp-validation.md",
+        "docs/laf-mcp.md",
+        "docs/laf-provider-portability.md",
+        "docs/laf-sdk-install.md",
+        "inference/laf_service/test_configured_profiles.py",
+        "inference/laf_service/test_provider_policy.py",
+        "inference/local_platform/test_model_catalog.py",
+        "mcp/MANIFEST.in",
+        "mcp/README.md",
+        "mcp/THIRD_PARTY_NOTICES.md",
+        "mcp/launch.py",
+        "mcp/pyproject.toml",
+        "mcp/sdk-pin.txt",
+        "mcp/src/laf_mcp/__init__.py",
+        "mcp/src/laf_mcp/application.py",
+        "mcp/src/laf_mcp/contracts.py",
+        "mcp/src/laf_mcp/receipts.py",
+        "mcp/src/laf_mcp/router.py",
+        "mcp/src/laf_mcp/server.py",
+        "mcp/tests/fake_stdio.py",
+        "mcp/tests/integrated_router_fixture.py",
+        "mcp/tests/test_application.py",
+        "mcp/tests/test_attempts.py",
+        "mcp/tests/test_contracts.py",
+        "mcp/tests/test_integrated_router.py",
+        "mcp/tests/test_package.py",
+        "mcp/tests/test_protocol.py",
+        "mcp/tests/test_receipts.py",
+        "mcp/tests/test_router.py",
+        "mcp/tests/test_sdist.py",
+        "mcp/tests/test_sdk_gate.py",
+        "scripts/check-laf-plugin.py",
+        "scripts/laf-sdk.py",
+        "scripts/test_sdk_installer.py",
+        "skills/laf-router/SKILL.md"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",
@@ -130,11 +170,36 @@
         "inference/local_platform/examples/median3-cases.json",
         "inference/local_platform/examples/safe_divide-cases.json",
         "inference/local_platform/fixtures/provenance-synthetic.json",
-        ".github/license-policy.json"
+        ".github/license-policy.json",
+        "mcp.json",
+        "mcp/LICENSE",
+        "mcp/NOTICE",
+        "plugin.json",
+        "scripts/laf-sdk-pins.json"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",
       "header": "root"
+    },
+    {
+      "paths": [
+        "mcp/licenses/MCP-SDK-LICENSE.txt"
+      ],
+      "kind": "third_party",
+      "license": "MIT",
+      "evidence": "mcp/THIRD_PARTY_NOTICES.md",
+      "origin": "https://github.com/modelcontextprotocol/python-sdk/blob/v1.30.0/LICENSE"
+    },
+    {
+      "paths": [
+        "mcp/dependency-review.json",
+        "scripts/fixtures/laf-sdk-pypi-20261111.json"
+      ],
+      "kind": "generated_metadata",
+      "evidence": "docs/license-evidence-scope.md",
+      "reason": "Dependency version, artifact identity, advisory and license observations, not dependency implementation or a KOL grant to external packages.",
+      "origin": "Official PyPI release metadata and recorded local validation; see mcp/dependency-review.json and docs/laf-sdk-install.md.",
+      "format": "json"
     }
   ]
 }

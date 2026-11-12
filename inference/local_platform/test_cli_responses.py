@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-11: preserve job safety assertions with required catalog discovery.
+
 """Offline malformed-response regression tests. No real socket or inference."""
 import io
 import json
@@ -26,6 +28,8 @@ from unittest.mock import Mock, patch
 from . import cli
 
 JOB = 'a' * 32
+CATALOG = {'models':['flash','coder-next','gpt-oss-120b'], 'context_limit':8192,
+           'max_output_tokens':1024, 'max_large_models_loaded':1}
 
 
 class WireResponseTests(unittest.TestCase):
@@ -108,7 +112,9 @@ class WireResponseTests(unittest.TestCase):
 
 class CommandResponseTests(unittest.TestCase):
     def invoke(self, command, response):
-        with patch.object(cli, 'request', return_value=response) as call, patch('sys.stdout', new_callable=io.StringIO) as output, patch('sys.stderr', new_callable=io.StringIO) as error:
+        def respond(path, method, route, body=None):
+            return CATALOG if route == '/v1/models' else response
+        with patch.object(cli, 'request', side_effect=respond) as call, patch('sys.stdout', new_callable=io.StringIO) as output, patch('sys.stderr', new_callable=io.StringIO) as error:
             code = cli.main(['--socket', '/unused', *command])
         return code, output.getvalue(), error.getvalue(), call.call_args_list
 
@@ -135,14 +141,14 @@ class CommandResponseTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(out, '')
         self.assertEqual(json.loads(error)['job_id'], JOB)
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls), 2)
 
     def test_get_rejects_unknown_state(self):
         code, out, error, calls = self.invoke(['get',JOB], {'id':JOB,'model':'flash','status':'imagined'})
         self.assertEqual(code, 1)
         self.assertEqual(out, '')
         self.assertEqual(json.loads(error)['job_id'], JOB)
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls), 2)
 
     def test_get_rejects_completed_job_without_valid_content(self):
         for value in (None, [], {'content':None}, {'content':True}):
@@ -151,14 +157,14 @@ class CommandResponseTests(unittest.TestCase):
                 self.assertEqual(code, 1)
                 self.assertEqual(out, '')
                 self.assertEqual(json.loads(error)['job_id'], JOB)
-                self.assertEqual(len(calls), 1)
+                self.assertEqual(len(calls), 2)
 
     def test_get_rejects_unknown_model(self):
         code, out, error, calls = self.invoke(['get',JOB], {'id':JOB,'model':'unknown','status':'queued'})
         self.assertEqual(code, 1)
         self.assertEqual(out, '')
         self.assertEqual(json.loads(error)['job_id'], JOB)
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls), 2)
 
     def test_get_accepts_matching_terminal_job(self):
         code, out, error, calls = self.invoke(['get',JOB], {'id':JOB,'model':'flash','status':'completed','result':{'content':'fixture','thinking':'private'}})
@@ -167,7 +173,7 @@ class CommandResponseTests(unittest.TestCase):
         self.assertEqual(result['id'], JOB)
         self.assertNotIn('thinking', result['result'])
         self.assertEqual(error, '')
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(calls), 2)
 
     def test_cancel_rejects_unrecognized_acknowledgement(self):
         code, out, error, calls = self.invoke(['cancel',JOB], {'status':'stopped'})
@@ -190,7 +196,8 @@ class UncertainOutcomeTests(unittest.TestCase):
         def call(path, method, route, body=None):
             calls.append((method, route))
             response = Mock(status=200)
-            response.read.return_value = payloads.pop(0)
+            response.read.return_value = (json.dumps(CATALOG).encode()
+                                          if route == '/v1/models' else payloads.pop(0))
             connection = Mock()
             connection.getresponse.return_value = response
             with patch.object(cli, 'checked_socket', return_value='/unused'), patch.object(cli, 'Connection', return_value=connection):
@@ -203,7 +210,7 @@ class UncertainOutcomeTests(unittest.TestCase):
         with self.assertRaises(cli.ClientError) as caught:
             cli.ask('/unused', 'flash', 'fixture', call=wire, sleep=lambda _:None)
         self.assertIsNone(caught.exception.job_id)
-        self.assertEqual(calls, [('POST','/v1/jobs')])
+        self.assertEqual(calls, [('GET','/v1/models'), ('POST','/v1/jobs')])
 
     def test_bad_poll_preserves_known_id_without_replay(self):
         calls = []
@@ -211,7 +218,7 @@ class UncertainOutcomeTests(unittest.TestCase):
         with self.assertRaises(cli.ClientError) as caught:
             cli.ask('/unused', 'flash', 'fixture', call=wire, sleep=lambda _:None)
         self.assertEqual(caught.exception.job_id, JOB)
-        self.assertEqual(calls, [('POST','/v1/jobs'), ('GET','/v1/jobs/'+JOB)])
+        self.assertEqual(calls, [('GET','/v1/models'), ('POST','/v1/jobs'), ('GET','/v1/jobs/'+JOB)])
 
 
 if __name__ == '__main__':

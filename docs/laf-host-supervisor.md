@@ -79,7 +79,12 @@ Illustrative structure only; placeholders deliberately fail validation and must 
 }
 ```
 
-The nested `ollama` configuration is the legacy fixed backend policy, not client input. Its image remains the backend's fixed reviewed digest. Core's owner label key is `laf.core.owner`; its UID/GID must match the supervisor's current host UID/GID. Mounts must enumerate every observed mount as `{"Source":"/absolute/existing/source","Destination":"/container/path","RW":false}`. Devices must enumerate exact Docker inspect objects with `PathOnHost`, `PathInContainer`, and `CgroupPermissions`; only `/dev/kfd` and `/dev/dri/renderD128` with matching container paths and `rwm` are permitted. No Docker socket, known Docker-socket ancestor directory, or symlink mount source is permitted. An empty mounts/devices list is valid only when inspect also reports no mounts/devices; it is not a working GPU Core configuration.
+The nested `ollama` configuration is trusted fixed host policy, not client input.
+Without an override, its image and resource defaults are unchanged. The optional
+[`ollama_provider` policy](laf-provider-portability.md) selects an explicitly
+installed immutable image, exact expected version and bounded RAM/CPU/PIDs,
+without any pull, new wire authority or device change.
+Core's owner label key is `laf.core.owner`; its UID/GID must match the supervisor's current host UID/GID. Mounts must enumerate every observed mount as `{"Source":"/absolute/existing/source","Destination":"/container/path","RW":false}`. Devices must enumerate exact Docker inspect objects with `PathOnHost`, `PathInContainer`, and `CgroupPermissions`; only `/dev/kfd` and `/dev/dri/renderD128` with matching container paths and `rwm` are permitted. No Docker socket, known Docker-socket ancestor directory, or symlink mount source is permitted. An empty mounts/devices list is valid only when inspect also reports no mounts/devices; it is not a working GPU Core configuration.
 
 Core resource policy must explicitly provide positive integer `memory` and `memory_swap` in bytes, `nano_cpus` in billionths of a CPU, and `pids_limit`. Each must fit Docker's signed 64-bit representation. `memory_swap` must equal `memory`, allowing no extra swap. Docker inspect must report exactly those values in `Memory`, `MemorySwap`, `NanoCpus`, and `PidsLimit`; missing values, zero/unlimited values, booleans, and mismatches are rejected before any stop. The example zeros deliberately fail closed. Actual limits must be chosen for the approved workload and host capacity; this module supplies no hardware-tuning defaults.
 

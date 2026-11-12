@@ -1,0 +1,24 @@
+# KISS Open License Version 1.0 (KOL-v1)
+#
+# SPDX-FileCopyrightText: 2026 I-plusplus Inc.
+# SPDX-License-Identifier: LicenseRef-KOL-v1
+#
+# Copyright remains with its respective holders; original copyright and attribution notices must be preserved.
+# Contributors may add copyright notices for their own original modifications.
+# Distributed modifications must be identified as required by Section 4(c) of KOL-v1.
+#
+# Use, modification, distribution, and incorporation into commercial or proprietary software are permitted
+# without license fees or source disclosure, subject to all terms of the complete KOL-v1 license.
+#
+# Contributors grant the patent permissions stated in KOL-v1. Outputs are not covered merely because a
+# KOL-licensed tool produced them; embedded licensed material remains subject to applicable license terms.
+#
+# THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OR LIABILITY TO THE EXTENT PERMITTED BY APPLICABLE LAW.
+#
+# This header is a summary, not a separate license or an amendment to KOL-v1.
+# All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
+
+# Reviewed SDK archive identity only, NOT a complete transitive dependency lock.
+# No dependency installation is performed by the launcher.
+# Modified 2026-11-11: official SDK 1.30.0 wheel and sdist archive identities.
+mcp==1.30.0 --hash=sha256:666edb5009503e1047c9d60346a756f94b261f05cc2625f23d41c728ffc484d0 --hash=sha256:445414625fce5c295faa505bb11bacece661ab6f4028d57c935db57820b7a3e4
