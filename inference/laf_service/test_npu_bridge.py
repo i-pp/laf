@@ -179,7 +179,26 @@ class ClassificationHTTPTest(unittest.TestCase):
         finally:
             connection.close()
     def test_empty_origin_is_rejected(self):
-        self.assertEqual(self.request('POST','/v1/classify',{'input':[0]*3072},headers={'Origin':''})[0],400)
+        # Origin is rejected before body consumption. Sending the body separately
+        # races with the server closing the connection after its valid 400 reply.
+        connection = service_test.UnixHTTPConnection(self.path)
+        try:
+            connection.putrequest('POST', '/v1/classify')
+            connection.putheader('Content-Type', 'application/json')
+            connection.putheader('Content-Length', str(len(json.dumps({'input': [0] * 3072}))))
+            connection.putheader('Origin', '')
+            with patch('inference.laf_service.server.npu_classify') as classify:
+                connection.endheaders()
+                response = connection.getresponse()
+                self.assertEqual(response.status, 400)
+                self.assertEqual(
+                    json.loads(response.read())['error'],
+                    'browser origin and transfer encoding are not accepted',
+                )
+                classify.assert_not_called()
+            self.assertEqual(self.ctl.backend.calls, [])
+        finally:
+            connection.close()
     def test_bad_classification_is_400(self):
         self.assertEqual(self.request('POST','/v1/classify',{'input':[]})[0],400)
 
