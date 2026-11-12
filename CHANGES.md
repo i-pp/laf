@@ -24,6 +24,18 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: tunnel-only operator transaction
+
+Added `ops/frontend_cutover.py`, `ops/test_frontend_cutover.py` and
+`docs/frontend-only-transition.md`. The original operator code imports an existing
+owned recipe; it does not bundle that recipe, private machine configuration,
+credentials or runtime data. Added a strict28-unique fake-only selection in
+`.github/workflows/minimum-ci.yml` and classified the three new files in
+`.github/license-policy.json`. This `CHANGES.md` entry records the affected paths.
+The change does not install, enable, deploy or publish a service when checked out.
+
+
+
 ## 2026-11-11: exact MCP SDK 1.30.0 source selection
 
 Changed the adapter startup guard and package dependency from 1.29.0 to 1.30.0,

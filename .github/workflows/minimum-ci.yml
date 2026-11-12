@@ -143,6 +143,30 @@ jobs:
                             'passed': passed}, sort_keys=True))
           raise SystemExit(0 if passed else 1)
           PYCODE
+      - name: Check tunnel-only operator transaction without services
+        shell: bash
+        run: |
+          python3 -B - <<'PYCODE'
+          import sys
+          import unittest
+          sys.path.insert(0, 'ops')
+          suite = unittest.defaultTestLoader.loadTestsFromName('test_frontend_cutover')
+          def flatten(group):
+              for item in group:
+                  if isinstance(item, unittest.TestSuite):
+                      yield from flatten(item)
+                  else:
+                      yield item
+          tests = list(flatten(suite))
+          ids = [test.id() for test in tests]
+          if len(ids) != 28 or len(set(ids)) != 28:
+              raise SystemExit('Expected 28 unique operator tests')
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          rejected = (result.failures, result.errors, result.skipped,
+                      result.expectedFailures, result.unexpectedSuccesses)
+          if result.testsRun != 28 or any(rejected) or not result.wasSuccessful():
+              raise SystemExit('Incomplete or non-green operator tests')
+          PYCODE
 
   license:
     name: License policy checks

@@ -145,7 +145,10 @@
         "scripts/check-laf-plugin.py",
         "scripts/laf-sdk.py",
         "scripts/test_sdk_installer.py",
-        "skills/laf-router/SKILL.md"
+        "skills/laf-router/SKILL.md",
+        "ops/frontend_cutover.py",
+        "ops/test_frontend_cutover.py",
+        "docs/frontend-only-transition.md"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",
