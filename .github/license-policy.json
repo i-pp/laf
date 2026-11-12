@@ -148,7 +148,15 @@
         "skills/laf-router/SKILL.md",
         "ops/frontend_cutover.py",
         "ops/test_frontend_cutover.py",
-        "docs/frontend-only-transition.md"
+        "docs/frontend-only-transition.md",
+        "packaging/INTEGRATED_PLUGIN_GUIDE.md",
+        "packaging/assemble_private_plugin.py",
+        "packaging/portable_launcher.py",
+        "packaging/run_packaging_checks.py",
+        "packaging/test_portable_plugin.py",
+        "packaging/test_private_assembly.py",
+        "packaging/CHANGES.md",
+        "packaging/SOURCE_ORIGIN.md"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",
@@ -178,7 +186,9 @@
         "mcp/LICENSE",
         "mcp/NOTICE",
         "plugin.json",
-        "scripts/laf-sdk-pins.json"
+        "scripts/laf-sdk-pins.json",
+        "packaging/upstream-orchestrator/LICENSE",
+        "packaging/upstream-orchestrator/NOTICE"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",

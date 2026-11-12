@@ -167,6 +167,8 @@ jobs:
           if result.testsRun != 28 or any(rejected) or not result.wasSuccessful():
               raise SystemExit('Incomplete or non-green operator tests')
           PYCODE
+      - name: Verify portable integrated package source without services
+        run: python3 -B packaging/run_packaging_checks.py
 
   license:
     name: License policy checks
