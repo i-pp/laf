@@ -164,7 +164,20 @@ class ClassificationHTTPTest(unittest.TestCase):
     def test_only_classification_gets_larger_body(self):
         with patch('inference.laf_service.server.npu_classify',return_value=ready()):
             self.assertEqual(self.request('POST','/v1/classify',{'input':[1.23456789012345e20]*3072})[0],200)
-        self.assertEqual(self.request('POST','/v1/jobs',body(content='x'*40000))[0],400)
+        # Oversized requests must be rejected from headers before reading the body.
+        # Sending that body races with the server closing its rejected connection.
+        connection = service_test.UnixHTTPConnection(self.path)
+        try:
+            connection.putrequest('POST', '/v1/jobs')
+            connection.putheader('Content-Type', 'application/json')
+            connection.putheader('Content-Length', str(len(json.dumps(body(content='x'*40000)))))
+            connection.endheaders()
+            response = connection.getresponse()
+            self.assertEqual(response.status, 400)
+            self.assertEqual(json.loads(response.read())['error'], 'body exceeds route bound')
+            self.assertEqual(self.ctl.backend.calls, [])
+        finally:
+            connection.close()
     def test_empty_origin_is_rejected(self):
         self.assertEqual(self.request('POST','/v1/classify',{'input':[0]*3072},headers={'Origin':''})[0],400)
     def test_bad_classification_is_400(self):
