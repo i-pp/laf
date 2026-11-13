@@ -54,6 +54,12 @@ No real model or hardware was used.
 
 ## Evidence integrity and limitations
 
+Counts in this dated record identify historical observations, not a fixed test
+specification or acceptance of future revisions. Current source commands and
+results are available in the [pull request checks](https://github.com/i-pp/laf/pull/12/checks)
+and [CI history](https://github.com/i-pp/laf/actions/workflows/minimum-ci.yml).
+Inspect the tested commit and verification scope rather than comparing totals.
+
 The source export tested on the host is retained separately from raw evidence.
 On 2026-11-12 the existing JSON/log artifacts were recovered and checked without
 rerunning the tests. Save times were normalized from the host's +09:00 offset:

@@ -360,3 +360,13 @@ body. Keep production service/guards unchanged; send only declared headers for
 and propagate unexpected send failures. Two RED-to-GREEN fixture regressions
 cover payload omission and cleanup without suppressing errors. Synchronize the
 bundled source-test copy. The original failed hosted run remains recorded.
+
+## 2026-11-13: test evidence is not a count specification
+
+Updated `docs/testing.md`, `docs/laf-sdk-install.md`, `docs/laf-mcp-validation.md`
+and their `runtime/public_laf/docs/` copies. Removed manually maintained test
+inventory totals from normative guide prose, described the verification behavior,
+and linked public GitHub checks with their tested commit. Dated historical results
+remain explicitly historical; mechanical empty/duplicate/incomplete-selection
+guards are unchanged. No runtime, dependency, service, permission or model change
+is made by this documentation correction.

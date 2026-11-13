@@ -163,10 +163,12 @@ No exception to ignore warnings has been added.
 
 ## Measured validation scope
 
-The corrected installer passed 56 tests: 52 cases using synthetic wheels, fake
-HTTP, fake installation runners, and similar fixtures, plus four real tests
-creating empty venvs with the existing CPython 3.12.14. The real tests used
-`venv --without-pip` in temporary directories and did not install the SDK.
+The installer regressions cover synthetic wheels, fake HTTP and installation
+runners, plus creation of empty private venvs with the existing CPython 3.12.14.
+The real venv checks used `venv --without-pip` in temporary directories and did
+not install the SDK. Inspect the installer selection and results in the
+[recorded source CI run](https://github.com/i-pp/laf/actions/runs/43378069913)
+for its tested commit; the guide does not prescribe a test total.
 
 - Original behavior reproduced: with `umask=0002`, `pyvenv.cfg` had mode `0664`
   and the strict check rejected it.
