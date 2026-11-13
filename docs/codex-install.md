@@ -56,11 +56,19 @@ The checkout also includes portable `plugin.json`/`mcp.json`, a matching
 `.codex-plugin/plugin.json` compatibility overlay, Codex `.mcp.json`, and
 `.agents/plugins/marketplace.json`. Codex CLI 0.167.0 exposes these commands:
 
+Use a source-only ZIP built by `scripts/build-integrated-source.py`, extracted
+under a new private directory, rather than registering a Git checkout. The
+Codex installer copies the source directory, including a checkout's `.git`
+metadata if present. The source builder excludes all Git/runtime evidence.
+
 ```sh
-codex plugin marketplace add /absolute/path/to/laf
+python3 -B /absolute/path/to/laf/scripts/build-integrated-source.py --output /absolute/new/laf-0.1.0-source.zip
+(umask 077; mkdir /absolute/new/laf-0.1.0 && python3 -m zipfile -e /absolute/new/laf-0.1.0-source.zip /absolute/new/laf-0.1.0)
+codex plugin marketplace add /absolute/new/laf-0.1.0
 codex plugin add laf@laf-experimental
 ```
 
+All example destinations must be new; preserve existing directories and records.
 Choose this OR direct MCP registration, not both, to avoid duplicate tools.
 The marketplace is local source and has no account/app binding. Installation
 copies source into Codex's plugin cache; it neither provisions the daemon nor
@@ -81,6 +89,8 @@ policy, auth, model and owner-socket prerequisites. Clean-host/second-PC setup,
 8–16 GB hardware acceptance and all 32 tools' backend functionality remain open.
 See the legacy-helper transport limitation in the prerequisite guide.
 
-The commands above were checked against the installed CLI's `--help`; they are
-not an instruction to alter an existing host automatically. No tool output,
+The commands were checked against the installed CLI's `--help`. Local marketplace
+registration, install and list also succeeded in an isolated HOME/CODEX_HOME;
+this is metadata/cache acceptance, not MCP startup or model acceptance. These
+examples are not an instruction to alter an existing host automatically. No tool output,
 credentials, model output or SDK binary is included in this source package.

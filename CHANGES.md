@@ -332,3 +332,7 @@ instructions. Correct the portable OpenAI extension nesting. These are explicit
 local source changes beyond the pinned compatibility snapshot; guards, schemas,
 authentication, runtime behavior and model configuration remain unchanged.
 ChatGPT connection listing metadata is separate and not claimed changed here.
+
+Codex local marketplace documentation uses source-only archive extraction, not
+a Git checkout: the CLI otherwise copies a .git worktree pointer into its cache.
+The source builder already excludes Git metadata; no guard is weakened.
