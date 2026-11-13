@@ -348,3 +348,15 @@ Unicode escapes; the verified body, hash/pin checks and parsing contract are
 unchanged. Add CI enforcement and negative controls. These documented language
 changes supersede the prior byte-frozen snapshot only in the affected source and
 documentation paths; no deployment, SDK install, auth or model change occurs.
+
+
+## 2026-11-13: deterministic header-rejection test transport
+
+A hosted Python 3.12 run exposed a pre-existing test-client race: the NPU fake
+HTTP server can return 415 after headers before http.client sends an unnecessary
+body. Keep production service/guards unchanged; send only declared headers for
+415/413 cases and assert no worker dispatch. Preserve the real body for the
+400 input-validation case. Close the test connection even if sending fails,
+and propagate unexpected send failures. Two RED-to-GREEN fixture regressions
+cover payload omission and cleanup without suppressing errors. Synchronize the
+bundled source-test copy. The original failed hosted run remains recorded.
