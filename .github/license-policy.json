@@ -160,7 +160,10 @@
         "docs/public-source-component-guide.md",
         "scripts/test_async_job_ack_disconnect.py",
         "scripts/run_integrated_source_checks.py",
-        "scripts/test_strict_source_gate.py"
+        "scripts/test_strict_source_gate.py",
+        "docs/ordinary-session-pool.md",
+        "scripts/test_ordinary_session_pool.py",
+        "scripts/test_session_pool_boundary.py"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",

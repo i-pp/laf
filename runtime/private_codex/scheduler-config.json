@@ -1,4 +1,5 @@
 {
+  "maximum_sessions": 8,
   "poll_seconds": 0.2,
   "task_timeout": 120,
   "shutdown_seconds": 15,

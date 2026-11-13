@@ -1,5 +1,9 @@
-"""Foreground daemon core: private local socket and at most two guarded workers."""
+"""Foreground daemon core: private local socket and a pinned guarded-worker pool.
 
+Modified 2026-11-13: configurable ordinary capacity with fail-closed generation admission.
+"""
+
+from contextlib import ExitStack
 import errno
 import json
 import os
@@ -12,7 +16,7 @@ import sys
 import time
 import uuid
 
-from concurrency import lease, recover_abandoned
+from concurrency import lease, recover_abandoned, pool_generation
 from control_socket import endpoint, peer_uid, validate_socket, MAX_REQUEST, MAX_RESPONSE
 from resources import Control, ResourceExceeded, BudgetLog, storage_check
 from runner import Runner
@@ -28,32 +32,37 @@ class Daemon:
                          else scheduler.configuration())
         self.runner = Runner(root, binary, development=development)
         self.root, self.store = self.runner.root, self.runner.store
-        try: self.lease = lease(self.root / "daemon.lock")
-        except BaseException:
-            self.store.close(); raise
-        try:
+        with ExitStack() as initializing:
+            initializing.callback(self.store.close)
+            self.runner.scheduler_settings = self.settings
+            self.lease = initializing.enter_context(lease(self.root / "daemon.lock"))
             scheduler.initialize(self.store)
-        except BaseException:
-            self.lease.close(); self.store.close(); raise
-        self.owner = scheduler.owner_identity()
-        self.worker_factory = worker_factory
-        self.children = {}
-        self.stopping = False
-        self.blocked = []
-        self.pending_recovery = []
-        self.reconciled_unknowns = set()
-        self.selector = selectors.DefaultSelector()
-        self.clients = {}
-        self.listener = None
-        self.socket_path = None
-        self.socket_inode = None
-        self.exit_code = 0
-        self.boot_id = str(uuid.uuid4())
-        self.allow_codex_pipeline = allow_codex_pipeline
-        self.pipeline_factory = pipeline_factory
-        self.pipeline = None
-        self.events_stream = (self.root / "logs" / ("daemon-" + self.boot_id + ".jsonl")).open("x")
-        self.events = BudgetLog(self.events_stream, self.settings["daemon"]["log_bytes"])
+            self.pool_lease = initializing.enter_context(
+                pool_generation(self.root, self.settings, daemon_owned=True))
+            self.owner = {**scheduler.owner_identity(),
+                          "session_pool_generation": self.settings["pool_generation"],
+                          "session_pool_codex_pipeline": allow_codex_pipeline}
+            self.worker_factory = worker_factory
+            self.children = {}
+            self.stopping = False
+            self.blocked = []
+            self.pending_recovery = []
+            self.reconciled_unknowns = set()
+            self.selector = selectors.DefaultSelector()
+            initializing.callback(self.selector.close)
+            self.clients = {}
+            self.listener = None
+            self.socket_path = None
+            self.socket_inode = None
+            self.exit_code = 0
+            self.boot_id = str(uuid.uuid4())
+            self.allow_codex_pipeline = allow_codex_pipeline
+            self.pipeline_factory = pipeline_factory
+            self.pipeline = None
+            self.events_stream = initializing.enter_context(
+                (self.root / "logs" / ("daemon-" + self.boot_id + ".jsonl")).open("x"))
+            self.events = BudgetLog(self.events_stream, self.settings["daemon"]["log_bytes"])
+            self._owned = initializing.pop_all()
 
     def event(self, kind, **facts):
         self.events.write(json.dumps({"time": time.time(), "boot": self.boot_id, "event": kind, **redact(facts)}) + "\n")
@@ -79,19 +88,31 @@ class Daemon:
         self.listener.setblocking(False)
         self.selector.register(self.listener, selectors.EVENT_READ, None)
 
+    def pool_policy_current(self):
+        try:
+            scheduler.require_pool_generation(self.settings, codex_pipeline=self.allow_codex_pipeline)
+            return True
+        except scheduler.PoolPolicyError:
+            return False
+
     def status(self):
+        current = self.pool_policy_current()
+        blocked = list(self.blocked)
+        if not current and 'session_pool_policy_changed' not in blocked:
+            blocked.append('session_pool_policy_changed')
         return {"pid": os.getpid(), "owner": self.owner, "boot": self.boot_id, "runtime": str(self.root),
                 "execution_mode": development_poc.MODE if self.runner.development else "namespace",
                 "socket": str(self.socket_path), "paused": bool(self.store.db.execute("SELECT paused FROM scheduler_state WHERE id=1").fetchone()[0]),
-                "stopping": self.stopping, "active_tasks": list(self.children), "blocked": self.blocked,
-                "pending_recovery": self.pending_recovery, "maximum_sessions": 2,
+                "stopping": self.stopping, "active_tasks": list(self.children), "blocked": blocked,
+                "pending_recovery": self.pending_recovery, "maximum_sessions": self.settings["maximum_sessions"],
+                "session_pool_policy_current": current,
                 "task_counts": {r[0]: r[1] for r in self.store.db.execute("SELECT state,count(*) FROM tasks GROUP BY state")},
                 "resource_policy": self.settings["daemon"], "worker_resource_policy": self.settings["worker"],
                 "codex_pipeline_enabled": self.allow_codex_pipeline,
                 "codex_pipeline_held": bool(self.pipeline and self.pipeline.held)}
 
     def ordinary_busy(self):
-        return bool(self.stopping or self.children or self.blocked or self.pending_recovery
+        return bool(not self.pool_policy_current() or self.stopping or self.children or self.blocked or self.pending_recovery
             or self.store.db.execute("SELECT paused FROM scheduler_state WHERE id=1").fetchone()[0]
             or self.store.db.execute("SELECT 1 FROM tasks WHERE state IN ('RUNNING','VERIFYING') LIMIT 1").fetchone())
 
@@ -185,6 +206,8 @@ class Daemon:
                 WHEN phase='RESERVED' THEN 'STARTED' ELSE phase END WHERE task_id=?""", (json.dumps(old), task_id))
 
     def start_worker(self, task):
+        scheduler.require_pool_generation(self.settings, codex_pipeline=self.allow_codex_pipeline)
+        scheduler.require_pool_headroom(self.settings)
         token = str(uuid.uuid4())
         control = Control(self.root, self.settings["worker"])
         relative = Path('/proc/self/cgroup').read_text().strip().split('::')[1]
@@ -204,7 +227,8 @@ class Daemon:
         argv = (self.worker_factory(task, token, timeout) if self.worker_factory else
             [sys.executable, "-B", str(Path(__file__).with_name("runner.py")), "--runtime", str(self.root),
              "--codex", self.runner.binary, *(["--development-poc"] if self.runner.development else []), "run", task["id"], "--timeout", str(timeout), "--dispatch-token", token])
-        env = {"PATH": str(Path(self.runner.binary).parent) + ":" + os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "C.UTF-8"}
+        env = {"PATH": str(Path(self.runner.binary).parent) + ":" + os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "C.UTF-8", "LAF_SESSION_POOL_GENERATION": self.settings["pool_generation"],
+               "LAF_SESSION_POOL_CODEX_PIPELINE": "1" if self.allow_codex_pipeline else "0"}
         try:
             child = Process(argv, cwd=self.root, env=env, raw_output=True, resources=control)
         except (OSError, RuntimeError) as exc:
@@ -267,15 +291,20 @@ class Daemon:
             from codex_host import pipeline_held
             if pipeline_held(self.root):
                 self.blocked.append('pipeline_recovery_pending'); return
+        if not self.pool_policy_current():
+            self.blocked.append('session_pool_policy_changed')
         if self.stopping or self.blocked or self.status()["paused"]: return
+        try: scheduler.require_pool_headroom(self.settings)
+        except ResourceExceeded:
+            self.blocked.append('session_pool_memory_headroom'); return
         active = [dict(r) for r in self.store.db.execute("SELECT * FROM tasks WHERE state IN ('RUNNING','VERIFYING')")]
         if any(t["id"] not in self.children for t in active):
             self.blocked.append("external_active_owner"); return
         if any(not self.store.get(t)["workspace_id"] for t in self.children): return
         rows = self.store.db.execute("""SELECT t.* FROM tasks t WHERE state='QUEUED' AND NOT EXISTS
-            (SELECT 1 FROM scheduler_dispatches d WHERE d.task_id=t.id) ORDER BY t.rowid LIMIT 2""").fetchall()
+            (SELECT 1 FROM scheduler_dispatches d WHERE d.task_id=t.id) ORDER BY t.rowid LIMIT ?""", (self.settings["maximum_sessions"],)).fetchall()
         for row in rows:
-            if len(self.children) >= 2: break
+            if len(self.children) >= self.settings["maximum_sessions"]: break
             task = dict(row)
             if task["workspace_id"] in protected_workspaces:
                 approval = self.store.db.execute("""SELECT 1 FROM decisions d JOIN tasks s ON s.id=d.task_id
@@ -285,7 +314,12 @@ class Daemon:
                     self.blocked.append("unknown_workspace"); break
             if not task["workspace_id"] and self.children: break
             if task["workspace_id"] and any(self.store.get(t)["workspace_id"] == task["workspace_id"] for t in self.children): break
-            self.start_worker(task)
+            try:
+                self.start_worker(task)
+            except scheduler.PoolPolicyError:
+                self.blocked.append('session_pool_policy_changed'); break
+            except ResourceExceeded:
+                self.blocked.append('session_pool_memory_headroom'); break
             if not task["workspace_id"]: break
 
     def close_client(self, connection):
@@ -414,7 +448,7 @@ class Daemon:
                 if self.listener: self.listener.close()
                 if self.socket_path and self.socket_path.exists() and self.socket_path.lstat().st_ino == self.socket_inode:
                     self.socket_path.unlink()
-                self.selector.close(); self.events_stream.close(); self.store.close(); self.lease.close()
+                self._owned.close()
                 for sig, handler in handlers.items(): signal.signal(sig, handler)
         return self.exit_code
 

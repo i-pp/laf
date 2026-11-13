@@ -22,6 +22,8 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
+<!-- Modified 2026-11-13: link the ordinary-pool source policy without authorizing live adoption. -->
+
 <!-- Modified 2026-11-10: relocate the root README's source-preview, host and release restrictions without changing their scope. -->
 
 # Source preview and release boundary
@@ -67,6 +69,11 @@ Default model catalog entries intentionally lack verified acquisition, license,
 version, manifest and capacity metadata, so installation is blocked. Synthetic
 regression fixtures are not real model provenance. Model management does not
 accept legal terms, authenticate to providers or obtain redistribution rights.
+
+The ordinary worker pool has a [selectable local session limit](ordinary-session-pool.md).
+Its source candidate selects 8, with generation and memory admission guards.
+That configured limit is not live availability, provider entitlement or evidence
+of real parallel model execution; adoption of an existing runtime is separate.
 
 ## Evidence and release boundary
 

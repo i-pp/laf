@@ -370,3 +370,19 @@ and linked public GitHub checks with their tested commit. Dated historical resul
 remain explicitly historical; mechanical empty/duplicate/incomplete-selection
 guards are unchanged. No runtime, dependency, service, permission or model change
 is made by this documentation correction.
+
+## 2026-11-13: guarded configurable ordinary sessions
+
+Modified the project-authored ordinary scheduler, daemon and concurrency source
+under `runtime/private_codex/src/`, its `scheduler-config.json`, and both MCP
+status projections. Added `docs/ordinary-session-pool.md`, its source-preview
+reference, dedicated ordinary-pool and status-boundary regressions, and explicit
+license/aggregate-check registration. Configuration selects a bounded local limit,
+with pinned generations, serialized complete-slot accounting and conservative
+memory admission. Missing or invalid observed status limits remain unknown.
+
+Per-worker resources and existing auth/capability boundaries are unchanged. This
+source proposal does not install or restart services, adopt an existing runtime,
+prove provider entitlement, or accept real parallel models. Verification results
+belong to their executed revision and public CI evidence, not a test-total
+specification. New Codex catalog/effort work is a separate unintegrated candidate.

@@ -21,7 +21,7 @@
 
 # Added 2026-11-12: original portable integrated package preparation.
 
-"""Strict supplemental source checks: 9 gate oracles then 32 ACK/builder/Codex/language cases."""
+"""Strict supplemental source checks with independent result/inventory refusal guards."""
 import json,sys,unittest
 from pathlib import Path
 
@@ -45,7 +45,8 @@ def main():
  runner=unittest.TextTestRunner(verbosity=2)
  try:
   gates=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_strict_source_gate'),9,runner)
-  source=run_checked(unittest.defaultTestLoader.loadTestsFromNames(['test_async_job_ack_disconnect','test_integrated_source','test_codex_package','test_common_policy_language','test_english_source']),32,runner)
+  # Cardinality is a machine refusal guard, not a coverage or product specification.
+  source=run_checked(unittest.defaultTestLoader.loadTestsFromNames(['test_async_job_ack_disconnect','test_integrated_source','test_codex_package','test_common_policy_language','test_english_source','test_ordinary_session_pool','test_session_pool_boundary']),76,runner)
  except ValueError as exc:print(json.dumps({'status':'failed','reason':str(exc)}));return 1
  print(json.dumps({'status':'passed','gate_oracles':gates,'source_cases':source,'scope':'pure gates/source/fake controller; no SDK child or service'}));return 0
 if __name__=='__main__':raise SystemExit(main())

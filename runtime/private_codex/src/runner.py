@@ -1,4 +1,7 @@
-"""Single active task runner using dedicated Codex App Server stdio processes."""
+"""Single active task runner using dedicated Codex App Server stdio processes.
+
+Modified 2026-11-13: pass the daemon's pinned effective policy to ordinary leases.
+"""
 
 import argparse
 import fcntl
@@ -78,7 +81,7 @@ class Runner:
         return self.launcher(root, self.binary, args)
 
     def task_lock(self, task):
-        return guard(self.root, task) if task["workspace_id"] else self.lock()
+        return guard(self.root, task, settings=getattr(self, "scheduler_settings", None)) if task["workspace_id"] else self.lock()
 
     def snapshot(self, task_id):
         with self.task_lock(self.store.get(task_id)):
