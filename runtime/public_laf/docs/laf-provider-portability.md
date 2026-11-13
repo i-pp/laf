@@ -96,7 +96,7 @@ cancellation, unload, fault and shutdown acceptance. Matching a version string
 alone is not proof of API compatibility. Model acquisition, reviewed licenses,
 model manifest identities and persistent storage remain separate prerequisites.
 
-## 8–16 GB VRAM: the next bounded path
+## 8-16 GB VRAM: the next bounded path
 
 Use the existing
 [Ollama-only Core acceptance catalog](laf-candidate-profiles.md) first. It already
@@ -163,6 +163,6 @@ Keep existing development-workspace tests read-only. A successful repair against
 those tests does not measure the model's ability to author correct strict tests.
 Measure speed only after correctness and defect detection; it is secondary.
 
-No actual image, model, 8–16 GB GPU, clean-host deployment or runtime failure
+No actual image, model, 8-16 GB GPU, clean-host deployment or runtime failure
 acceptance has been performed for this policy change. Software mock results do
 not establish hardware support, certification or safety-critical readiness.

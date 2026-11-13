@@ -22,149 +22,178 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
-# MCP SDK をホストに導入する
+# Install the MCP SDK on the host
 
-## 最初に確認すること
+## Before you begin
 
-この CLI は、MCP SDK **1.30.0を含む固定29パッケージだけ**を、ホスト上に
-残るユーザー専用 venv へ入れます。システム Python、PATH、MCPクライアント、
-Router、モデル、サービスは変更しません。**既に導入済みなら再導入は不要です。**
-SDK を入れるだけでは LAF adapter は有効になりません。
+This CLI installs **only 29 pinned packages, including MCP SDK 1.30.0**, into a
+persistent, user-owned venv on the host. It does not change system Python, PATH,
+the MCP client, Router, models, or services. **If already installed, no
+reinstallation is needed.** Installing the SDK alone does not enable the LAF adapter.
 
-初回は、リポジトリのルートで次を実行します。`inspect` は読み取りだけです。
+For the first installation, run the following from the repository root.
+`inspect` is read-only.
 
 ```sh
 python3 -I -B scripts/laf-sdk.py inspect
 ```
 
-`ready_for_explicit_action` と空の `preflight_issues` を確認してから取得します。
-この操作は公式 PyPI の資料と wheel を新しい bundle に保存しますが、導入しません。
+Check for `ready_for_explicit_action` and an empty `preflight_issues` before
+fetching artifacts. This operation saves official PyPI metadata and wheels to a
+new bundle; it does not install them.
 
 ```sh
 python3 -I -B scripts/laf-sdk.py prepare
 ```
 
-出力の `review_path` にある `review.json` のライセンス、advisory、対象環境を確認し、
-その出力に含まれる **`install_dry_run_command`、続いて `install_command`** を使います。
-別の環境や記事から SHA256 をコピーしないでください。コマンドには今回の bundle に
-対応する確認値と導入先が入ります。dry-run は導入を行いません。
+Review the licenses, advisories, and target environment in `review.json` at the
+reported `review_path`. Then use **`install_dry_run_command`, followed by
+`install_command`**, from that output. Do not copy a SHA256 from another
+environment or article. The generated commands contain the review hash and
+installation destination for this bundle. The dry run does not install anything.
 
-この手順は SDK だけの導入です。[adapter の設定と試験](laf-mcp.md)は別工程であり、
-LAF 全体の Quick Start ではありません。自動インストールやサービス起動は行いません。
+These instructions install only the SDK. [Adapter configuration and testing](laf-mcp.md)
+are separate steps. This is not a complete LAF Quick Start; it does not
+automatically install LAF or start services.
 
-## 保存先と前提
+## Destinations and prerequisites
 
-引数を省略すると、次の保存先を使います。
+Without arguments, the CLI uses these destinations:
 
-- 取得資料: `$HOME/laf-sdk-1.30.0-bundle`
-- 永続的な導入先: `$HOME/.local/share/laf-sdk-1.30.0`
-- 導入後の Python: `$HOME/.local/share/laf-sdk-1.30.0/venv/bin/python`
+- Downloaded artifacts: `$HOME/laf-sdk-1.30.0-bundle`
+- Persistent installation prefix: `$HOME/.local/share/laf-sdk-1.30.0`
+- Installed Python: `$HOME/.local/share/laf-sdk-1.30.0/venv/bin/python`
 
-各保存先の親ディレクトリは既存で、自分が所有し、他ユーザーが書き込めない
-必要があります。`prepare` には新しい bundle、`install` には新しい prefix が必要です。
-既存のディレクトリは上書きも削除もしません。途中状態がある場合は、原因を確認して
-別の新しい保存先を指定します。確認済み bundle は同じ環境での再開に使えます。
-新しい bundle が必要な場合の例です。実在する安全な親ディレクトリを使ってください。
+Each destination's parent directory must already exist, be owned by you, and
+not be writable by other users. `prepare` requires a new bundle directory;
+`install` requires a new prefix. Existing directories are neither overwritten
+nor deleted. If an incomplete directory remains, inspect the cause and select
+a different, new destination. A verified bundle can be reused to resume in the
+same environment. For example, when a new bundle is needed, use existing, safe
+parent directories:
 
 ```sh
 python3 -I -B scripts/laf-sdk.py prepare \
   --bundle /ABSOLUTE/NEW/bundle --prefix /ABSOLUTE/NEW/prefix
 ```
 
-対象は Linux x86_64 の既存 CPython 3.12 または3.14です。
-`venv` と pip 22.3以上が必要ですが、この CLI は不足分をホストに追加しません。
-導入には既存 pip のメタデータパーサーと `--python` を使い、venv は
-`--without-pip` で作ります。`apt`、`get-pip`、`sudo`、
-`--break-system-packages` による回避処理はありません。
-Ubuntu の PEP 668 対応システム Python でも、専用 venv のみを導入先にします。
-SDK 用 venv には pip/build ツールを追加しないでください。
+The supported target is Linux x86_64 with an existing CPython 3.12 or 3.14.
+`venv` and pip 22.3 or later are required; this CLI does not add missing host
+components. Installation uses the existing pip's metadata parser and `--python`,
+and creates the venv with `--without-pip`. It does not work around missing
+prerequisites with `apt`, `get-pip`, `sudo`, or `--break-system-packages`.
+On Ubuntu with a PEP 668-managed system Python, the dedicated venv remains the
+only installation target. Do not add pip or build tools to the SDK venv.
 
-## CLI が検証するもの
+## What the CLI verifies
 
-`prepare` は、実行中 Python の互換 wheel tags と依存 marker を使います。
-3.12用 wheel を3.14ホスト向けとして流用しません。固定候補は29パッケージで、
-`pyjwt[crypto]` の cryptography / cffi / pycparser も含みます。
+`prepare` uses the running Python's compatible wheel tags and dependency markers.
+It does not reuse a Python 3.12 wheel as though it were compatible with a 3.14
+host. The pinned set contains 29 packages, including the cryptography, cffi, and
+pycparser dependencies of `pyjwt[crypto]`.
 
-- 公式 `pypi.org` のリリース情報と `files.pythonhosted.org` の binary wheel のみ取得。
-  リダイレクト・環境変数の proxy・代替 index・sdist・MCP SDK の追加 extras は使いません。
-- パッケージ名、版、ファイル名、サイズ、SHA256、METADATA、WHEEL tags を照合。
-  SDK wheel は確認済みの上流 SHA256 とも照合します。
-- Python条件、依存制約、extra の到達範囲を検証。直接 URL の依存を拒否。
-- PyPI の脆弱性情報と wheel のライセンス宣言・文面を記録。
-  advisory、欠落、不明な宣言、互換 wheel 不在なら停止。
-- ピンが公式の最新安定1.xでなくなっていたら、勝手に更新せず停止。
+- Fetches only official release metadata from `pypi.org` and binary wheels from
+  `files.pythonhosted.org`. It does not use redirects, environment-configured
+  proxies, alternate indexes, sdists, or additional MCP SDK extras.
+- Checks package names, versions, filenames, sizes, SHA256, METADATA, and WHEEL
+  tags. It also checks the SDK wheel against the previously verified upstream SHA256.
+- Validates Python requirements, dependency constraints, and extras reachability.
+  Rejects direct-URL dependencies.
+- Records PyPI vulnerability information and wheel license declarations and text.
+  Stops on any advisory, missing information, unknown declaration, or missing
+  compatible wheel.
+- Stops rather than automatically updating if the pinned SDK is no longer the
+  official latest stable 1.x release.
 
-これらは取得時点の確認です。PyPI の情報が空でも、脆弱性が存在しないことや
-包括的な安全性を証明しません。ライセンス資料の保存も法的な承認ではありません。
-通信を許可されていない環境では停止します。proxy が設定されている場合も、
-直接接続へ切り替えず、取得前に停止します。別経路への自動切り替えはありません。
+These checks reflect information available at acquisition time. Empty PyPI
+vulnerability information does not prove the absence of vulnerabilities or
+comprehensive safety. Saving license evidence is not legal approval.
+The CLI stops if network access is not authorized. If a proxy is configured,
+it stops before acquisition rather than switching to a direct connection.
+There is no automatic fallback to another route.
 
-`install` は通信せず、確認済みのローカル wheel と完全な hash lock だけを使います。
-最終保存先に venv を作り、Python の prefix / site-packages を検証してから
-`--no-index --no-deps --require-hashes` で導入します。
-続いて `pip check`、SDK import、正確なパッケージ版を確認します。
-全て通過した場合だけ `installed.json` を作ります。venv は移動しません。
+`install` operates offline, using only verified local wheels and a complete
+hash lock. It creates the venv at its final destination, verifies Python's
+prefix and site-packages, and installs with `--no-index --no-deps --require-hashes`.
+It then checks `pip check`, SDK import, and exact package versions.
+It writes `installed.json` only after all checks pass. It does not relocate the venv.
 
-依存物の改ざん検知用 hash lock と、MCP の同一ジョブ要求を照合する fingerprint は
-別用途です。どちらもリポジトリ内のソースファイル別 hash 一覧を作る機能ではありません。
+The dependency-integrity hash lock and the fingerprint used to match identical
+MCP job requests serve different purposes. Neither creates a per-source-file
+hash inventory in the repository.
 
-## 失敗した場合
+## If an operation fails
 
-新しく作ったディレクトリは途中の状態で残します。導入途中のパッケージが
-新規 prefix 内だけに存在する場合もありますが、完了 marker は作りません。
-既存の環境・コマンド・サービスには触れません。自動削除・上書き・再利用はせず、
-エラーに残した場所を表示します。その状態を完成済みとして使わないでください。
-不要な領域の削除は、内容を確認したうえで利用者が判断します。
+The newly created directory is retained in its incomplete state. Partially
+installed packages may exist inside the new prefix, but no completion marker
+is written. Existing environments, commands, and services are untouched.
+The CLI does not automatically delete, overwrite, or reuse the directory; the
+error reports its retained location. Do not treat that state as a completed
+installation. After inspecting its contents, the user decides whether to
+remove unneeded data.
 
-2026-11-11に修正した作成権限の不具合では、呼び出し元の `umask=0002` を継承した
-venv が `pyvenv.cfg` を `0664` で作り、CLI 自身の厳格な検査で止まっていました。
-修正版は `subprocess.run(..., umask=0o077)` で子プロセスだけを private にします。
-呼び出し元の `umask` と既存ファイルは変えず、所有者・書き込み権限の検査も緩めません。
-`chmod` や旧 prefix の削除で回避する必要はありません。
-[CPython 3.14.4 の venv 実装](https://github.com/python/cpython/blob/v3.14.4/Lib/venv/__init__.py)
-でも、このファイルは通常の書き込み用 `open` で作ることを確認しています。
+The creation-permissions bug fixed on 2026-11-11 caused a venv inheriting the
+caller's `umask=0002` to create `pyvenv.cfg` with mode `0664`, which the CLI's own
+strict check rejected. The fix uses `subprocess.run(..., umask=0o077)` to make
+only child-process file creation private. It does not change the caller's
+`umask` or existing files, and does not relax ownership or write-permission
+checks. There is no need to work around the failure with `chmod` or by deleting
+the old prefix. The [CPython 3.14.4 venv implementation](https://github.com/python/cpython/blob/v3.14.4/Lib/venv/__init__.py)
+was also checked: it creates this file with a normal writable `open` call.
 
-## PyJWT の更新理由
+## Why PyJWT was updated
 
-2026-11-11の公式 PyPI 情報では、旧候補の2.13.0に advisory の記録があり、
-2.15.1では `vulnerabilities` が空でした。2.15.1は MIT、Python >=3.9で、
-MCP SDK 1.30.0 の `pyjwt[crypto]>=2.10.1` を満たします。
-cryptography への依存条件と crypto extra は旧候補と同じです。
+Official PyPI metadata observed on 2026-11-11 listed advisories for the previous
+candidate, 2.13.0, while 2.15.1 had an empty `vulnerabilities` list. Version
+2.15.1 is MIT-licensed, requires Python >=3.9, and satisfies MCP SDK 1.30.0's
+`pyjwt[crypto]>=2.10.1` requirement. Its cryptography dependency constraint and
+crypto extra are unchanged from the previous candidate.
 
-- [2.15.1の公式リリース情報](https://pypi.org/pypi/pyjwt/2.15.1/json)
-- [decode options の更新に関する advisory](https://github.com/advisories/GHSA-gvp8-978c-rx2q)
-- [2.15.0で修正された再帰処理の advisory](https://github.com/advisories/GHSA-42vr-xj54-vc7v)
-- [2.15.0で修正された OKP key の advisory](https://github.com/advisories/GHSA-x33g-cr3x-6449)
+- [Official 2.15.1 release metadata](https://pypi.org/pypi/pyjwt/2.15.1/json)
+- [Advisory concerning updates to decode options](https://github.com/advisories/GHSA-gvp8-978c-rx2q)
+- [Recursion advisory fixed in 2.15.0](https://github.com/advisories/GHSA-42vr-xj54-vc7v)
+- [OKP key advisory fixed in 2.15.0](https://github.com/advisories/GHSA-x33g-cr3x-6449)
 
-decode options の advisory は修正版の欄が未指定ですが、2.15.1の上流ソースに
-[options をコピーする修正](https://github.com/jpadilla/pyjwt/commit/0c87c8c8b1a74cac99ad8115f3050efcb7fbed35)
-が含まれることも確認しました。2.14.0は残る advisory の対象なので選んでいません。
-取得時には全29パッケージの advisory を確認し、1件でも報告されれば停止します。
-警告を無視する例外は追加していません。
+The decode-options advisory did not specify a fixed version, but the 2.15.1
+upstream source was also confirmed to include the
+[fix that copies options](https://github.com/jpadilla/pyjwt/commit/0c87c8c8b1a74cac99ad8115f3050efcb7fbed35).
+Version 2.14.0 was not selected because other advisories still apply to it.
+Acquisition checks advisories for all 29 packages and stops if any are reported.
+No exception to ignore warnings has been added.
 
-## 測定した範囲
+## Measured validation scope
 
-installer 修正版は56件の試験を通過しました。synthetic wheel・fake HTTP・fake install
-runner 等の52件と、既存 CPython 3.12.14 で空の venv を作る実試験4件です。
-実試験は一時ディレクトリで `venv --without-pip` を使い、SDK は導入していません。
+The corrected installer passed 56 tests: 52 cases using synthetic wheels, fake
+HTTP, fake installation runners, and similar fixtures, plus four real tests
+creating empty venvs with the existing CPython 3.12.14. The real tests used
+`venv --without-pip` in temporary directories and did not install the SDK.
 
-- 旧動作の再現: `umask=0002` なら `pyvenv.cfg` は `0664` となり、厳格な検査が拒否。
-- 修正後: 呼び出し元が `0002`、`0022`、`0077` のどれでも同ファイルは `0600`、
-  venv ディレクトリは `0700` となり、同じ検査が通過。
-- 呼び出し元の `umask` 不変、system site-packages 無効、pip 未導入を確認。
+- Original behavior reproduced: with `umask=0002`, `pyvenv.cfg` had mode `0664`
+  and the strict check rejected it.
+- After the fix: with caller masks `0002`, `0022`, and `0077`, the file had mode
+  `0600`, the venv directory had mode `0700`, and the same check passed.
+- The caller's `umask` remained unchanged, system site-packages were disabled,
+  and pip was not installed.
 
-利用者自身による Ubuntu 26.04.1 x86_64 / CPython 3.14.4 への導入成功も確認済みです。
-SDK 1.30.0、PyJWT 2.15.1、全29固定版、`pip check`、SDK import、prefix 分離が通過しました。
-その既存 SDK を使う adapter の stdio・fake-provider 試験も後に通過しました。
-[検証記録](laf-mcp-validation.md)は、この SDK の導入と実サービスへの接続を区別します。
-GPU/NPU、8–16 GB VRAM、実モデル、別PC、実 MCP クライアント設定、配備は未検証です。
+A successful installation performed by the user on Ubuntu 26.04.1 x86_64 /
+CPython 3.14.4 was also confirmed. SDK 1.30.0, PyJWT 2.15.1, all 29 pinned
+versions, `pip check`, SDK import, and prefix isolation passed verification.
+Adapter stdio and fake-provider tests using that existing SDK subsequently
+passed as well. The [validation record](laf-mcp-validation.md) distinguishes
+SDK installation from connection to real services. This evidence does not
+validate GPU/NPU operation, 8-16 GB VRAM configurations, real models, another PC,
+real MCP-client configuration, or deployment.
 
-## ライセンスと変更
+## Licensing and changes
 
-first-party CLI・pin候補・文書は KOL-v1 です。リポジトリの `LICENSE` と `NOTICE` を
-参照してください。SDK・依存 wheel は同梱せず、取得時には各ライセンスが適用されます。
+The first-party CLI, pin candidates, and documentation are licensed under
+KOL-v1. See the repository's `LICENSE` and `NOTICE`. SDK and dependency wheels
+are not bundled; their individual licenses apply when downloaded.
 
-2026-11-11: SDK-only CLI、固定候補、試験、導入文書を追加。PyJWT を2.15.1へ更新し、
-子プロセスだけの作成マスクを `0077` に固定。既存環境を上書きしない条件を維持。
-2026-11-12: 個人別の再開コマンド・確認値を一般向け導入手順と実測結果へ置き換え。
-CLI の動作・固定版・権限検査には変更なし。
+2026-11-11: Added the SDK-only CLI, pinned candidates, tests, and installation
+guide. Updated PyJWT to 2.15.1 and set the child-process-only creation mask to
+`0077`. Preserved the requirement not to overwrite existing environments.
+
+2026-11-12: Replaced personalized resumption commands and review hashes with
+general installation instructions and measured results. No changes to CLI
+behavior, pinned versions, or permission checks.

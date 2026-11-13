@@ -59,6 +59,6 @@ or release. The SDK-only installer selects PyJWT 2.15.1; its archive/review reco
 remain separate from this adapter source. No SDK or transitive package is bundled.
 
 The [official advisory](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-84m7-p3x7-pcfv)
-affects 1.8.0–1.29.1 and 2.0.0–2.1.1 stateful Streamable HTTP; 1.30.0 is the fixed
+affects 1.8.0-1.29.1 and 2.0.0-2.1.1 stateful Streamable HTTP; 1.30.0 is the fixed
 1.x release. It explicitly excludes stdio-only servers. This is not exhaustive
 security clearance or approval for remote hosting.

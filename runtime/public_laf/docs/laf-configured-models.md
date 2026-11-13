@@ -157,4 +157,4 @@ telemetry/device prerequisites or establish model fit. See
 for the remaining measured-hardware gates and independent AI test-quality work.
 
 Software tests use synthetic providers. No new deployment, actual small-model
-generation, 8–16 GB GPU or clean-host acceptance is claimed.
+generation, 8-16 GB GPU or clean-host acceptance is claimed.

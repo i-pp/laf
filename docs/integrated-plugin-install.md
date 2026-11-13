@@ -133,7 +133,7 @@ same receipt after an uncertain result, never submit a new attempt as a retry.
   loader, not only a direct CLI or synthetic test. Recheck the 32-tool catalog.
 - Provide and test a clean-host daemon/policy/isolation/setup flow. Existing-host
   success does not establish second-PC portability, other Python versions or
-  8–16 GB VRAM acceptance.
+  8-16 GB VRAM acceptance.
 - For a public directory submission, verify publisher identity, website/support/
   privacy/terms URLs, countries, actual commerce behavior, icon, recorded demo,
   review cases and applicable attestations. No URLs, credentials, legal promises,

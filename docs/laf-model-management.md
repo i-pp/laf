@@ -50,7 +50,7 @@ an independent local `model_storage` summary. Use `LAF_MODEL_STATE_DIR` to selec
 the same registry used by model operations; otherwise it reads
 `~/.local/state/laf-models`. Catalog, list and local model status do not create directories or contact
 Ollama. The opt-in inspect command makes GET-only requests to configured Ollama. Registry entries describe the last verified installation, not a fresh
-engine inventory. `loaded_state: not_queried` must not be read as “unloaded.”
+engine inventory. `loaded_state: not_queried` must not be read as "unloaded."
 
 ## What is implemented
 

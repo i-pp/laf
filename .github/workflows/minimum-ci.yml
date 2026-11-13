@@ -68,6 +68,8 @@ jobs:
               raise SystemExit('No source files checked')
           print(f'Syntax checked: {checked} files')
           PYCODE
+      - name: Enforce English and ASCII source with explicit Unicode test data
+        run: python3 -B scripts/check_english_source.py
       - name: Run full offline Python regressions, including Unix sockets
         run: python3 -B scripts/check-laf.py --suite full
       - name: Validate the local stdio plugin source boundary

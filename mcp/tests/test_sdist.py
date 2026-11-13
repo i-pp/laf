@@ -33,6 +33,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class SourceDistributionTests(unittest.TestCase):
     def test_offline_sdist_preserves_modules_audit_metadata_and_test_helpers(self):
+        # Unicode test fixture: source-distribution paths contain multi-byte characters.
         with tempfile.TemporaryDirectory(prefix='laf sdist 雪 ') as tmp:
             tmp = Path(tmp)
             source = tmp / 'source'

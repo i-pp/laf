@@ -311,6 +311,7 @@ class IntegratedSDKTests(unittest.TestCase):
             self.assertNotIn(PROMPT, disk)
             self.assertNotIn('synthetic reply', disk)
 
+        # Unicode test fixture: non-ASCII paths exercise SDK/UDS path handling.
         with tempfile.TemporaryDirectory(prefix='laf integrated 雪 ') as tmp:
             anyio.run(session_run, Path(tmp))
 

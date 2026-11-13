@@ -117,9 +117,8 @@ The terminal shows the assistant text rather than the job envelope. Replies are
 printed after completion, not streamed token by token. All replies are generated
 advice, not executed code or verified facts.
 
-An optional Japanese example can follow the English examples: the greeting
-"こんにちは" might receive "こんにちは！". This is illustrative too; exact replies depend
-on the selected model.
+For example, a greeting such as "Hello" might receive "Hello!". This is only
+illustrative; the exact reply depends on the selected model.
 
 ## Commands and privacy
 

@@ -408,7 +408,11 @@
         ".codex-plugin/plugin.json",
         ".mcp.json",
         "docs/codex-install.md",
-        "scripts/test_codex_package.py"
+        "scripts/test_codex_package.py",
+        "scripts/check_english_source.py",
+        "scripts/test_english_source.py",
+        "scripts/test_common_policy_language.py",
+        "docs/source-language-policy.md"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",

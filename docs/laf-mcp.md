@@ -90,7 +90,7 @@ an accepted Linux Router and the release gate below. Python >=3.10 is package
 metadata only: historical cloud tests used 3.12; the SDK installation and
 subsequent native checks used 3.14.4. The selected transitive closure includes rpds-py requiring >=3.11;
 it is not a tested Python 3.10 lock. Linux SO_PEERCRED and Unix sockets are required.
-No Windows/macOS, GPU/NPU, 8–16 GB fit or clean-host inference claim follows.
+No Windows/macOS, GPU/NPU, 8-16 GB fit or clean-host inference claim follows.
 
 The SDK pin and official archive hashes are in `mcp/sdk-pin.txt`; the dependency
 review is in `mcp/dependency-review.json`. This is not a full transitive hash lock.
@@ -135,7 +135,7 @@ packaging does not authorize installing the plugin or editing a host's config.
   not treat a listed model as ready or installed.
 - `laf_router_status` reports separate non-atomic health/capability observations.
   `not_ready` remains not ready; GPU readiness does not attest NPU execution.
-- `laf_router_submit_job` requires `attempt_id`, `model` and 1–32 role/content text messages.
+- `laf_router_submit_job` requires `attempt_id`, `model` and 1-32 role/content text messages.
   Optional output/deadline bounds retain Router limits. It makes at most one POST.
 - `laf_router_get_job` accepts the returned opaque `handle`, not an arbitrary
   Router ID. Completed output is unverified text, never executed.
@@ -251,6 +251,6 @@ or release. The SDK-only installer selects PyJWT 2.15.1; its archive/review reco
 remain separate from this adapter source. No SDK or transitive package is bundled.
 
 The [official advisory](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-84m7-p3x7-pcfv)
-affects 1.8.0–1.29.1 and 2.0.0–2.1.1 stateful Streamable HTTP; 1.30.0 is the fixed
+affects 1.8.0-1.29.1 and 2.0.0-2.1.1 stateful Streamable HTTP; 1.30.0 is the fixed
 1.x release. It explicitly excludes stdio-only servers. This is not exhaustive
 security clearance or approval for remote hosting.

@@ -132,7 +132,7 @@ terminal venv does not establish a desktop application's interpreter selection.
 - Review one integrated candidate before public push/PR; publication is not authorized here.
 - Explicitly select and test a local MCP client/plugin configuration and catalog.
 - Review a separate deployment plan before any service or live MCP cutover.
-- Measure actual accepted models on intended 8–16 GB VRAM hosts; no fit/latency or
+- Measure actual accepted models on intended 8-16 GB VRAM hosts; no fit/latency or
   GPU/NPU acceptance follows from synthetic profiles.
 - Complete clean-host/second-PC runtime and external-asset redistribution review.
 - Preserve independent test/evidence review. Automotive, aviation or aerospace

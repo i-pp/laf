@@ -86,7 +86,7 @@ refreshing tools alone does not establish that the listing has changed.
 
 No npm/uvx wrapper is published here. Those wrappers would not remove the daemon,
 policy, auth, model and owner-socket prerequisites. Clean-host/second-PC setup,
-8–16 GB hardware acceptance and all 32 tools' backend functionality remain open.
+8-16 GB hardware acceptance and all 32 tools' backend functionality remain open.
 See the legacy-helper transport limitation in the prerequisite guide.
 
 The commands were checked against the installed CLI's `--help`. Local marketplace

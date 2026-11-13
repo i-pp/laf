@@ -43,11 +43,13 @@ class Contracts(unittest.TestCase):
   self.assertEqual(read_frame(io.BytesIO(b'{"x":1}\n')),{'x':1})
  def test_final_size_preserves_unknown_handle_and_job(self):
   out={'outcome':'UNKNOWN','handle':'a'*32,'job_id':'b'*32,'content':'\x00'*MAX_FRAME}
+  # Unicode test fixture: a multi-byte request ID exercises the byte limit.
   frame=final_frame({'jsonrpc':'2.0','id':'識'*128,'result':{'content':[{'type':'text','text':out['content']}],'structuredContent':out,'isError':False}})
   self.assertLessEqual(len(frame),MAX_FRAME)
   r=json.loads(frame)['result']['structuredContent']
   self.assertEqual(r['outcome'],'UNKNOWN');self.assertEqual(r['handle'],'a'*32);self.assertEqual(r['job_id'],'b'*32)
  def test_final_size_preserves_known_completion(self):
+  # Unicode test fixture: emoji output must still respect the byte limit.
   out={'outcome':'TERMINAL','status':'completed','handle':'c'*32,'content':'😀'*MAX_FRAME}
   r=json.loads(final_frame({'jsonrpc':'2.0','id':1,'result':{'structuredContent':out,'content':[]}}))['result']['structuredContent']
   self.assertEqual(r['status'],'completed');self.assertEqual(r['outcome'],'TERMINAL')

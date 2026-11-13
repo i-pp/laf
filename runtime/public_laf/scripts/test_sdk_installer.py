@@ -119,6 +119,7 @@ class FakeRunner:
 
 class Fixture:
     def __init__(self, root, version="3.12.14", pin_overrides=None):
+        # Unicode test fixture: bundle/prefix paths include spaces and multi-byte text.
         self.root, self.bundle, self.prefix = root, root / "bundle 雪 space", root / "SDK 永続 space"
         self.pins = copy.deepcopy(sdk.load_pins())
         for name, version_override in (pin_overrides or {}).items():
@@ -698,6 +699,7 @@ class EmptyVenvUmaskTests(unittest.TestCase):
     def probe(self, mask, runner="private-installer"):
         parent_before = next(line for line in Path("/proc/self/status").read_text().splitlines() if line.startswith("Umask:"))
         with tempfile.TemporaryDirectory(prefix="laf-empty-venv-test-") as temporary:
+            # Unicode test fixture: empty-venv paths must preserve multi-byte text.
             command = [sys.executable, "-I", "-B", "-c", EMPTY_VENV_PROBE, str(SCRIPT), str(Path(temporary) / "empty venv 雪"), runner]
             result = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=300, umask=mask)
             self.assertEqual(result.returncode, 0, result.stderr)

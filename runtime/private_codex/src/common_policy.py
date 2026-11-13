@@ -40,7 +40,9 @@ class SourcePolicyBundle(NamedTuple):
 
 _VERSION = re.compile(r'[0-9]+(?:\.[0-9]+)*\Z')
 _SHA256 = re.compile(r'[0-9a-f]{64}\Z')
-_TITLE = '# AI開発オーケストレーション統合指示 v'
+# Legacy format token, not generated prose. Escapes preserve the pinned historical
+# heading bytes; verified policy snapshots must never be translated or rewritten.
+_TITLE = '# AI\u958b\u767a\u30aa\u30fc\u30b1\u30b9\u30c8\u30ec\u30fc\u30b7\u30e7\u30f3\u7d71\u5408\u6307\u793a v'
 
 
 def _path(path, *, directory=False):
@@ -190,11 +192,13 @@ def developer_instructions(bundle, role_instructions=''):
         raise PolicyError('Role instructions must not duplicate the common-policy body')
     metadata = json.dumps(bundle.metadata(), ensure_ascii=False, sort_keys=True)
     preamble = (
-        '共通ポリシーの検証済みスナップショットを以下に含む。\n'
-        '適用順位: 実行環境の上位規則・権限・ユーザーの明示的制約が優先する。'
-        'このポリシーは権限や承認を追加しない。'
-        '既存の安全ガード・追加隔離禁止・明示されたscope/認証/費用制限を上書きしない。'
-        '共通ポリシーはその範囲内で適用し、ロール/実行の補足は本文を変更しない。\n'
+        'A verified snapshot of the common policy follows.\n'
+        'Higher-priority runtime rules, permissions and explicit user constraints take precedence. '
+        'This policy does not grant permissions or approval. '
+        'It does not override existing safety guards, prohibitions on additional isolation, '
+        'or explicit scope, authentication and cost limits. '
+        'Apply the common policy only within those bounds; supplementary role/execution '
+        'instructions do not modify its body.\n'
         'Policy metadata: ' + metadata + '\n\n--- BEGIN COMMON POLICY ---\n')
     boundary = '' if bundle.text.endswith('\n') else '\n'
     return (preamble + bundle.text + boundary + '--- END COMMON POLICY ---\n\n'

@@ -71,3 +71,15 @@ instructions. Correct the portable OpenAI extension nesting. These are explicit
 local source changes beyond the pinned compatibility snapshot; guards, schemas,
 authentication, runtime behavior and model configuration remain unchanged.
 ChatGPT connection listing metadata is separate and not claimed changed here.
+
+
+## 2026-11-13: English public source and explicit Unicode test fixtures
+
+Translate the SDK installation guide and its bundled copy, chat examples and
+generated policy preamble to English; normalize English typography to ASCII.
+Retain intentional Unicode byte/path regression data with English explanations
+and a literal-only allowlist. Preserve the historical policy heading bytes using
+Unicode escapes; the verified body, hash/pin checks and parsing contract are
+unchanged. Add CI enforcement and negative controls. These documented language
+changes supersede the prior byte-frozen snapshot only in the affected source and
+documentation paths; no deployment, SDK install, auth or model change occurs.

@@ -336,3 +336,15 @@ ChatGPT connection listing metadata is separate and not claimed changed here.
 Codex local marketplace documentation uses source-only archive extraction, not
 a Git checkout: the CLI otherwise copies a .git worktree pointer into its cache.
 The source builder already excludes Git metadata; no guard is weakened.
+
+
+## 2026-11-13: English public source and explicit Unicode test fixtures
+
+Translate the SDK installation guide and its bundled copy, chat examples and
+generated policy preamble to English; normalize English typography to ASCII.
+Retain intentional Unicode byte/path regression data with English explanations
+and a literal-only allowlist. Preserve the historical policy heading bytes using
+Unicode escapes; the verified body, hash/pin checks and parsing contract are
+unchanged. Add CI enforcement and negative controls. These documented language
+changes supersede the prior byte-frozen snapshot only in the affected source and
+documentation paths; no deployment, SDK install, auth or model change occurs.

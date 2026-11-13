@@ -92,7 +92,7 @@ Core must have a private PID namespace and IPC, read-only root filesystem, no ca
 
 ## Safety behavior and limits
 
-Two mode-0600 UDS lanes use the existing UID-authenticated transport. Starts are isolated from control operations. Authenticated samples refresh a 1–30 second lease; the monitor checks host telemetry and lease every 0.5 seconds. The configured lease includes startup time before the first sample. The Core Controller watchdog must continue sampling while idle and busy.
+Two mode-0600 UDS lanes use the existing UID-authenticated transport. Starts are isolated from control operations. Authenticated samples refresh a 1-30 second lease; the monitor checks host telemetry and lease every 0.5 seconds. The configured lease includes startup time before the first sample. The Core Controller watchdog must continue sampling while idle and busy.
 
 A resource fault, expired lease, or fixed emergency-stop request first invalidates admitted starts and latches a sticky host safety fault. It then stops the fixed owned Core container, verifies termination, and only afterward stops Ollama through the existing physical GPU-idle barrier. An unconfirmed Core stop prevents the Ollama stop. The monitor keeps retrying fixed-target cleanup, with ownership/security reconciliation on every attempt, until Core termination and the Ollama physical barrier are both confirmed. Recovery of the resource readings does not cancel this cleanup obligation. Regular client stop cannot clear the host safety fault. There is no wire reset operation.
 

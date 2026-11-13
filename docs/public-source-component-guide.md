@@ -36,8 +36,8 @@ Local AI Fabric (LAF) coordinates local inference engines and development tools
 through one private API. Use your own model assets while LAF checks resources,
 switches models and handles recovery on your machine.
 
-[Getting started](#getting-started) · [Architecture](#architecture) ·
-[Project status](#project-status) · [Documentation](#documentation)
+[Getting started](#getting-started) | [Architecture](#architecture) |
+[Project status](#project-status) | [Documentation](#documentation)
 
 ## Why LAF?
 
@@ -63,13 +63,13 @@ without models. See [source-preview limits and release gates](docs/source-previe
 ```mermaid
 flowchart TD
     Client["Terminal chat / JSON CLI / scoped development tools"]
-    Router["LAF Router · owner-only Unix socket"]
-    Guards["Resource admission · bounded GPU queue · release checks"]
+    Router["LAF Router | owner-only Unix socket"]
+    Guards["Resource admission | bounded GPU queue | release checks"]
     Flash["Strata Flash"]
-    Ollama["Ollama · one model profile at a time"]
-    NPU["Optional NPU service · fixed-shape classification"]
+    Ollama["Ollama | one model profile at a time"]
+    NPU["Optional NPU service | fixed-shape classification"]
     Core["Opt-in Core entrypoint"]
-    Host["Fixed host supervisor · owned provider lifecycle"]
+    Host["Fixed host supervisor | owned provider lifecycle"]
 
     Client --> Router
     Router --> Guards

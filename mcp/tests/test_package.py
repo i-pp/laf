@@ -24,6 +24,7 @@ ROOT=pathlib.Path(__file__).resolve().parents[2]
 class PackageTests(unittest.TestCase):
  def test_manifest(self):subprocess.run([sys.executable,'-B',str(ROOT/'scripts/check-laf-plugin.py')],check=True,capture_output=True)
  def test_offline_wheel_and_isolated_entrypoint(self):
+  # Unicode test fixture: wheel/install paths contain multi-byte characters.
   with tempfile.TemporaryDirectory(prefix='laf mcp 雪 ') as tmp:
    tmp=pathlib.Path(tmp)
    env=dict(os.environ);env.pop('PYTHONPATH',None)
