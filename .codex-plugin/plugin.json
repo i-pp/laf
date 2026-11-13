@@ -1,0 +1,15 @@
+{
+  "name": "laf",
+  "version": "0.1.0",
+  "description": "Local AI Fabric integrated Codex/orchestration and owner-scoped Router tools. Experimental integrated source; existing owner-host setup required.",
+  "author": {
+    "name": "I-plusplus Inc."
+  },
+  "interface": {
+    "displayName": "Local AI Fabric",
+    "shortDescription": "Local models and Codex tools",
+    "category": "Developer Tools"
+  },
+  "skills": "./skills",
+  "mcpServers": "./.mcp.json"
+}

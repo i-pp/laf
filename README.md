@@ -40,6 +40,8 @@ complete clean-host Quick Start. Model/SDK/vendor assets and private account,
 service, tunnel and runtime state are not included. Clean-host provisioning,
 plugin loader and Chat acceptance remain separate gates.
 
+For Codex registration and the local marketplace option, see [Codex install](docs/codex-install.md).
+
 ## Source layout and package build
 
 `runtime/` is the fixed reviewed compatibility implementation for the root launcher.

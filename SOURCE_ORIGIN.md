@@ -61,3 +61,13 @@ R5 archive-only metadata correction: public LAF Git tree 4485a7b records `laf` a
 ## Proposed repository integration
 
 Base public integration 114b4b72bcbadefbeca52f96a430e00402a8d0bd remains at top level. runtime/ is the R5 reviewed compatibility snapshot, not a replacement of newer top-level sources. New root launcher/manifests select that subset. Root inference/laf_service/server.py receives only ASYNC-ACK-01: async acknowledgment disconnection must not cancel the admitted job; synchronous disconnect cancellation remains. No other upstream main changes imported. New source-tree builder uses explicit policy paths, no private input artifact. The owner confirmed the KOL-v1 classification of project-authored local additions for this source PR. Existing third-party licenses and copyright notices are preserved. Merge, directory submission and further deployments are separate decisions.
+
+
+## 2026-11-13: Codex package and version alignment
+
+Set the root plugin and both integrated MCP SERVER_INFO versions to 0.1.0.
+Add Codex compatibility/marketplace metadata and existing-owner-host registration
+instructions. Correct the portable OpenAI extension nesting. These are explicit
+local source changes beyond the pinned compatibility snapshot; guards, schemas,
+authentication, runtime behavior and model configuration remain unchanged.
+ChatGPT connection listing metadata is separate and not claimed changed here.

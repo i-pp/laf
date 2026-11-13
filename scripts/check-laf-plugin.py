@@ -34,6 +34,9 @@ def check():
  assert p['$schema']=='https://agent-plugins.org/schemas/1.0.0/plugin.schema.json'
  assert set(m['mcpServers'])=={'laf'}
  c=m['mcpServers']['laf'];assert c=={'type':'stdio','command':'python3','args':['-B','${PLUGIN_ROOT}/launcher.py'],'cwd':'${PLUGIN_ROOT}'}
+ assert p['version']=='0.1.0'
+ assert 'interface' in p['extensions']['com.openai']
+ assert (ROOT/'.codex-plugin/plugin.json').is_file()
  assert (ROOT/'launcher.py').is_file()
  assert (ROOT/'runtime/integration/laf_stdio_cli.py').is_file()
  assert (ROOT/'runtime/integration/launch.py').is_file()

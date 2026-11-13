@@ -322,3 +322,13 @@ plugin-loader, complete 32-tool functionality and directory-release acceptance.
 No credential, runtime state, private Git history, model, SDK, service unit binding
 or operational evidence is included. This source change does not install, switch
 or merge anything.
+
+
+## 2026-11-13: Codex package and version alignment
+
+Set the root plugin and both integrated MCP SERVER_INFO versions to 0.1.0.
+Add Codex compatibility/marketplace metadata and existing-owner-host registration
+instructions. Correct the portable OpenAI extension nesting. These are explicit
+local source changes beyond the pinned compatibility snapshot; guards, schemas,
+authentication, runtime behavior and model configuration remain unchanged.
+ChatGPT connection listing metadata is separate and not claimed changed here.

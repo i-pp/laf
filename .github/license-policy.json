@@ -403,7 +403,12 @@
         "runtime/public_laf/scripts/test_sdk_installer.py",
         "runtime/public_laf/skills/laf-router/SKILL.md",
         "scripts/build-integrated-source.py",
-        "scripts/test_integrated_source.py"
+        "scripts/test_integrated_source.py",
+        ".agents/plugins/marketplace.json",
+        ".codex-plugin/plugin.json",
+        ".mcp.json",
+        "docs/codex-install.md",
+        "scripts/test_codex_package.py"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",
