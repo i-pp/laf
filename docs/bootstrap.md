@@ -256,3 +256,21 @@ not silently generalized to this new bootstrap.
 
 The self-contained policy is an exact licensed public snapshot, not a fabricated
 legacy policy or local Git checkout. See [policy provenance](bootstrap-policy-provenance.md).
+
+
+## Observed frontend installation
+
+Source commit [`ad0b133`](https://github.com/y-ooya-ipp/laf/tree/ad0b13316f2fabcad751fb834bdb0c32a2f38bb3)
+was prepared into a new private prefix and activated in a new isolated Codex
+HOME. Official Codex 0.167.0 installed the plugin, and the actual loader used the
+existing SDK 1.30.0 to advertise the exact 33 schemas with version 0.1.0. Source,
+cache and copied-runtime checks passed; owned cleanup completed normally.
+See the [curated validation record](validation/bootstrap-frontend-20261113.json)
+and [pull request checks](https://github.com/i-pp/laf/pull/12/checks).
+
+All seven backends remained explicitly unconfigured. This accepts the new-prefix
+frontend installation path, not dependency installation on a clean operating
+system, configured backend actions, account/model readiness or live deployment.
+Resource observations were sampled, not proof of zero pressure or attribution
+to a particular process. Later documentation-only additions are not a rerun of
+their whole-source ZIP.

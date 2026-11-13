@@ -24,6 +24,17 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: observed new-prefix frontend installation
+
+Added a curated validation record at
+`docs/validation/bootstrap-frontend-20261113.json`, its KOL metadata declaration
+and an installation-evidence section in `docs/bootstrap.md`. It records source
+commit `ad0b133` and its exact tested source archive, real Codex/SDK catalog and
+owned cleanup, without raw logs, host paths, process/account identifiers or a
+claim that unconfigured backends are ready. Existing commands, runtime source,
+authority, limits and historical evidence remain unchanged. Later metadata/docs
+are not presented as a whole-source rerun.
+
 ## Unreleased: bounded resource policy and explicit host recovery
 
 Updated the top-level and bundled `inference/laf_service` Core, server,

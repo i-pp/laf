@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "kind": "isolated_frontend_acceptance",
+  "date_utc": "2026-11-13",
+  "source_commit": "ad0b13316f2fabcad751fb834bdb0c32a2f38bb3",
+  "input_source_archive_sha256": "2608cc5b5546c629ed6b9ba6c09594c1ec3c4db52069a8cdee14dbcf03b88804",
+  "input_source_members": 378,
+  "versions": {
+    "laf_plugin": "0.1.0",
+    "codex_cli": "0.167.0",
+    "mcp_sdk": "1.30.0"
+  },
+  "setup": [
+    "new private prefix",
+    "prepare dry-run",
+    "prepare",
+    "copied doctor",
+    "standard config activation into new fake HOME",
+    "static launcher check",
+    "native version",
+    "local marketplace registration",
+    "plugin installation"
+  ],
+  "observations": {
+    "source_and_installed_cache_match_every_input_byte": true,
+    "copied_runtime_matches_expected_source_set_and_bytes": true,
+    "sdk_child_uses_prepared_prefix": true,
+    "unique_tools": 33,
+    "complete_input_output_schema_match": true,
+    "server_version": "0.1.0",
+    "tools_error": null,
+    "all_seven_backends_remain_explicitly_unconfigured": true
+  },
+  "requested_appserver_methods": [
+    "initialize",
+    "plugin/installed",
+    "mcpServerStatus/list"
+  ],
+  "initialized_notifications": 1,
+  "requested_tool_thread_turn_model_login_rpcs": 0,
+  "cleanup": {
+    "all_setup_and_appserver_exit_codes_zero": true,
+    "direct_children_reaped": true,
+    "observed_processes_confirmed_absent": 13,
+    "signals_sent": 0,
+    "new_private_native_snapshot_removed": true,
+    "receipt_records": 0,
+    "audit_tool_calls": 0,
+    "existing_user_configuration_replaced": false
+  },
+  "sampled_resources": {
+    "scope": "cooperative host samples, not continuous containment or causal attribution",
+    "samples": 14,
+    "maximum_gap_seconds": 0.899,
+    "peak_observed_appserver_family_rss_bytes": 292044800,
+    "observed_host_swap_growth_bytes": 132345856,
+    "observed_host_swap_out_pages": 32218,
+    "host_oom_counter_growth": 0,
+    "within_reviewed_finite_canary_budget": true
+  },
+  "independent_review": {
+    "read_only_source_pin_byte_and_schema_crosscheck": "passed",
+    "raw_rpc_audit_receipt_and_cleanup_consistency": "passed",
+    "native_trial_rerun_during_evidence_review": false
+  },
+  "not_established": [
+    "clean-host dependency installation",
+    "configured backend actions or daemon readiness",
+    "account or provider acceptance for this new prefix",
+    "model generation, effective reasoning effort, entitlement or billing",
+    "hardware capacity or concurrent model throughput",
+    "zero native network syscalls or zero pressure",
+    "live deployment or public registry/directory acceptance"
+  ],
+  "privacy": "Curated fixture observations only. Raw logs, host/user paths, process IDs, account identities, credentials and endpoint locators are not included.",
+  "revision_scope": "This records the exact input source commit above. Later documentation/metadata additions are not relabeled as a rerun of their whole-source ZIP."
+}
