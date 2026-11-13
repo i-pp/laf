@@ -1,0 +1,12 @@
+{
+  "state_dir": "/EXISTING/state/laf-inference",
+  "runtime_dir": "/run/user/UID/laf-inference",
+  "generation_lock": "/EXISTING/agents/local_llm/.runtime/generation.lock",
+  "container_name": "laf-inference-ollama-20261107",
+  "docker_network": "EXISTING_INTERNAL_DOCKER_NETWORK",
+  "weights": "/EXISTING/models/large-coder-b3",
+  "strata_source": "/EXISTING/strata-source",
+  "tokenizer_python": "/EXISTING/venv/bin/python",
+  "strata_command": ["/EXISTING/strata", "--pack", "/EXISTING/pack", "--native", "/EXISTING/flash-part1.gguf", "--ple-gguf", "/EXISTING/flash-part2.gguf", "--mmap-experts", "--ple-io", "direct", "--expert-cache", "1024", "--max-context", "8192", "--spec", "2", "--suffix-draft", "0", "--prefill", "512", "--eos-ids", "248044,248046", "--expert-profile", "/EXISTING/expert-profile.bin", "--pool-workers", "15", "--pool-cores", "1-15", "--pool-tasks", "48", "--serve"],
+  "npu_socket": "/run/user/UID/laf-npu/service.sock"
+}

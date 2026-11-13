@@ -22,13 +22,14 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
-# LAF integrated plugin: private review candidate
+# LAF integrated plugin: experimental source
 
 This package preserves the integrated 27 Codex/orchestration/legacy tools plus
-five owner-scoped Router tools. It is **not approved for public upload**, a
-complete clean-host Quick Start, or a safety-critical product certification.
-The full runtime is assembled privately while source origin/rights review is
-finished. Do not publish its ASSEMBLY_STATUS or this draft as a release approval.
+five owner-scoped Router tools. The owner has authorized publication of the
+project-authored source changes under KOL-v1, with third-party terms preserved.
+This is an experimental source proposal, not a complete clean-host Quick Start,
+a directory publication approval, or a safety-critical product certification.
+Private assembly status, credentials and operational evidence are not distributed.
 
 ## What is included
 
@@ -40,8 +41,8 @@ finished. Do not publish its ASSEMBLY_STATUS or this draft as a release approval
   `runtime/integration/launch.py`. The portable manifest starts **stdio only**.
   Existing HTTP authentication must be retained; this package neither configures
   nor exposes an HTTP server and does not copy a live IdP or Tunnel binding.
-- Applicable upstream license and notice files. Imported snapshot changes still
-  need their specific origin, modification notices and public-release clearance.
+- Applicable upstream license and notice files. Imported snapshot changes retain
+  their specific origin and modification notices; external terms are unchanged.
 
 There are no SDK/model binaries, live runtime files, account tokens, live/installed service
 units (example templates are included), captured model outputs, machine-specific tunnel registrations or logs.
@@ -124,9 +125,10 @@ Model outputs are unverified. A returned job handle is not proof of completion;
 a cancellation acknowledgment is not proof of physical stop. Read/reconcile the
 same receipt after an uncertain result, never submit a new attempt as a retry.
 
-## Still required before public release
+## Remaining product acceptance and directory-release gates
 
-- Finish origin/rights review and modification notices for every imported delta.
+- Recheck source origin, secret exclusion and modification notices for later changes.
+  The present owner-authorized source scope does not authorize a directory submission.
 - Verify the assembled package on the target host through the actual plugin
   loader, not only a direct CLI or synthetic test. Recheck the 32-tool catalog.
 - Provide and test a clean-host daemon/policy/isolation/setup flow. Existing-host

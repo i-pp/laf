@@ -167,6 +167,8 @@ jobs:
           if result.testsRun != 28 or any(rejected) or not result.wasSuccessful():
               raise SystemExit('Incomplete or non-green operator tests')
           PYCODE
+      - name: Strict ACK and source-builder checks with negative gate oracles
+        run: python3 -B scripts/run_integrated_source_checks.py
       - name: Verify portable integrated package source without services
         run: python3 -B packaging/run_packaging_checks.py
 

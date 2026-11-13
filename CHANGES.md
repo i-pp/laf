@@ -308,3 +308,17 @@ The SDK-free CI steps also reject empty/duplicate selections, incomplete run
 counts, skips, expected failures and unexpected successes. Actual 74/56 runs
 passed; synthetic pass/skip/xfail/error/early-stop witnesses checked fail-closed
 result accounting without installing SDK packages or starting real providers.
+
+2026-11-12 proposed integrated source layout: root manifests/launcher select 27 legacy/Codex plus Router5; runtime/ is the reviewed compatibility snapshot. Root Core/CLI sources remain current public baseline. See SOURCE_ORIGIN.md. No deployment or rights grant implied.
+
+
+## Owner-authorized experimental integrated source proposal
+
+Publish the reviewed local compatibility/integration source and operator tooling
+in one personal-fork PR, preserving public PR11 ancestry and third-party notices.
+Update the root plugin description, README, install guides and origin records
+to distinguish authorized source publication from still-unverified clean-host,
+plugin-loader, complete 32-tool functionality and directory-release acceptance.
+No credential, runtime state, private Git history, model, SDK, service unit binding
+or operational evidence is included. This source change does not install, switch
+or merge anything.

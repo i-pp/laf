@@ -50,7 +50,7 @@ Distributed changed paths relative to that baseline:
 - `runtime/private_codex/src/verification.py`
 - `runtime/private_codex/src/pipeline_policy_migration.py`
 
-Locally added runtime paths: `src/oauth_auth.py`, `src/legacy_tool_adapter.py`, `src/experiments.py`, from captured HTTP snapshot 167c32320d78eea5cbee75d06f6d935ca2eb5d08. Legacy adapter is an extraction of the earlier adapter; local runtime-scope/identity changes remain. The six integration modules are local glue. Public-distribution authority for these changes remains pending.
+Locally added runtime paths: `src/oauth_auth.py`, `src/legacy_tool_adapter.py`, `src/experiments.py`, from captured HTTP snapshot 167c32320d78eea5cbee75d06f6d935ca2eb5d08. Legacy adapter is an extraction of the earlier adapter; local runtime-scope/identity changes remain. The six integration modules are local glue. The owner explicitly authorized publishing the project-authored local changes under KOL-v1 to the personal public fork and proposing them to i-pp/laf. Third-party ownership, licenses and notices remain unchanged; this is not an authorization to publish secrets, private state or operational evidence.
 
 Differences include OAuth/HTTP identity, runtime scope, notification composition, bounded NSS resolver, older policy pin and older Codex protocol/pipeline behavior. No claim of newer upstream remote-approval features. Tests and operational comparison evidence are not included.
 

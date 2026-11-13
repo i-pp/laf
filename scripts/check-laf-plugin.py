@@ -29,15 +29,18 @@ ROOT=Path(__file__).resolve().parents[1]
 def check():
  p=json.loads((ROOT/'plugin.json').read_text());m=json.loads((ROOT/'mcp.json').read_text())
  assert re.fullmatch('[a-z][a-z0-9-]{0,63}',p['name']) and p['name']=='laf'
- assert re.fullmatch(r'\d+\.\d+\.\d+',p['version'])
+ assert re.fullmatch(r'\d+\.\d+\.\d+(?:-dev\.\d+)?',p['version'])
  assert not set(p)&{'skills','mcpServers','apps','interface'}
  assert p['$schema']=='https://agent-plugins.org/schemas/1.0.0/plugin.schema.json'
  assert set(m['mcpServers'])=={'laf'}
- c=m['mcpServers']['laf'];assert c=={'type':'stdio','command':'python3','args':['${PLUGIN_ROOT}/mcp/launch.py'],'cwd':'${PLUGIN_ROOT}'}
- assert (ROOT/'mcp/launch.py').is_file()
+ c=m['mcpServers']['laf'];assert c=={'type':'stdio','command':'python3','args':['-B','${PLUGIN_ROOT}/launcher.py'],'cwd':'${PLUGIN_ROOT}'}
+ assert (ROOT/'launcher.py').is_file()
+ assert (ROOT/'runtime/integration/laf_stdio_cli.py').is_file()
+ assert (ROOT/'runtime/integration/launch.py').is_file()
+ assert (ROOT/'runtime/public_laf/inference/laf_service/core.py').is_file()
  tree=ast.parse((ROOT/'mcp/src/laf_mcp/__init__.py').read_text())
  versions=[n.value.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='__version__' for t in n.targets)]
- assert versions==[p['version']]
+ assert versions==['0.1.0'] # standalone component version is independent of integrated package
  assert (ROOT/'mcp/LICENSE').read_bytes()==(ROOT/'LICENSE').read_bytes()
  assert 'name: laf-router' in (ROOT/'skills/laf-router/SKILL.md').read_text()
  for f in (ROOT/'mcp').rglob('*'):

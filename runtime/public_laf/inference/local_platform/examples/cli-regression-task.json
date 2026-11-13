@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "goal": "Fix the controlled cancellation regression in inference/local_platform/cli.py: ClientCancelled must preserve the received job identifier. Keep the public exception and CLI behavior and all tests unchanged. Read the source, make the smallest fix, run the selected existing test suite, then finish only after actual tests pass.",
+  "files": [
+    {
+      "path": "inference/local_platform/cli.py",
+      "access": "write"
+    },
+    {
+      "path": "inference/local_platform/__init__.py",
+      "access": "read"
+    },
+    {
+      "path": "inference/local_platform/test_cli.py",
+      "access": "read"
+    },
+    {
+      "path": "inference/local_platform/bounded_patch.py",
+      "access": "read"
+    },
+    {
+      "path": "inference/laf_service/__init__.py",
+      "access": "read"
+    },
+    {
+      "path": "inference/laf_service/npu_bridge.py",
+      "access": "read"
+    }
+  ],
+  "test": {
+    "kind": "python-unittest",
+    "start_dir": "inference/local_platform",
+    "pattern": "test_cli.py"
+  }
+}

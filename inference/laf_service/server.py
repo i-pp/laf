@@ -214,7 +214,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except ServiceError as exc:
             self.response(503, {'error': str(exc)[:160]})
         except (OSError, http.client.HTTPException):
-            if 'job' in locals():
+            # ASYNC-ACK-01: losing async ACK must not cancel admitted work.
+            if self.path == '/v1/chat/completions' and 'job' in locals():
                 job.cancel.set()
     def do_DELETE(self):
         try:
