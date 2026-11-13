@@ -99,3 +99,41 @@ A resource fault, expired lease, or fixed emergency-stop request first invalidat
 Confirmed shutdown drains in-flight panic callbacks and host operations, closes the old port admission gate, advances its generation, removes only endpoints it created, and releases locks. On an unconfirmed shutdown, the CLI retains its locks and retries cleanup. Operator termination or host failure can still end the process; there is no durable cross-process safety ledger or automatic recovery claim.
 
 The monitor and provider operations are Python code with cooperative cancellation. Docker subprocess timeouts are bounded, but arbitrary Python hangs, blocked telemetry, or an unresponsive physical idle barrier do **not** have hard execution deadlines. This prototype does not replace independent host containment or final operational review.
+
+
+## Explicit bounded resource policy and owner recovery
+
+The optional host-config integer `swap_limit_mib` is bounded to 512..2048 and
+otherwise defaults to 512. Set the same value in Core configuration. Core reads
+host `resource_policy` before provider construction and rejects a mismatch. The
+response is bound to the host epoch; a changed epoch requires a fresh explicit
+Core start, not an automatic retry. RAM/VRAM reserves, PSI limits and the Core
+container's no-extra-swap limit remain unchanged. Host-wide swap tolerance is
+not a change to the Core container limit.
+
+After diagnosing a host latch, its owning operator may send SIGUSR1 to the
+verified supervisor process. Recovery rejects a healthy host before stopping
+providers; an existing host safety latch is required. This is a host management action, not a Core wire
+operation. The handler records a request only; duplicate requests while pending
+or executing are coalesced. The normal loop performs the transaction:
+
+1. Invalidate admission and verify the fixed owned Core has stopped.
+2. Stop the owned Ollama provider and verify its physical release barrier.
+3. Require five seconds with unchanged swap occupancy and swap I/O counters,
+   PSI at most 1 percent, and the existing absolute RAM/VRAM reserves.
+4. Reconfirm both providers remain stopped and no newer panic, shutdown or
+   lifecycle mutation invalidated the transaction.
+5. Install the fresh baseline and a new epoch, then clear the host latch.
+
+Core is not automatically restarted. While awaiting the operator's explicit
+Core start, resource monitoring continues without expiring an absent Core's
+sample lease. Once the fixed Core is observed running, the lease resumes.
+Failure or interruption leaves the old epoch and safety latch; there is no
+automatic recovery retry. An uncertain result must be observed through status,
+not retried blindly. A regular Core stop cannot clear the host latch, and no
+`recover` lifecycle operation is accepted. Foreign processes and containers
+are never recovery targets.
+
+These changes have source/fake regression coverage only. Actual split-host
+recovery, owner signal delivery, startup timing and long-duration operation need
+separate acceptance before deployment; see [issue #13](https://github.com/i-pp/laf/issues/13).

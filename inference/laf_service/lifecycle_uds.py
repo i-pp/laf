@@ -232,7 +232,7 @@ class UnixLifecycleServer:
                 raise ValueError('positive bounded timeouts required')
         self.uid = os.getuid()
         self.path = private_runtime(runtime_dir, self.uid) / (CONTROL_SOCKET_NAME if control else SOCKET_NAME)
-        self.allowed_operations = {'stop', 'status', 'sample', 'panic'} if control else {'ensure'}
+        self.allowed_operations = {'stop', 'status', 'sample', 'panic', 'resource_policy'} if control else {'ensure'}
         if os.path.lexists(self.path):
             raise TransportError('lifecycle socket already exists; not replaced')
         self.port = port

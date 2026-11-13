@@ -75,4 +75,5 @@ class OwnedOllama:
 
 def fixed_host_lifecycle(config, config_path):
     provider = OwnedOllama(config, config_path)
-    return HostLifecycle(provider, snapshot, read_endpoint=lambda: provider.backend.address)
+    return HostLifecycle(provider, snapshot, read_endpoint=lambda: provider.backend.address,
+                         swap_limit_mib=config.get('swap_limit_mib', 512))

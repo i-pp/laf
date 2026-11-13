@@ -4,6 +4,7 @@ The existing executor remains Codex app-server. This ledger only binds client
 request keys to its thread/turn IDs and persists an explicit FIFO and cursor.
 """
 # Modified 2026-11-13: feature-only provider catalog/immutable effort port; no approval APIs.
+# Modified 2026-11-13: NEW bootstrap bindings require the existing pinned HostGateway.
 from contextlib import contextmanager
 import hashlib
 import json
@@ -959,6 +960,10 @@ def build_pipeline(runtime, project, *, transport_factory=None):
     """Explicit operator activation only. No caller-supplied command or provider."""
     from common_policy import load_project_policy, developer_instructions
     from codex_app_protocol import ProtocolClient, StdioTransport, schema_version_supported
+    from backend_state import load_state
+    state, _ = load_state(runtime)
+    if state is not None and state['schema'] == 2:
+        raise PipelineError('BOOTSTRAP_REQUIRES_PINNED_HOST_GATEWAY')
     path = Path(runtime) / 'codex-pipeline-policy.json'
     _private(path, 16384)
     policy = validate_policy(_json(path.read_bytes()))

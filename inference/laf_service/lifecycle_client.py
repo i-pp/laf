@@ -45,6 +45,7 @@ class LifecycleClient:
         self.ticket = 0
         self.pending_ensure = None
         self.expected_stop = None
+        self.policy_epoch = None
 
     @staticmethod
     def _identity(value):
@@ -53,9 +54,25 @@ class LifecycleClient:
             raise ServiceError('invalid host lifecycle identity')
         return value['epoch'], value['generation']
 
+    def resource_policy(self):
+        """Read fixed host policy without granting Core mutation authority."""
+        result = self.control_exchange({'operation': 'resource_policy'}, self.read_timeout)
+        if (type(result) is not dict or set(result) != {'epoch', 'swap_limit_mib'}
+                or type(result['epoch']) is not str or not re.fullmatch(r'[0-9a-f]{32}', result['epoch'])
+                or type(result['swap_limit_mib']) is not int or not 512 <= result['swap_limit_mib'] <= 2048):
+            raise ServiceError('invalid host resource policy')
+        with self.lock:
+            if self.policy_epoch is not None and self.policy_epoch != result['epoch']:
+                raise ServiceError('host policy epoch changed; restart Core explicitly')
+            self.policy_epoch = result['epoch']
+        return result
+
     def status(self, timeout=None):
         result = self.control_exchange({'operation': 'status'}, self.read_timeout if timeout is None else timeout)
         self._identity(result)
+        with self.lock:
+            if self.policy_epoch is not None and self.policy_epoch != result['epoch']:
+                raise ServiceError('host policy epoch changed; restart Core explicitly')
         if (set(result) != {'epoch', 'generation', 'running', 'stopping', 'fault', 'stopped_generation',
                                    'host_pid_namespace', 'host_uid', 'host_boot_id', 'emergency_stop_supported'}
                 or type(result['running']) is not bool or type(result['stopping']) is not bool
@@ -95,7 +112,8 @@ class LifecycleClient:
                 or not re.fullmatch(r'[0-9a-f]{32}', result['epoch'])):
             raise ServiceError('invalid host telemetry response')
         with self.lock:
-            if self.epoch is not None and result['epoch'] != self.epoch:
+            if ((self.epoch is not None and result['epoch'] != self.epoch)
+                    or (self.policy_epoch is not None and result['epoch'] != self.policy_epoch)):
                 self.ticket += 1
                 self.uncertain = True
                 self.need_reconcile = True

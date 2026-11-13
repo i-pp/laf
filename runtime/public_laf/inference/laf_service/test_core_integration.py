@@ -45,6 +45,7 @@ class FakeLifecycle:
         self.identity = {'epoch': 'a' * 32, 'host_uid': os.getuid(),
                          'host_pid_namespace': 'pid:[111]', 'emergency_stop_supported': True}
         self.resources = sample()
+    def resource_policy(self): return {'epoch': self.identity['epoch'], 'swap_limit_mib': 512}
     def status(self): return dict(self.identity)
     def read_resources(self): self.samples += 1; return dict(self.resources)
     def ensure(self, check): check(); self.calls.append('ensure'); return {'endpoint': self.endpoint}

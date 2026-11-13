@@ -40,6 +40,8 @@ class SelectionBoundary(unittest.TestCase):
 
     def adapter(self, module, data=None):
         adapter = object.__new__(module.Adapter)
+        # This deliberately constructor-free fixture represents legacy configured state.
+        adapter.unconfigured = frozenset()
         adapter.tools = module.tool_definitions(codex_pipeline=True)
         adapter.shared_tool_names = set()
         adapter.events_enabled = False

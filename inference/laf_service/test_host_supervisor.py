@@ -171,10 +171,10 @@ class SupervisorTest(unittest.TestCase):
             self.events.append('core')
         self.core.stop.side_effect = stop_core
         # Deterministic monitor turns without sleeping or real services. If the
-        # loop fails to stop after confirmed cleanup, fail on the third wait.
-        with patch.object(sup.closed, 'wait', side_effect=[False, False, AssertionError('extra monitor turn')]) as wait:
+        # cleanup is not repeated; the monitor stays alive for owner recovery.
+        with patch.object(sup.closed, 'wait', side_effect=[False, False, False, True]) as wait:
             sup._monitor()
-        self.assertEqual(wait.call_count, 2)
+        self.assertEqual(wait.call_count, 4)
         self.assertEqual(attempts, ['core', 'core'])
         self.assertEqual(self.events, ['core', 'ollama'])
         self.assertEqual(sup.port.read_resources.call_count, 1)
@@ -185,12 +185,129 @@ class SupervisorTest(unittest.TestCase):
         sup = self.make()
         self.now[0] = 104
         self.provider.stop.side_effect = [ServiceError('physical barrier uncertain'), None]
-        with patch.object(sup.closed, 'wait', side_effect=[False, False, AssertionError('extra monitor turn')]):
+        with patch.object(sup.closed, 'wait', side_effect=[False, False, False, True]):
             sup._monitor()
         self.assertEqual(self.core.stop.call_count, 2)
         self.assertEqual(self.provider.stop.call_count, 2)
         self.assertTrue(sup.cleanup_confirmed)
         self.assertTrue(sup.port.safety_fault)
+
+    def test_explicit_host_recovery_updates_epoch_and_keeps_core_stopped(self):
+        self.config['swap_limit_mib'] = 2048
+        sup = self.make(); sup.panic('initial resource fault'); old_epoch = sup.port.epoch
+        with patch(__package__ + '.host_supervisor.time.sleep'):
+            result = sup.recover()
+        self.assertNotEqual(result['epoch'], old_epoch)
+        self.assertTrue(result['core_restart_required'])
+        self.assertIsNone(sup.port.safety_fault)
+        self.assertTrue(sup.awaiting_core)
+        self.assertEqual(sup.port.swap_limit_mib, 2048)
+        self.provider.ensure.assert_not_called()
+        self.now[0] += 100; sup.tick()
+        self.assertIsNone(sup.port.safety_fault)
+        self.core.running.return_value = True; sup.tick()
+        self.assertFalse(sup.awaiting_core)
+        self.core.running.return_value = False
+        self.now[0] += 3; sup.tick()
+        self.assertTrue(sup.port.safety_fault)
+
+    def test_recovered_host_keeps_lease_exception_limited_to_stopped_providers(self):
+        sup = self.make()
+        sup.panic('initial resource fault')
+        with patch(__package__ + '.host_supervisor.time.sleep'):
+            sup.recover()
+        self.provider.running.return_value = True
+        sup.tick()
+        self.assertTrue(sup.port.safety_fault)
+        self.provider.running.return_value = False
+
+    def test_host_recovery_stops_on_pressure_and_preserves_epoch(self):
+        sup = self.make(); sup.panic('initial resource fault'); old_epoch = sup.port.epoch
+        sup.port.read_resources = lambda: {**sample(), 'psi_full_avg10': 2}
+        with patch(__package__ + '.host_supervisor.time.sleep'):
+            with self.assertRaises(ServiceError): sup.recover()
+        self.assertEqual(sup.port.epoch, old_epoch)
+        self.assertTrue(sup.port.safety_fault)
+
+    def test_host_recovery_uncertain_stop_never_rebases(self):
+        sup = self.make(); sup.panic('initial resource fault'); baseline = dict(sup.port.baseline)
+        self.provider.stop.reset_mock()
+        self.core.stop.side_effect = ServiceError('unknown stop')
+        with self.assertRaises(ServiceError): sup.recover()
+        self.assertEqual(sup.port.baseline, baseline)
+        self.assertTrue(sup.port.safety_fault)
+        self.provider.stop.assert_not_called()
+
+    def test_host_recovery_rejects_cancel_and_new_panic(self):
+        for cancel in (True, False):
+            with self.subTest(cancel=cancel):
+                sup = self.make(); sup.panic('initial resource fault'); old_epoch = sup.port.epoch
+                cancelled = [False]
+                def interrupt(_):
+                    if cancel: cancelled[0] = True
+                    else: sup.panic_serial += 1
+                with patch(__package__ + '.host_supervisor.time.sleep', side_effect=interrupt):
+                    with self.assertRaises(ServiceError): sup.recover(cancelled=lambda: cancelled[0])
+                self.assertEqual(sup.port.epoch, old_epoch)
+                self.assertTrue(sup.port.safety_fault)
+                sup.close()
+
+    def test_core_cannot_request_host_recovery(self):
+        sup = self.make()
+        with self.assertRaises(ValueError):
+            sup.port.dispatch({'operation': 'recover', 'epoch': sup.port.epoch, 'generation': 0})
+        self.core.stop.assert_not_called()
+
+    def test_host_policy_readonly_and_bounded(self):
+        self.config['swap_limit_mib'] = 2048
+        sup = self.make()
+        self.assertEqual(sup.port.dispatch({'operation':'resource_policy'})['swap_limit_mib'], 2048)
+        self.provider.ensure.assert_not_called()
+        with self.assertRaises(ValueError):
+            sup.port.dispatch({'operation':'resource_policy','swap_limit_mib':512})
+
+    def test_healthy_host_recovery_is_rejected_before_stop(self):
+        sup = self.make()
+        with self.assertRaisesRegex(ServiceError, 'existing safety latch'):
+            sup.recover()
+        self.core.stop.assert_not_called()
+        self.provider.stop.assert_not_called()
+
+    def test_panic_between_recovery_cleanup_and_admission_is_not_cleared(self):
+        sup = self.make(); sup.panic('initial resource fault')
+        old_epoch = sup.port.epoch
+        original = sup.panic
+        def racing_panic(reason):
+            result = original(reason)
+            with sup.port.state_lock:
+                sup.panic_serial += 1
+                sup.port.safety_fault = 'new emergency'
+            return result
+        with patch.object(sup, 'panic', side_effect=racing_panic):
+            with self.assertRaises(ServiceError): sup.recover()
+        self.assertEqual(sup.port.epoch, old_epoch)
+        self.assertEqual(sup.port.safety_fault, 'new emergency')
+
+    def test_owner_signal_coalesces_recovery_and_shutdown(self):
+        import signal
+        from . import host_supervisor as module
+        handlers = {}
+        supervisor = Mock()
+        supervisor.start.side_effect = lambda: handlers[signal.SIGUSR1](None, None)
+        def recover(*, cancelled):
+            handlers[signal.SIGUSR1](None, None)
+            handlers[signal.SIGUSR1](None, None)
+            handlers[signal.SIGTERM](None, None)
+            self.assertTrue(cancelled())
+            raise ServiceError('cancelled')
+        supervisor.recover.side_effect = recover
+        with patch.object(module.signal, 'signal', side_effect=lambda sig, fn: handlers.__setitem__(sig, fn)), \
+                patch.object(module, 'read_config', return_value={}), \
+                patch.object(module, 'HostSupervisor', return_value=supervisor), \
+                patch.object(module.sys, 'argv', ['host-supervisor', '--config', '/unused']):
+            module.main()
+        supervisor.recover.assert_called_once()
+        supervisor.close.assert_called_once()
 
     def test_sample_refresh_and_expiry(self):
         sup = self.make()

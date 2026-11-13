@@ -20,6 +20,7 @@
 
 # Scope: this newly authored file only; imported private source is not relicensed.
 """Compose existing MCP tools with public LAF Router tools; no new transport."""
+# Modified 2026-11-13: explicit NEW-prefix bootstrap/deny-all setup; legacy behavior retained.
 import copy
 import json
 import re
@@ -214,7 +215,17 @@ class IntegratedAdapter(Adapter):
         if not self.audit.closed: self.audit.close()
         return True
 
-def build_router_application(*, socket_path, state_directory, models):
+class UnconfiguredRouterApplication:
+    """Visible schemas, explicit deny-all state; no endpoint, receipt or fallback."""
+    def call(self, name, arguments):
+        if name not in TOOLS:raise Invalid('Tool is not enabled')
+        return {'status': 'BLOCKED', 'code': 'BACKEND_UNCONFIGURED', 'backend': 'router',
+                'error': 'router_unconfigured', 'outcome': 'NOT_SUBMITTED' if name == 'laf_router_submit_job' else 'UNAVAILABLE',
+                'dispatch_started': False, 'automatic_retry': False}
+
+
+def build_router_application(*, socket_path, state_directory, models, socket_identity=None,
+                             binding_runtime=None, binding_sha256=None):
     """Operator-only startup configuration; never sourced from tool arguments."""
     from pathlib import Path
     from laf_mcp.application import Application
@@ -231,7 +242,21 @@ def build_router_application(*, socket_path, state_directory, models):
             raise ValueError('Explicit absolute Router socket/state paths required')
     # The original owner/root/socket/receipt guards are used unchanged. This does
     # not start a provider, make a job request, repair permissions or install SDKs.
-    return Application(Router(str(socket_path)), Receipts(state_directory), models)
+    if socket_identity is None:
+        if binding_runtime is not None or binding_sha256 is not None:raise ValueError('Incomplete Router binding snapshot')
+        router=Router(str(socket_path))
+    else:
+        if binding_runtime is None or binding_sha256 is None:raise ValueError('Explicit Router binding snapshot required')
+        expected_identity=tuple(socket_identity)
+        class BoundRouter(Router):
+            def _check_identity(self):
+                from backend_state import check_snapshot
+                check_snapshot(binding_runtime,binding_sha256)
+                identity=super()._check_identity()
+                if identity!=expected_identity:raise ValueError('Router endpoint changed since configuration')
+                return identity
+        router=BoundRouter(str(socket_path))
+    return Application(router, Receipts(state_directory), models)
 
 
 def close_shared_adapter(shared, timeout=12):

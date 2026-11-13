@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "repository": "i-pp/ai-orchestration",
+  "commit": "ddcaf63e50bed722d558d418deeef791f3029a6f",
+  "version": "git:ddcaf63e50bed722d558d418deeef791f3029a6f",
+  "sha256": "beccfd5c9aeb63d6a06f33ef39732e832e7f4e79b0a7915829ca993b55347236",
+  "files": {
+    "docs/ai/orchestration.md": {
+      "sha256": "7df5688930358b951ff53c9e1af55b245532df6004fd2016c9c0d6933a2df92c",
+      "git_blob_sha": "ece1b9c5ae659d9ee13c5fecf1f0166da3b1d604"
+    },
+    "docs/ai/policies.md": {
+      "sha256": "1fc173e2c7826106ae4baec5bfe851d77088fd7841e2e9099554aec388275b18",
+      "git_blob_sha": "0554d18499161015185e7f6fe821fd0ce4a5175d"
+    },
+    "agents/README.md": {
+      "sha256": "41ac2dd6d45269b344733b82739e856abab395f5456ea7fd952d3c8bdbc0e13d",
+      "git_blob_sha": "f1ee0a5070a3df2e2dfc4a1a5c913467d7187f21"
+    }
+  },
+  "license": {
+    "file": "LICENSE",
+    "sha256": "df951a913ed6f5fe319b9e1b1a3cc2b6e396ea65b9d1687b9f735bd8f117ea9c",
+    "git_blob_sha": "dda603b4c2464b3a006b55fced8c0f8a388831a9"
+  },
+  "notice": {
+    "file": "NOTICE",
+    "sha256": "ca7477f0f5ab056d1fa5578df9379abddd5886899ba7aba32bce222831b58d21",
+    "git_blob_sha": "840ff8455c1941b57f8f23bbb3f75714033e30b3"
+  }
+}

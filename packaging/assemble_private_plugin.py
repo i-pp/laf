@@ -40,7 +40,9 @@ class PackageError(ValueError):pass
 
 def selected(name):
  p=PurePosixPath(name)
- if name.startswith('integration/'):return len(p.parts)==2 and p.name in INTEGRATION
+ if name.startswith('integration/'):return len(p.parts)==2 and p.name in (INTEGRATION|{'laf_bootstrap.py'})
+ if name.startswith('private_codex/policy-snapshot/'):
+  return name[len('private_codex/policy-snapshot/'):] in ('manifest.json','docs/ai/orchestration.md','docs/ai/policies.md','agents/README.md','LICENSE','NOTICE')
  if name.startswith('private_codex/src/'):return len(p.parts)==3 and p.suffix=='.py'
  if name.startswith('private_codex/config/'):return len(p.parts)==3 and p.suffix=='.json'
  if name.startswith('private_codex/'):return len(p.parts)==2 and p.name in TOP_CONFIG
@@ -73,6 +75,9 @@ def source_members(bundle,expected):
    name=i.filename[len('stdio/'):]
    if selected(name):result[name]=z.read(i)
  if not REQUIRED<=set(result):raise PackageError('Reviewed integrated stdio/HTTP source is incomplete')
+ if 'integration/laf_bootstrap.py' in result:
+  bootstrap={'private_codex/src/backend_state.py','private_codex/src/bundled_policy.py'}|{'private_codex/policy-snapshot/'+x for x in ('manifest.json','docs/ai/orchestration.md','docs/ai/policies.md','agents/README.md','LICENSE','NOTICE')}
+  if not bootstrap<=set(result):raise PackageError('Bootstrap source requires its complete licensed policy snapshot')
  return result
 
 # Restore only public Git executable metadata; never chmod staged/host files.

@@ -3,6 +3,7 @@
 This module performs no model calls, network access, writes, or authorization.
 Project configuration is operator-owned input, not a task/MCP parameter.
 """
+# Modified 2026-11-13: explicit NEW-prefix bootstrap/deny-all setup; legacy behavior retained.
 
 import hashlib
 import json
@@ -36,6 +37,19 @@ class SourcePolicyBundle(NamedTuple):
     def metadata(self):
         return {'version':self.version,'sha256':self.sha256,'source':self.source,
                 'upstream':json.loads(self.provenance_json)}
+
+
+class BundledPolicyBundle(NamedTuple):
+    """Licensed public bytes, not an attestation of a local Git checkout."""
+    text: str
+    version: str
+    sha256: str
+    source: str
+    provenance_json: str
+
+    def metadata(self):
+        return {'version': self.version, 'sha256': self.sha256, 'source': self.source,
+                'upstream': json.loads(self.provenance_json)}
 
 
 _VERSION = re.compile(r'[0-9]+(?:\.[0-9]+)*\Z')
@@ -79,7 +93,7 @@ def _utf8(raw, path):
         raise PolicyError('Policy file is not UTF-8: ' + str(path)) from error
 
 
-def _json(path, keys):
+def _json(path, keys, *, schemas=(1,)):
     def unique(pairs):
         result = {}
         for key, value in pairs:
@@ -99,7 +113,7 @@ def _json(path, keys):
     valid = [set(k) for k in keys] if isinstance(keys,tuple) else [set(keys)]
     if not isinstance(value, dict) or set(value) not in valid:
         raise PolicyError('Unexpected or missing policy fields: ' + str(path))
-    if type(value['schema_version']) is not int or value['schema_version'] != 1:
+    if type(value['schema_version']) is not int or value['schema_version'] not in schemas:
         raise PolicyError('Unsupported policy schema: ' + str(path))
     return value
 
@@ -147,7 +161,13 @@ def load_project_policy(project_root):
     """Load the common bundle selected and pinned by a project's operator file."""
     root = _path(project_root, directory=True)
     fields={'schema_version','bundle_root','expected_version','expected_sha256'}
-    config = _json(root / 'config/policy.json',(fields,fields|{'upstream_pin'}))
+    config = _json(root / 'config/policy.json',
+                   (fields,fields|{'upstream_pin'},fields|{'source'}), schemas=(1,2))
+    if config['schema_version'] == 2:
+        from bundled_policy import load_snapshot
+        return load_snapshot(root, config)
+    if set(config) not in (fields,fields|{'upstream_pin'}):
+        raise PolicyError('Unexpected legacy policy fields')
     location = config['bundle_root']
     if not isinstance(location, str) or not location.strip() or Path(location).is_absolute():
         raise PolicyError('bundle_root must be a nonempty project-relative path')
@@ -164,6 +184,10 @@ def load_project_policy(project_root):
 
 
 def _checked_bundle(bundle):
+    if isinstance(bundle,BundledPolicyBundle):
+        from bundled_policy import check_bundle
+        check_bundle(bundle)
+        return
     if isinstance(bundle,SourcePolicyBundle):
         from upstream_policy import check_bundle
         check_bundle(bundle)

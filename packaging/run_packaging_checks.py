@@ -37,7 +37,7 @@ def main():
  suite=unittest.defaultTestLoader.loadTestsFromNames(['test_portable_plugin','test_private_assembly'])
  planned=suite.countTestCases()
  ids=list(test_ids(suite))
- if planned!=34 or len(ids)!=planned:raise SystemExit('Expected exactly 34 packaging tests')
+ if planned!=35 or len(ids)!=planned:raise SystemExit('Expected exactly 35 packaging tests')
  if len(set(ids))!=planned:raise SystemExit('Duplicate test IDs refused before execution')
  result=unittest.TextTestRunner(verbosity=2).run(suite)
  counts={'planned':planned,'tests_run':result.testsRun,'failures':len(result.failures),'errors':len(result.errors),'skipped':len(result.skipped),'expected_failures':len(result.expectedFailures),'unexpected_successes':len(result.unexpectedSuccesses)}

@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Changed 2026-11-13: bounded swap policy and explicit quiet resource recovery.
+
 """Bounded single-lane scheduling and fail-closed resource admission."""
 from __future__ import annotations
 import dataclasses
@@ -52,16 +54,18 @@ def snapshot():
             'pswpin': int(vm['pswpin']), 'pswpout': int(vm['pswpout']), 'psi_full_avg10': float(psi['avg10'])}
 
 
-def check_resources(s, baseline):
+def check_resources(s, baseline, swap_limit_mib=512):
+    if type(swap_limit_mib) is not int or not 512 <= swap_limit_mib <= 2048:
+        raise ValueError("swap_limit_mib must be 512..2048")
     if s['mem_available'] < 8 * GIB:
         raise ServiceError('RAM reserve below 8 GiB')
     if s['vram_total'] - s['vram_used'] < 2 * GIB:
         raise ServiceError('VRAM reserve below 2 GiB')
-    if s['swap_used'] - baseline['swap_used'] > 512 * 1024**2:
-        raise ServiceError('swap growth exceeds 512 MiB')
+    if s['swap_used'] - baseline['swap_used'] > swap_limit_mib * 1024**2:
+        raise ServiceError(f'swap growth exceeds {swap_limit_mib} MiB')
     page = __import__('os').sysconf('SC_PAGE_SIZE')
-    if any((s[key] - baseline[key]) * page > 512 * 1024**2 for key in ['pswpin', 'pswpout']):
-        raise ServiceError('swap I/O exceeds 512 MiB since service start')
+    if any((s[key] - baseline[key]) * page > swap_limit_mib * 1024**2 for key in ['pswpin', 'pswpout']):
+        raise ServiceError(f'swap I/O exceeds {swap_limit_mib} MiB since resource baseline')
     if s['psi_full_avg10'] > 10:
         raise ServiceError('memory PSI full avg10 above 10 percent')
 
@@ -114,13 +118,14 @@ class Job:
 
 
 class Controller:
-    def __init__(self, backend, read_resources=snapshot, start=True):
+    def __init__(self, backend, read_resources=snapshot, start=True, swap_limit_mib=512):
         self.backend = backend
+        self.swap_limit_mib = swap_limit_mib
         self.models = frozenset(getattr(backend, 'models', MODELS))
         self.requires_flash = getattr(backend, 'requires_flash', True)
         self.read_resources = read_resources
         self.baseline = read_resources()
-        check_resources(self.baseline, self.baseline)
+        check_resources(self.baseline, self.baseline, self.swap_limit_mib)
         self.queue = queue.Queue(maxsize=8)
         self.jobs = {}
         self.lock = threading.RLock()
@@ -158,25 +163,38 @@ class Controller:
             return job
 
     def safety(self):
+        # Backend lifecycle callbacks call this while holding their own lock.
+        # Never acquire Controller.lock here (it would invert lock ordering).
         s = self.read_resources()
         self.latest = s
-        check_resources(s, self.baseline)
+        check_resources(s, self.baseline, self.swap_limit_mib)
         return s
 
     def watch(self):
         while not self.stop.wait(0.5):
             try:
                 self.safety()
+            except Exception:
                 with self.lock:
-                    job = self.active
-                    abort = job and not job.abort_requested and (job.cancel.is_set() or time.monotonic() >= job.deadline)
-                    if abort:
-                        job.abort_requested = True
-                        # Keep active-job identity stable until its stop barrier.
+                    if not self.fault:
+                        # Recovery may have renewed the baseline while the
+                        # observation waited. Only resource errors are retried.
+                        try:
+                            self.safety()
+                        except Exception as current_error:
+                            self.trip(str(current_error))
+                continue
+            with self.lock:
+                job = self.active
+                abort = job and not job.abort_requested and (job.cancel.is_set() or time.monotonic() >= job.deadline)
+                if abort:
+                    job.abort_requested = True
+                    try:
                         self.backend.abort()
-            except Exception as exc:
-                if not self.fault:
-                    self.trip(str(exc))
+                    except Exception:
+                        # A successful resource reading never proves a failed
+                        # provider stop safe. Preserve the fail-closed latch.
+                        self.trip('provider stop unconfirmed')
 
     def trip(self, reason):
         with self.lock:
@@ -239,11 +257,28 @@ class Controller:
         return self.safety()
 
     def recover(self):
+        """Rebase only explicit, idle recovery after five seconds of quiet telemetry."""
         with self.lock:
-            if self.active:
-                raise ServiceError('wait for active request to stop')
-            self.safety()
+            if self.stop.is_set() or self.active or any(not job.done.is_set() for job in self.jobs.values()):
+                raise ServiceError('wait for all requests to stop')
+            self.fault = self.fault or "explicit recovery pending"
+            # A failed stop barrier must never clear the existing fault.
             self.backend.abort()
+            first = self.read_resources()
+            for _ in range(10):
+                time.sleep(0.5)
+                current = self.read_resources()
+                # Absolute reserves and PSI protections remain in force. The
+                # old cumulative I/O counter is deliberately not a new budget.
+                check_resources(current, current, self.swap_limit_mib)
+                if current['psi_full_avg10'] > 1 or any(
+                    current[key] != first[key] for key in ('swap_used', 'pswpin', 'pswpout')
+                ):
+                    raise ServiceError('resource recovery requires five quiet seconds')
+            if self.stop.is_set():
+                raise ServiceError("service stopping")
+            self.baseline = current
+            self.latest = current
             self.fault = None
             self.restarts = []
 

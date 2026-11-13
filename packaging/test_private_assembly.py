@@ -97,4 +97,10 @@ class Assembly(unittest.TestCase):
    self.assertFalse(r['submission_ready']);self.assertEqual(json.loads((out/'mcp.json').read_text()),p.mcp_manifest());self.assertEqual((out/'runtime/integration/launch.py').read_text(),'# synthetic source only\n')
    with self.assertRaises(p.PackageError):p.assemble(z,h,out,templates)
    self.assertTrue((out/'ASSEMBLY_STATUS.json').exists())
+ # Bootstrap assets are optional for historical inputs, complete when selected.
+ def test_bootstrap_selection_includes_policy_not_runtime_state(self):
+  for name in ('integration/laf_bootstrap.py','private_codex/src/backend_state.py','private_codex/policy-snapshot/docs/ai/orchestration.md','private_codex/policy-snapshot/LICENSE','private_codex/policy-snapshot/manifest.json'):
+   self.assertTrue(p.selected(name),name)
+  for name in ('private_codex/.runtime/auth.json','private_codex/policy-snapshot/auth.json'):
+   self.assertFalse(p.selected(name),name)
 if __name__=='__main__':unittest.main(verbosity=2)

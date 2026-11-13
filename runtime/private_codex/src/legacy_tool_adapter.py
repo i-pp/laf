@@ -6,6 +6,7 @@ Source snapshot SHA-256: e0aec63c04aa575ad7187ec113def043dc72d94499f28966e67f392
 Do not edit the original worktree from here; later consolidation should factor
 this shared surface into a common module and remove the duplicate facade.
 """
+# Modified 2026-11-13: explicit NEW-prefix bootstrap/deny-all setup; legacy behavior retained.
 
 import argparse
 import hashlib
@@ -184,20 +185,31 @@ def tool_definitions(writes=False, local_llm=False, local_models=False, chat_mai
     return result
 
 
+from backend_state import load_state, state_sha256, check_snapshot, tool_backend, blocked_result
+
+
 class Adapter:
     def __init__(self, root, allow_writes=False, allow_local_llm=False, allow_local_models=False, allow_chat_mailbox=False, allow_mailbox_grants=False,
                  allow_codex_pipeline=False, pipeline=None, allow_experiments=False,
-                 runtime_project_root=None):
+                 runtime_project_root=None, backend_state_sha256=None):
         self.runtime_project_root = resolve_project_root(runtime_project_root)
         self.root = runtime_path(root, project_root=self.runtime_project_root)
+        backend_state, backend_raw = load_state(self.root)
+        self.unconfigured = frozenset() if backend_state is None else frozenset(backend_state['unconfigured'])
+        if backend_state_sha256 is not None and state_sha256(backend_raw) != backend_state_sha256:
+            raise ValueError('Backend binding changed during startup')
+        self.backend_state_sha256 = (state_sha256(backend_raw) if backend_state_sha256 is not None
+                                    or backend_state is not None and backend_state['schema'] == 2 else None)
         if pipeline is not None and not allow_codex_pipeline: raise ValueError('Pipeline activation is explicit')
         if allow_codex_pipeline and pipeline is None: raise ValueError('Pipeline executor must be explicitly connected')
         self.pipeline = pipeline
         self.tools = tool_definitions(allow_writes, allow_local_llm, allow_local_models, allow_chat_mailbox, allow_codex_pipeline, allow_experiments)
-        self.experiments = ExperimentStore.from_runtime(self.root) if allow_experiments else None
-        self.mailbox = Mailbox(self.root) if allow_chat_mailbox else None
+        self.experiments = ExperimentStore.from_runtime(self.root) if allow_experiments and 'experiments' not in self.unconfigured else None
+        self.mailbox = Mailbox(self.root) if allow_chat_mailbox and 'mailbox' not in self.unconfigured else None
         self.grant = None
-        if allow_mailbox_grants:
+        if allow_mailbox_grants and not allow_chat_mailbox:raise ValueError('Mailbox grants require the existing mailbox tools')
+        if allow_mailbox_grants and 'mailbox_grants' not in self.unconfigured:
+            if self.mailbox is None:raise ValueError('Enabled grants require a configured mailbox')
             if not allow_chat_mailbox:raise ValueError('Mailbox grants require the existing mailbox tools')
             from mailbox_grants import load_runtime_grant,GrantLedger
             policy=load_runtime_grant(self.root)
@@ -205,7 +217,7 @@ class Adapter:
                 raise ValueError('Grant task namespace conflicts with a fixed mailbox task')
             self.grant=GrantLedger(self.root,policy,enabled=True)
         self.helper_root = None
-        if allow_local_llm or allow_local_models:
+        if (allow_local_llm or allow_local_models) and 'local_helper' not in self.unconfigured:
             path = self.root/'local-llm.json'
             info = path.lstat()
             if path.is_symlink() or not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > 4096:
@@ -262,6 +274,8 @@ class Adapter:
         except OSError: pass  # Existing uncertainty is preserved; nothing is deleted.
 
     def call_tool(self, name, arguments, rpc_id):
+        if getattr(self, 'backend_state_sha256', None) is not None:
+            check_snapshot(self.root, self.backend_state_sha256)
         if name not in {t['name'] for t in self.tools}: raise Invalid('Tool is not enabled')
         if name == 'orchestrator_status': fields(arguments, [])
         elif name in EXPERIMENT_TOOLS:
@@ -318,6 +332,13 @@ class Adapter:
         if self.audit.tell() > AUDIT_LIMIT - 4096: raise OSError('Audit capacity reached')
         self.record('begin', **facts)
         try:
+            backend = tool_backend(name)
+            if backend in self.unconfigured:
+                data = blocked_result(backend)
+                self.record('end', outcome='not_dispatched', **facts)
+                content = {'call_id': call_id, 'data': data}
+                return {'content': [{'type': 'text', 'text': json.dumps(content)}],
+                        'structuredContent': content, 'isError': True}
             if name in EXPERIMENT_TOOLS:
                 try:
                     data = self.experiments.dispatch(name, arguments)

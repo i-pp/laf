@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Changed 2026-11-13: bounded swap policy and explicit quiet resource recovery.
+
 """HTTP over an owner-only Unix socket. No TCP listener or new credentials."""
 from __future__ import annotations
 import argparse
@@ -257,7 +259,7 @@ def main():
         fcntl.flock(service_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         backend = Backends(config, config_path)
         if args.prepare_models:
-            prepare = Controller(backend, start=False)
+            prepare = Controller(backend, start=False, swap_limit_mib=config.get('swap_limit_mib', 512))
             prepare.monitor.start()
             def interrupt_prepare(*_):
                 raise KeyboardInterrupt()
@@ -269,7 +271,7 @@ def main():
             finally:
                 prepare.close()
             return
-        controller = Controller(backend, start=False)
+        controller = Controller(backend, start=False, swap_limit_mib=config.get('swap_limit_mib', 512))
         address = runtime / 'service.sock'
         server = None
         def shutdown(*_):

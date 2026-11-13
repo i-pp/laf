@@ -24,6 +24,27 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: bounded resource policy and explicit host recovery
+
+Updated the top-level and bundled `inference/laf_service` Core, server,
+lifecycle client/host/UDS and host-supervisor source, corresponding regressions,
+`README.md`/host-supervisor guides and `scripts/check-laf.py` selections.
+The Core and host share an explicitly bounded swap policy (512 MiB by default,
+operator selection up to 2048 MiB); read-only policy and epoch agreement is
+required before provider operations. Explicit quiet recovery preserves provider
+stop barriers, ownership, absolute RAM/VRAM/PSI checks and unknown outcomes.
+Host latch renewal requires an owner-triggered request and confirmed stopped
+providers plus quiet telemetry, not a Core-side privilege or automatic restart.
+Pending panic or a superseded epoch remains fenced; no uncertain job is replayed.
+
+Added `test_resource_policy.py` in both source trees and its KOL declarations in
+`.github/license-policy.json`. These are reviewed source and fake-clock/thread
+regressions, not acceptance of the split service, real signal recovery, all
+providers or larger hardware capacity. No live configuration, service, model,
+authentication or host swap settings are changed by this source update. Further
+pressure-aware time-window/unload accounting remains separate work in
+[Issue 13](https://github.com/i-pp/laf/issues/13); no automatic `swapoff` is added.
+
 ## Unreleased: tunnel-only operator transaction
 
 Added `ops/frontend_cutover.py`, `ops/test_frontend_cutover.py` and
@@ -463,3 +484,60 @@ The historical b531 loader/archive boundary remains unchanged. No private paths,
 identifiers, logs, instructions or account details are published. Commands,
 source/header rights and third-party terms are unchanged; this documentation
 change does not modify runtime, manifests, dependencies, tests or services.
+
+
+## 2026-11-13: prepare a new private integrated runtime prefix
+
+Add the standard-library `runtime/integration/laf_bootstrap.py` preparation,
+dry-run, doctor and explicit new-config activation flow. A new independent
+private prefix receives the real runtime source and tracked configuration, not
+a placeholder daemon or copied production state. Existing prefixes and config
+files are preserved; activation does not register Codex or start a service.
+
+Add a strictly verified, self-contained canonical policy snapshot for new
+schema-2 prefixes, with source/license/notice provenance and no fabricated Git
+checkout attestation. Existing schema-1 policy selection and guards retain their
+previous behavior. Explicit unconfigured/deny-all backend state keeps the full
+33-tool schemas visible without creating fake helper, mailbox/grant or experiment
+records or dispatching operations against missing backends.
+
+Cover source, path, permission, umask, failure-cleanup and policy boundaries,
+including the exact copied doctor command from a separate working directory
+without a checkout-specific Python path. Preserve the original upstream license
+bytes even where their existing trailing blank line triggers a whitespace warning.
+This is runtime preparation, not operational installation or all-backend
+acceptance. At this preparation milestone, backend binding was not implemented.
+The `prepare` command does not install or copy SDK/dependency binaries, model
+data, authentication secrets or personal user-instruction files, and does not
+change an existing daemon, service, account or live configuration.
+
+
+## 2026-11-13: explicit new-prefix Router and Codex bindings
+
+Extend `runtime/integration/laf_bootstrap.py` with metadata-only
+`configure-router`, `configure-codex` and explicit command emission. Update
+`backend_state.py`, the stdio/shared/legacy adapters and both launcher copies
+to consume one atomically published private binding record through the immutable
+plugin anchor. Pin Router filesystem identity and Codex native/policy/common
+policy snapshots; refuse changed, existing, used or uncertain binding state.
+The Codex gateway uses its existing finite read-only schema1/concurrency1 path,
+not a change to ordinary maximum_sessions8 or a provider-quota guarantee.
+Existing schema1 configuration, OAuth/ACL, ownership, resource and UNKNOWN/
+no-replay behavior remains. The unpinned builder cannot select this new path.
+
+Add the separate user-run `snapshot-codex` operation: explicit existing source
+plus expected SHA256, bounded512MiB streaming and coherent source/copy checks,
+NEW owner0500 `PREFIX/bin/codex` under0700. This optional copy does not execute
+the native, change its original0775 installation, copy authentication/model/
+user-instruction data, or include the private binary in the public source ZIP.
+It is an explicit exception to preparation's no-dependency-copy scope, not an
+automatic dependency installer or permission repair.
+
+Add `scripts/test_bootstrap_bindings.py`, strict source selection and license
+classification, and document the actual commands in `docs/bootstrap.md`, linked
+from `README.md` and `docs/codex-install.md` without changing historical evidence.
+Source/tempfile tests cover atomic publication and uncertain durability, active
+anchor consistency, guarded composition, native/hash/path/swap/fault bounds and
+fake-only gateway metadata. No new real native, SDK, socket, service, account or
+model execution is asserted by those tests. Prior phase1/loader/model evidence
+remains historical rather than acceptance for this new source.

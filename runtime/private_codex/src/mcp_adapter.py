@@ -1,4 +1,5 @@
 """Bounded MCP facade; stdio default, optional loopback HTTP, no resident scheduler."""
+# Modified 2026-11-13: explicit NEW-prefix bootstrap/deny-all setup; legacy behavior retained.
 
 # Modified 2026-11-13: bounded owner pages/catalog ACL parity and proof-bound blocked-input origins.
 import argparse
@@ -29,6 +30,7 @@ from chat_mailbox import Mailbox, MailboxError, TOOLS as MAILBOX_TOOLS, validate
 from experiments import (TOOLS as EXPERIMENT_TOOLS, EvidenceError, ExperimentStore,
                          tool_definitions as experiment_tools, validate_arguments as experiment_arguments)
 from legacy_tool_adapter import Invalid as ExistingToolInvalid
+from backend_state import load_unconfigured, tool_backend, blocked_result
 
 PROJECT = Path(__file__).resolve().parents[1]
 PROTOCOL = '2025-11-25'
@@ -183,6 +185,7 @@ class Adapter:
                  shared_tools_principal=None, runtime_project_root=None):
         self.runtime_project_root = resolve_project_root(runtime_project_root)
         self.root = runtime_path(root, project_root=self.runtime_project_root)
+        self.unconfigured = load_unconfigured(self.root)
         if pipeline is not None and not allow_codex_pipeline:
             raise ValueError('Pipeline activation is explicit')
         if allow_codex_pipeline and pipeline is None:
@@ -422,6 +425,13 @@ class Adapter:
         if self.audit.tell() > AUDIT_LIMIT - 4096: raise OSError('Audit capacity reached')
         self.record('begin', **facts)
         try:
+            backend = tool_backend(name)
+            if backend in self.unconfigured:
+                data = blocked_result(backend)
+                self.record('end', outcome='not_dispatched', **facts)
+                content = {'call_id': call_id, 'data': data}
+                return {'content': [{'type': 'text', 'text': json.dumps(content)}],
+                        'structuredContent': content, 'isError': True}
             if name in PIPELINE_TOOLS:
                 if isinstance(request_principal, OAuthPrincipal):
                     if name == 'codex_pipeline_tick':

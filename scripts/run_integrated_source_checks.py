@@ -48,6 +48,8 @@ def main():
   # Cardinality is a machine refusal guard, not a coverage or product specification.
   source=run_checked(unittest.defaultTestLoader.loadTestsFromNames(['test_async_job_ack_disconnect','test_integrated_source','test_codex_package','test_common_policy_language','test_english_source','test_ordinary_session_pool','test_session_pool_boundary']),76,runner)
   codex_selection=run_checked(unittest.defaultTestLoader.loadTestsFromNames(['test_codex_selection_boundary','test_codex_catalog_effort']),77,runner)
+  bootstrap=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_bootstrap'),28,runner)
+  bindings=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_bootstrap_bindings'),30,runner)
  except ValueError as exc:print(json.dumps({'status':'failed','reason':str(exc)}));return 1
- print(json.dumps({'status':'passed','gate_oracles':gates,'source_cases':source,'codex_selection_cases':codex_selection,'scope':'pure gates/source/fake Codex peer and owner HTTP handler/fake controller; no SDK child or service'}));return 0
+ print(json.dumps({'status':'passed','gate_oracles':gates,'source_cases':source,'codex_selection_cases':codex_selection,'bootstrap_cases':bootstrap,'binding_cases':bindings,'bootstrap_scope':'source/tempfiles/fake native and peer; bounded stdlib copied doctor/config CLI children; no SDK/native/socket/service/model','scope':'pure gates/source/fake Codex peer and owner HTTP handler/fake controller; no SDK child or service'}));return 0
 if __name__=='__main__':raise SystemExit(main())

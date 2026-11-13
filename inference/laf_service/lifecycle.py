@@ -69,7 +69,8 @@ class HostLifecycle:
     Transport authentication, watchdog and crash reconciliation are deliberately
     not implemented here. Do not deploy this prototype as a security boundary.
     """
-    def __init__(self, provider, read_resources, *, read_endpoint=lambda: None, panic_callback=None):
+    def __init__(self, provider, read_resources, *, read_endpoint=lambda: None, panic_callback=None, swap_limit_mib=512):
+        self.swap_limit_mib = swap_limit_mib
         self.provider = provider
         self.read_endpoint = read_endpoint
         self.panic_callback = panic_callback
@@ -78,7 +79,7 @@ class HostLifecycle:
         self.host_boot_id = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
         self.read_resources = read_resources
         self.baseline = validate_sample(read_resources())
-        check_resources(self.baseline, self.baseline)
+        check_resources(self.baseline, self.baseline, self.swap_limit_mib)
         self.epoch = uuid.uuid4().hex
         self.generation = 0
         self.fault = None
@@ -118,7 +119,7 @@ class HostLifecycle:
                 raise LifecycleFault('host lifecycle closed')
             if self.safety_fault or self.fault:
                 raise LifecycleFault(self.safety_fault or self.fault)
-        check_resources(validate_sample(self.read_resources()), self.baseline)
+        check_resources(validate_sample(self.read_resources()), self.baseline, self.swap_limit_mib)
 
     def dispatch(self, request, *, deadline=None):
         with self.state_lock:
@@ -127,9 +128,12 @@ class HostLifecycle:
         if not isinstance(request, dict) or type(request.get('operation')) is not str:
             raise ValueError('fixed lifecycle operation required')
         op = request['operation']
-        if op in {'status', 'sample'}:
+        if op in {'status', 'sample', 'resource_policy'}:
             if set(request) != {'operation'}:
                 raise ValueError('operation accepts no parameters')
+            if op == 'resource_policy':
+                with self.state_lock:
+                    return {'epoch': self.epoch, 'swap_limit_mib': self.swap_limit_mib}
             if op == 'sample':
                 with self.state_lock:
                     if self.safety_fault:

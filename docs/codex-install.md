@@ -33,6 +33,11 @@ Router and private receipt directory. Do not copy another person's credentials
 or runtime. Local Core/Router needs no OpenAI account; optional Codex operations
 use that operator's separately authorized installation.
 
+For a NEW independent prefix instead of reusing existing runtime state, see the
+[source prepare/configure flow](bootstrap.md). It provides explicit backend
+bindings and optional protected native copying, not automatic SDK/model/service
+provisioning or a complete clean-host Quick Start.
+
 ## Existing owner host: simplest supported path
 
 Review the checkout, create your private `~/.config/laf/plugin.json` as described

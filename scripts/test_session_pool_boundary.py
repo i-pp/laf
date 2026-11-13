@@ -34,6 +34,8 @@ TASK='00000000-0000-4000-8000-000000000001'
 class SessionStatusBoundary(unittest.TestCase):
     def call(self,module,raw):
         adapter=object.__new__(module.Adapter)
+        # This deliberately constructor-free fixture represents legacy configured state.
+        adapter.unconfigured = frozenset()
         adapter.tools=module.tool_definitions()
         adapter.shared_tool_names=set()
         adapter.audit=SimpleNamespace(tell=lambda:0)

@@ -118,7 +118,7 @@ uncertain, the next model is not loaded. RAM and VRAM are separately monitored;
 UMA/GTT are not added together as extra physical capacity.
 
 Admission reserves 8 GiB OS available RAM and 2 GiB VRAM. The watchdog also latches
-on swap growth or swap I/O above 512 MiB from the service baseline, telemetry
+on swap growth or swap I/O above the configured limit (default 512 MiB), telemetry
 failure, or memory full PSI avg10 above 10%. Only owned providers are stopped. The
 latch rejects new jobs until an operator checks the cause and requests recovery.
 A 3 GiB absolute GPU-idle ceiling blocks new loads after stop if release cannot be
@@ -181,7 +181,40 @@ Follow the local [development rules](../../AGENTS.md). Host changes, license
 selection, publication and production deployment remain separate from source
 checks. No private orchestration repository is required for the offline suite.
 
-The swap-I/O threshold is cumulative from process startup. If that threshold
-latched, `/v1/recover` cannot reset it: investigate and restart this new service to
-establish a new baseline only after the host is healthy. The future-container
+The swap-I/O threshold is cumulative from the last admitted resource baseline.
+If that threshold latched, investigate before explicit recovery. Recovery can
+renew the baseline only after the idle, stop-barrier and quiet checks below. The future-container
 release checklist is in [distribution notes](distribution-notes.md); nothing is published here.
+
+### Bounded swap policy override
+
+The optional integer `swap_limit_mib` accepts 512 through 2048 (default 512).
+It bounds both swap growth and cumulative swap I/O since the resource baseline.
+RAM/VRAM reserves, PSI checks, model serialization and provider stop handling are
+unchanged. This is an operator-selected tolerance, not a guarantee that a model
+fits. Reaching the limit latches the service and does not trigger an automatic
+retry or rebaseline. Only explicit quiet recovery may renew the baseline.
+
+Explicit `/v1/recover` waits for all jobs to finish, confirms provider abort,
+then requires five seconds without swap occupancy/counter changes and PSI at
+most 1 percent. Absolute RAM/VRAM reserves remain required. Only then is the
+resource baseline updated; failures preserve the latch. Recovery never replays
+jobs and is not automatic.
+
+Scope: the standalone Controller and split HostLifecycle/HostSupervisor support
+this same bounded setting. Split Core startup reads host `resource_policy` and
+requires the configured value to match before constructing a provider. Host
+policy is authoritative; a Core request cannot change it or clear host latches.
+
+For a latched split host, the owner may explicitly request supervisor recovery
+with SIGUSR1. The signal handler only sets a flag. The normal supervisor loop
+stops and verifies the fixed owned Core and Ollama, requires quiet resources,
+and renews the host epoch and baseline. Core remains stopped until the owner
+explicitly starts it. Old leases and uncertain jobs must not be replayed. Failed
+cleanup, pressure, interruption or identity changes retain the safety fence.
+No recovery command is exposed on the Core lifecycle socket.
+
+See [host supervisor recovery](../../docs/laf-host-supervisor.md) for the
+operator contract and [issue #13](https://github.com/i-pp/laf/issues/13) for
+validation tracking. Source/fake coverage is not a split-deployment or soak-test
+acceptance claim.

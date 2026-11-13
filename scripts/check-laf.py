@@ -50,6 +50,7 @@ MODULES = (
     'inference.laf_service.test_npu_bridge',
     'inference.laf_service.test_provider_policy',
     'inference.laf_service.test_service',
+    'inference.laf_service.test_resource_policy',
     'inference.core_container.test_build',
     'inference.local_platform.test_chat',
     'inference.local_platform.test_cli',

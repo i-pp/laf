@@ -24,6 +24,7 @@
 HTTP keeps its separately reviewed entrypoint/auth policy. Existing Codex/local
 helper flags remain opt-in; Router5 has its own explicit owner-only configuration.
 """
+# Modified 2026-11-13: explicit NEW-prefix bootstrap/deny-all setup; legacy behavior retained.
 import argparse,importlib.metadata,os,sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -36,12 +37,12 @@ def _components():
  from legacy_tool_adapter import runtime_path
  from runtime_scope import resolve_project_root
  from laf_stdio_adapter import StdioRouterAdapter
- from laf_shared_tools import build_router_application
+ from laf_shared_tools import build_router_application,UnconfiguredRouterApplication
  from laf_stdio_lifecycle import run_stdio
  def pipeline(runtime):
   from codex_host import DaemonPipelineProxy
   return DaemonPipelineProxy(runtime)
- return SimpleNamespace(resolve_project_root=resolve_project_root,runtime_path=runtime_path,pipeline=pipeline,router=build_router_application,adapter=StdioRouterAdapter,serve=run_stdio)
+ return SimpleNamespace(resolve_project_root=resolve_project_root,runtime_path=runtime_path,pipeline=pipeline,router=build_router_application,unconfigured_router=UnconfiguredRouterApplication,adapter=StdioRouterAdapter,serve=run_stdio)
 
 def main(argv=None):
  parser=Parser(description='Private LAF composed stdio frontend; does not install or switch services')
@@ -57,13 +58,15 @@ def main(argv=None):
   ('experiments','Existing pinned read-only experiment projection'),
   ('laf-router','Add five owner-scoped Router job tools; submit may start/switch providers')):
   parser.add_argument('--allow-'+flag,action='store_true',help=help)
+ parser.add_argument('--laf-router-unconfigured',action='store_true',help='Explicit deny-all Router state; schemas remain visible, no endpoint or receipts are opened')
+ parser.add_argument('--laf-bootstrap-bindings',action='store_true',help='Read one explicit anchored bootstrap binding snapshot; no endpoint discovery or fallback')
  parser.add_argument('--laf-router-socket',type=Path)
  parser.add_argument('--laf-router-state',type=Path)
  parser.add_argument('--laf-router-model',action='append',default=None,help='Explicit allowed model ID; repeat for multiple IDs; no default or discovery-based enablement')
  try:args=parser.parse_args(argv)
  except UsageError:
   print('Invalid LAF stdio startup options; use --help. No runtime was opened.',file=sys.stderr);return 1
- if (args.allow_mailbox_grants and not args.allow_chat_mailbox) or (args.allow_laf_router and (args.laf_router_socket is None or args.laf_router_state is None or not args.laf_router_model)) or (not args.allow_laf_router and any(x is not None for x in (args.laf_router_socket,args.laf_router_state,args.laf_router_model))):
+ if (args.allow_mailbox_grants and not args.allow_chat_mailbox) or (args.allow_laf_router and not (args.laf_router_unconfigured or args.laf_bootstrap_bindings) and (args.laf_router_socket is None or args.laf_router_state is None or not args.laf_router_model)) or ((not args.allow_laf_router or args.laf_router_unconfigured or args.laf_bootstrap_bindings) and any(x is not None for x in (args.laf_router_socket,args.laf_router_state,args.laf_router_model))) or ((args.laf_router_unconfigured or args.laf_bootstrap_bindings) and not args.allow_laf_router) or (args.laf_bootstrap_bindings and args.laf_router_unconfigured):
   print('Incomplete LAF stdio opt-in configuration; use --help. No runtime was opened.',file=sys.stderr);return 1
  try:version=importlib.metadata.version('mcp')
  except importlib.metadata.PackageNotFoundError:version=None
@@ -73,11 +76,32 @@ def main(argv=None):
  try:
   parts=_components();anchor=parts.resolve_project_root(args.runtime_project_root);runtime=parts.runtime_path(args.runtime,project_root=anchor)
   pipeline=parts.pipeline(runtime) if args.allow_codex_pipeline else None
-  app=parts.router(socket_path=args.laf_router_socket,state_directory=args.laf_router_state,models=args.laf_router_model) if args.allow_laf_router else None
+  binding_options={}
+  if args.laf_bootstrap_bindings:
+   from backend_state import load_state,state_sha256,bootstrap_paths
+   bootstrap_paths(runtime);state,raw=load_state(runtime)
+   if state is None:raise ValueError('Explicit bootstrap binding state required')
+   binding_options={'backend_state_sha256':state_sha256(raw)}
+   binding=state.get('router')
+   if binding is None:
+    if 'router' not in state['unconfigured']:raise ValueError('Explicit Router state required')
+    app=parts.unconfigured_router()
+   else:
+    app=parts.router(socket_path=binding['socket'],state_directory=binding['receipts'],models=binding['models'],
+       socket_identity=binding['socket_identity'],binding_runtime=runtime,binding_sha256=state_sha256(raw))
+  elif args.laf_router_unconfigured:
+   from backend_state import load_unconfigured
+   if 'router' not in load_unconfigured(runtime):raise ValueError('Explicit runtime Router deny-all state required')
+   app=parts.unconfigured_router()
+  else:
+   if args.allow_laf_router:
+    from backend_state import load_unconfigured
+    if 'router' in load_unconfigured(runtime):raise ValueError('Router remains explicitly unconfigured')
+   app=parts.router(socket_path=args.laf_router_socket,state_directory=args.laf_router_state,models=args.laf_router_model) if args.allow_laf_router else None
   # Ownership transfers to the reviewed constructor, including its failure
   # cleanup; lifecycle owns later draining. Never perform a second12s drain or
   # close receipt handles behind an admitted worker after lifecycle returns.
-  adapter=parts.adapter(runtime,router_app=app,allow_writes=args.allow_writes,allow_local_llm=args.allow_local_llm,allow_local_models=args.allow_local_models,allow_chat_mailbox=args.allow_chat_mailbox,allow_mailbox_grants=args.allow_mailbox_grants,allow_codex_pipeline=args.allow_codex_pipeline,pipeline=pipeline,allow_experiments=args.allow_experiments,runtime_project_root=anchor)
+  adapter=parts.adapter(runtime,router_app=app,allow_writes=args.allow_writes,allow_local_llm=args.allow_local_llm,allow_local_models=args.allow_local_models,allow_chat_mailbox=args.allow_chat_mailbox,allow_mailbox_grants=args.allow_mailbox_grants,allow_codex_pipeline=args.allow_codex_pipeline,pipeline=pipeline,allow_experiments=args.allow_experiments,runtime_project_root=anchor,**binding_options)
   return parts.serve(adapter)
  except BaseException:
   print('LAF stdio startup/lifecycle unavailable; reconcile known attempts before retry. No provider lifecycle repair was attempted.',file=sys.stderr);return 1

@@ -76,7 +76,8 @@
         "inference/laf_service/test_lifecycle_uds.py",
         "inference/laf_service/test_lifecycle_uds_live.py",
         "inference/laf_service/test_npu_bridge.py",
-        "inference/laf_service/test_service.py",
+        "inference/laf_service/test_resource_policy.py",
+      "inference/laf_service/test_service.py",
         "inference/local_platform/API.md",
         "inference/local_platform/README.md",
         "inference/local_platform/__init__.py",
@@ -163,7 +164,14 @@
         "scripts/test_strict_source_gate.py",
         "docs/ordinary-session-pool.md",
         "scripts/test_ordinary_session_pool.py",
-        "scripts/test_session_pool_boundary.py"
+        "scripts/test_session_pool_boundary.py",
+        "runtime/integration/laf_bootstrap.py",
+        "runtime/private_codex/src/backend_state.py",
+        "runtime/private_codex/src/bundled_policy.py",
+        "scripts/test_bootstrap.py",
+        "scripts/test_bootstrap_bindings.py",
+        "docs/bootstrap.md",
+        "docs/bootstrap-policy-provenance.md"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",
@@ -195,7 +203,8 @@
         "plugin.json",
         "scripts/laf-sdk-pins.json",
         "packaging/upstream-orchestrator/LICENSE",
-        "packaging/upstream-orchestrator/NOTICE"
+        "packaging/upstream-orchestrator/NOTICE",
+        "runtime/private_codex/policy-snapshot/manifest.json"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",
@@ -351,7 +360,8 @@
         "runtime/public_laf/inference/laf_service/test_lifecycle_uds_live.py",
         "runtime/public_laf/inference/laf_service/test_npu_bridge.py",
         "runtime/public_laf/inference/laf_service/test_provider_policy.py",
-        "runtime/public_laf/inference/laf_service/test_service.py",
+        "runtime/public_laf/inference/laf_service/test_resource_policy.py",
+      "runtime/public_laf/inference/laf_service/test_service.py",
         "runtime/public_laf/inference/local_platform/API.md",
         "runtime/public_laf/inference/local_platform/README.md",
         "runtime/public_laf/inference/local_platform/__init__.py",
@@ -433,6 +443,19 @@
       "license": "MIT",
       "evidence": "mcp/THIRD_PARTY_NOTICES.md",
       "origin": "https://github.com/modelcontextprotocol/python-sdk/blob/v1.30.0/LICENSE"
+    },
+    {
+      "paths": [
+        "runtime/private_codex/policy-snapshot/docs/ai/orchestration.md",
+        "runtime/private_codex/policy-snapshot/docs/ai/policies.md",
+        "runtime/private_codex/policy-snapshot/agents/README.md",
+        "runtime/private_codex/policy-snapshot/LICENSE",
+        "runtime/private_codex/policy-snapshot/NOTICE"
+      ],
+      "kind": "third_party",
+      "license": "LicenseRef-KOL-v1",
+      "evidence": "docs/bootstrap-policy-provenance.md",
+      "origin": "https://github.com/i-pp/ai-orchestration/tree/ddcaf63e50bed722d558d418deeef791f3029a6f"
     }
   ]
 }

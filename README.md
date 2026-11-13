@@ -44,6 +44,11 @@ Clean-host provisioning, general backend functionality and Chat acceptance remai
 
 For Codex registration and the local marketplace option, see [Codex install](docs/codex-install.md).
 
+For a NEW independent private prefix, use the [prepare and configure guide](docs/bootstrap.md).
+It connects explicit existing Router/Codex prerequisites without copying another
+runtime's state. Unconfigured backends remain denied; this is not complete
+clean-host provisioning or acceptance of all backend actions.
+
 For provider-advertised Codex models and immutable reasoning effort, see
 [model selection](docs/codex-model-selection.md). One bounded `gpt-6.1-sol`/`max`
 application-path turn completed; its [verification scope](docs/codex-model-selection.md#bounded-solmax-application-path-result)

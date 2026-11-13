@@ -1,5 +1,6 @@
 """Daemon-owned, opt-in native gateway. No listener or authentication changes."""
 # Modified 2026-11-13: reserve the existing host budget for model-catalog reads.
+# Modified 2026-11-13: read NEW-prefix executor/policy from one atomic binding record.
 import hashlib
 from contextlib import closing
 import json
@@ -68,8 +69,30 @@ def binary_snapshot(binary, expected):
     return str(path)
 
 
-def executor_snapshot(runtime, binary):
+def executor_configuration(runtime, binary):
+    """One immutable NEW bootstrap record, or the unchanged legacy file format."""
+    from backend_state import load_state, bootstrap_paths, file_identity, state_sha256
     root = Path(runtime)
+    state, binding_raw = load_state(root)
+    if state is not None and state['schema'] == 2:
+        binding = state['codex']
+        if binding is None: raise PipelineError('BACKEND_UNCONFIGURED')
+        if str(binary) != binding['binary']: raise PipelineError('PINNED_NATIVE_BINARY_REQUIRED')
+        for name in ('codex-pipeline-executor.json', 'codex-pipeline-policy.json'):
+            path = root / name
+            if path.exists() or path.is_symlink(): raise PipelineError('CONFLICTING_BOOTSTRAP_POLICY')
+        path = Path(binary)
+        if file_identity(path.lstat()) != binding['binary_identity']: raise PipelineError('NATIVE_BINARY_IDENTITY_CHANGED')
+        binary_snapshot(binary, binding['binary_sha256'])
+        if file_identity(path.lstat()) != binding['binary_identity']: raise PipelineError('NATIVE_BINARY_IDENTITY_CHANGED')
+        _, project = bootstrap_paths(root)
+        bundle = load_project_policy(project)
+        policy = validate_policy(binding['policy'])
+        packed = lambda value: json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode()
+        return {'executor_policy_sha256': hashlib.sha256(packed({k: v for k, v in binding.items() if k != 'policy'})).hexdigest(),
+                'pipeline_policy_sha256': hashlib.sha256(packed(policy)).hexdigest(),
+                'common_policy_sha256': bundle.sha256, 'binary_sha256': binding['binary_sha256'],
+                'bootstrap_bindings_sha256': state_sha256(binding_raw)}, policy
     path = root / 'codex-pipeline-executor.json'
     _private(path, 4096)
     raw = path.read_bytes(); config = _json(raw)
@@ -85,7 +108,11 @@ def executor_snapshot(runtime, binary):
     bundle = load_project_policy(Path(__file__).resolve().parents[1])
     return {'executor_policy_sha256': hashlib.sha256(raw).hexdigest(),
             'pipeline_policy_sha256': hashlib.sha256(policy_raw).hexdigest(),
-            'common_policy_sha256': bundle.sha256, 'binary_sha256': config['binary_sha256']}
+            'common_policy_sha256': bundle.sha256, 'binary_sha256': config['binary_sha256']}, policy
+
+
+def executor_snapshot(runtime, binary):
+    return executor_configuration(runtime, binary)[0]
 
 
 def pipeline_held(runtime):
@@ -204,7 +231,7 @@ class HostGateway:
                  notification_runtime=None):
         self.root, self.binary = Path(runtime), binary
         self.require_host()
-        self.snapshot = executor_snapshot(runtime, binary)
+        self.snapshot, policy = executor_configuration(runtime, binary)
         self.ordinary_busy = ordinary_busy
         self.transport_factory = transport_factory
         if notification_runtime is not None:
@@ -238,7 +265,6 @@ class HostGateway:
                 raise PipelineError('EXECUTOR_CLEANUP_REQUIRES_RECONCILIATION', 'UNKNOWN')
         bundle = load_project_policy(project)
         if bundle.sha256 != self.snapshot['common_policy_sha256']: raise PipelineError('COMMON_POLICY_CHANGED')
-        policy = _json((self.root / 'codex-pipeline-policy.json').read_bytes())
         self.pipeline = Pipeline(runtime, policy, _LazyClient(self), instructions=developer_instructions(bundle),
             policy_sha256=bundle.sha256, admission=self.admit_turn)
 

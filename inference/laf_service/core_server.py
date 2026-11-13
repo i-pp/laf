@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Changed 2026-11-13: bounded swap policy and explicit quiet resource recovery.
+
 """Explicit Core-only entrypoint. The legacy host entrypoint remains unchanged."""
 from __future__ import annotations
 import argparse
@@ -55,8 +57,10 @@ def load_config(path):
             required |= {'strata_source', 'tokenizer_python', 'strata_command'}
     else:
         required = {'state_dir', 'runtime_dir', 'lifecycle_runtime_dir', 'acceptance_ollama_profiles'} if candidate else REQUIRED
-    if type(config) is not dict or not required <= set(config) or set(config) - required - {'npu_socket'}:
+    if type(config) is not dict or not required <= set(config) or set(config) - required - {'npu_socket', 'swap_limit_mib'}:
         raise ServiceError('explicit Core configuration fields required')
+    if 'swap_limit_mib' in config and (type(config['swap_limit_mib']) is not int or not 512 <= config['swap_limit_mib'] <= 2048):
+        raise ServiceError('swap_limit_mib must be an integer from 512 through 2048')
     if candidate:
         acceptance_profiles(config['acceptance_ollama_profiles'])
     for name in required - {'strata_command', 'acceptance_ollama_profiles', 'ollama_profiles', 'flash_enabled', 'default_model'}:
@@ -84,6 +88,9 @@ def run_core(path, *, backend_factory=CoreBackends, client_factory=lifecycle_cli
     path = Path(path)
     config = load_config(path)
     client = client_factory(config)
+    policy = client.resource_policy()
+    if policy['swap_limit_mib'] != config.get('swap_limit_mib', 512):
+        raise ServiceError('Core and host swap policy mismatch')
     # Namespace/UID refusal precedes any Core runtime-directory creation.
     backend = backend_factory(config, path, client)
     state, runtime = private_dir(config['state_dir']), private_dir(config['runtime_dir'])
@@ -96,7 +103,7 @@ def run_core(path, *, backend_factory=CoreBackends, client_factory=lifecycle_cli
                 or lock_info.st_nlink != 1 or stat.S_IMODE(lock_info.st_mode) != 0o600):
             raise ServiceError('Core singleton lock identity invalid')
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        controller = Controller(backend, client.read_resources, start=False)
+        controller = Controller(backend, client.read_resources, start=False, swap_limit_mib=config.get('swap_limit_mib', 512))
         # Refresh the host lease and enforce host resource limits during startup.
         controller.monitor.start()
         def shutdown(*_):

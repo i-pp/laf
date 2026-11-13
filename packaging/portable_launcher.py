@@ -22,6 +22,7 @@
 # Added 2026-11-12: original portable integrated package preparation.
 
 """Local integrated MCP launcher; never installs, starts services or repairs guards."""
+# Modified 2026-11-13: explicit NEW-prefix bootstrap/deny-all setup; legacy behavior retained.
 import argparse
 import json
 import os
@@ -33,6 +34,7 @@ import sys
 CAPABILITIES=('local-llm','local-models','chat-mailbox','mailbox-grants','codex-pipeline','experiments')
 KEYS={'schema','profile','sdk_python','runtime','runtime_project_root','router_socket','receipt_directory','models','capabilities'}
 PATH_KEYS=('sdk_python','runtime','runtime_project_root','router_socket','receipt_directory')
+BOOTSTRAP_KEYS=KEYS|{'runtime_source_root'}
 class ConfigError(ValueError):pass
 
 def decode(text):
@@ -64,19 +66,32 @@ def read_config(path):
  finally:os.close(fd)
 
 def arguments(value,root):
- if not isinstance(value,dict) or set(value)!=KEYS or type(value['schema']) is not int or value['schema']!=1 or value['profile']!='integrated-32':
+ if not isinstance(value,dict) or type(value.get('schema')) is not int or value.get('schema') not in (1,2) or set(value)!=(KEYS if value['schema']==1 else BOOTSTRAP_KEYS) or value.get('profile')!='integrated-32':
   raise ConfigError('Explicit integrated-32 configuration required')
- for key in PATH_KEYS:
+ bootstrap=value['schema']==2
+ for key in (*PATH_KEYS,*(('runtime_source_root',) if bootstrap else ())):
   text=value[key]
+  if bootstrap and key=='router_socket' and text is None:continue
   if not isinstance(text,str) or not text.startswith('/') or '\0' in text or len(text)>4096 or any(x in ('','..','.') for x in text.split('/')[1:]):raise ConfigError('Invalid absolute operator path')
  flags=value['capabilities']
  if not isinstance(flags,list) or len(flags)!=len(CAPABILITIES) or any(not isinstance(x,str) for x in flags) or set(flags)!=set(CAPABILITIES):raise ConfigError('All six existing capabilities must be explicitly selected; no fallback')
  models=value['models']
- if not isinstance(models,list) or not 1<=len(models)<=16 or any(not isinstance(x,str) or not re.fullmatch('[a-z][a-z0-9-]{0,63}',x) for x in models) or len(models)!=len(set(models)):raise ConfigError('Explicit unique model allowlist required')
- args=[value['sdk_python'],'-B',str(root/'runtime/integration/laf_stdio_cli.py'),'--runtime',value['runtime'],'--runtime-project-root',value['runtime_project_root']]
+ unconfigured_router=bootstrap and value['router_socket'] is None and models==[]
+ if not isinstance(models,list) or not (0 if unconfigured_router else 1)<=len(models)<=16 or any(not isinstance(x,str) or not re.fullmatch('[a-z][a-z0-9-]{0,63}',x) for x in models) or len(models)!=len(set(models)):raise ConfigError('Explicit unique model allowlist required')
+ runtime_source=root/'runtime'
+ if bootstrap:
+  runtime_source=Path(value['runtime_source_root'])
+  if (any(runtime_source.parts[i:i+2]==('plugins','cache') for i in range(len(runtime_source.parts)-1))
+      or Path(value['runtime_project_root'])!=runtime_source/'private_codex'
+      or not Path(value['runtime']).is_relative_to(runtime_source/'private_codex/.runtime')):raise ConfigError('Independent bootstrap runtime anchor required')
+ args=[value['sdk_python'],'-B',str(runtime_source/'integration/laf_stdio_cli.py'),'--runtime',value['runtime'],'--runtime-project-root',value['runtime_project_root']]
  args.extend('--allow-'+x for x in CAPABILITIES)
- args.extend(['--allow-laf-router','--laf-router-socket',value['router_socket'],'--laf-router-state',value['receipt_directory']])
- for model in models:args.extend(['--laf-router-model',model])
+ if bootstrap:
+  if not unconfigured_router:raise ConfigError('Bootstrap plugin configuration is an immutable anchor; use configure-router')
+  args.extend(['--allow-laf-router','--laf-bootstrap-bindings'])
+ else:
+  args.extend(['--allow-laf-router','--laf-router-socket',value['router_socket'],'--laf-router-state',value['receipt_directory']])
+  for model in models:args.extend(['--laf-router-model',model])
  return args
 
 def clean_environment():

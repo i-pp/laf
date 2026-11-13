@@ -36,6 +36,8 @@ import stat
 import subprocess
 import threading
 import time
+import uuid
+import sys
 from .core import ServiceError, snapshot, check_resources
 from .lifecycle import HostLifecycle, LifecycleFault, validate_sample
 from .lifecycle_host import OwnedOllama
@@ -203,7 +205,9 @@ class HostSupervisor:
         self.locks, self.servers, self.threads = [], [], []
         self.closed = threading.Event()
         self.clock, self.port = clock, None
-        self.panic_lock = threading.Lock()
+        self.panic_lock = threading.RLock()
+        self.panic_serial = 0
+        self.awaiting_core = False
         self.started = False
         self.released = False
         self.cleanup_confirmed = False
@@ -226,7 +230,8 @@ class HostSupervisor:
             if provider.running():
                 raise ServiceError('active Ollama must be stopped explicitly before supervisor startup')
             self.port = HostLifecycle(provider, read_resources,
-                                      read_endpoint=lambda: provider.backend.address, panic_callback=self.panic)
+                                      read_endpoint=lambda: provider.backend.address, panic_callback=self.panic,
+                                      swap_limit_mib=config.get('swap_limit_mib', 512))
             for control in (False, True):
                 self.servers.append(server_factory(self.port, runtime, control=control))
             self.started_at = clock()
@@ -245,35 +250,41 @@ class HostSupervisor:
             thread.start()
 
     def tick(self):
-        with self.port.state_lock:
-            fault = self.port.safety_fault
-            confirmed = self.cleanup_confirmed
-        if fault:
-            # Safety recovery must not depend on another resource violation or
-            # an expired lease: a prior panic may have had an uncertain outcome.
-            if not confirmed:
-                self.panic(fault)
-            return
-        try:
-            check_resources(validate_sample(self.port.read_resources()), self.port.baseline)
+        with self.panic_lock:
             with self.port.state_lock:
-                last = self.port.last_sample
-            if self.clock() - (self.started_at if last is None else last) > self.lease_seconds:
-                raise ServiceError('Core sample lease expired')
-        except Exception:
-            self.panic('host resource guard or Core lease failed')
+                fault = self.port.safety_fault
+                confirmed = self.cleanup_confirmed
+            if fault:
+                # Safety recovery must not depend on another resource violation or
+                # an expired lease: a prior panic may have had an uncertain outcome.
+                if not confirmed:
+                    self.panic(fault)
+                return
+            try:
+                check_resources(validate_sample(self.port.read_resources()), self.port.baseline, self.port.swap_limit_mib)
+                if self.awaiting_core:
+                    if self.core.running() is False:
+                        if self.port.provider.running() is not False:
+                            raise ServiceError('provider running before explicit Core start')
+                        return
+                    self.awaiting_core = False
+                    self.started_at = self.clock()
+                with self.port.state_lock:
+                    last = self.port.last_sample
+                if self.clock() - (self.started_at if last is None else last) > self.lease_seconds:
+                    raise ServiceError('Core sample lease expired')
+            except Exception:
+                self.panic('host resource guard or Core lease failed')
 
     def _monitor(self):
         while not self.closed.wait(.5):
             self.tick()
-            with self.port.state_lock:
-                if self.port.safety_fault and self.cleanup_confirmed:
-                    return
 
     def panic(self, reason):
         port = self.port
         # Invalidate admitted starts before waiting for any provider or lock.
         with port.state_lock:
+            self.panic_serial += 1
             if port.closed:
                 raise LifecycleFault('host supervisor closed')
             if not port.safety_fault:
@@ -284,6 +295,13 @@ class HostSupervisor:
             with port.state_lock:
                 if port.closed:
                     raise LifecycleFault('host supervisor closed')
+                # A queued emergency may outlive an owner recovery. Re-establish
+                # its fence rather than performing an unfenced late cleanup.
+                if not port.safety_fault:
+                    self.panic_serial += 1
+                    port.generation += 1
+                    port.safety_fault = reason
+                    port.stopping = True
                 self.cleanup_confirmed = False
             try:
                 self.core.stop()
@@ -298,6 +316,55 @@ class HostSupervisor:
             except Exception:
                 # Remain fenced; client stop never clears this safety fault.
                 return False
+
+    def recover(self, *, cancelled=lambda: False):
+        """Host-owner-only recovery. Never exposed as a Core lifecycle operation.
+
+        Core stays stopped; the owner must explicitly restart it after success.
+        A lost result is reconciled with the new host epoch, never replayed.
+        """
+        if self.closed.is_set() or cancelled():
+            raise ServiceError('host supervisor stopping')
+        with self.port.state_lock:
+            if not self.port.safety_fault:
+                raise ServiceError('host recovery requires an existing safety latch')
+            prior_serial = self.panic_serial
+        if not self.panic('operator resource recovery requested'):
+            raise ServiceError('recovery provider cleanup unconfirmed')
+        with self.panic_lock, self.port._operation(None):
+            with self.port.state_lock:
+                serial = prior_serial + 1
+                if self.panic_serial != serial:
+                    raise ServiceError('host recovery superseded by another panic')
+                epoch, generation = self.port.epoch, self.port.generation
+            first = validate_sample(self.port.read_resources())
+            for _ in range(10):
+                if self.closed.is_set() or cancelled():
+                    raise ServiceError('host supervisor stopping')
+                time.sleep(0.5)
+                current = validate_sample(self.port.read_resources())
+                check_resources(current, current, self.port.swap_limit_mib)
+                if current['psi_full_avg10'] > 1 or any(
+                    current[key] != first[key] for key in ('swap_used', 'pswpin', 'pswpout')
+                ):
+                    raise ServiceError('host recovery requires five quiet seconds')
+            if self.core.running() is not False or self.port.provider.running() is not False:
+                raise ServiceError('recovery providers no longer stopped')
+            with self.port.state_lock:
+                if (self.closed.is_set() or cancelled() or self.port.closed
+                        or self.panic_serial != serial or self.port.epoch != epoch
+                        or self.port.generation != generation or not self.cleanup_confirmed):
+                    raise ServiceError('host recovery invalidated')
+                self.port.baseline = current
+                self.port.epoch = uuid.uuid4().hex
+                self.port.generation = 0
+                self.port.stopped_generation = 0
+                self.port.stopping = False
+                self.port.fault = self.port.safety_fault = None
+                self.port.last_sample = None
+                self.awaiting_core = True
+                self.started_at = self.clock()
+                return {'epoch': self.port.epoch, 'core_restart_required': True}
 
     def _release(self):
         # Panic can act on Core outside operation_lock. Drain it too and retain
@@ -341,11 +408,29 @@ def main():
     config = read_config(args.config)
     supervisor = HostSupervisor(config, args.config)
     stopping = threading.Event()
+    recovery = threading.Event()
+    recovering = threading.Event()
+    def request_recovery(*_):
+        # Coalesce pending requests and discard duplicates during the transaction.
+        if not recovering.is_set():
+            recovery.set()
+    signal.signal(signal.SIGUSR1, request_recovery)
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stopping.set())
     supervisor.start()
     try:
-        stopping.wait()
+        while not stopping.wait(.5):
+            if recovery.is_set():
+                recovering.set()
+                recovery.clear()
+                try:
+                    supervisor.recover(cancelled=stopping.is_set)
+                    print('Host recovery complete; explicitly restart Core.', flush=True)
+                except Exception:
+                    print('Host recovery failed; safety latch retained.', file=sys.stderr, flush=True)
+                finally:
+                    recovery.clear()
+                    recovering.clear()
     finally:
         # Keep process ownership on an uncertain shutdown; never implicitly
         # release flock by exiting while the owned providers remain unconfirmed.
