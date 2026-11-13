@@ -129,12 +129,22 @@ Model outputs are unverified. A returned job handle is not proof of completion;
 a cancellation acknowledgment is not proof of physical stop. Read/reconcile the
 same receipt after an uncertain result, never submit a new attempt as a retry.
 
+## Completed local loader and discovery check
+
+The actual Codex 0.167.0 local loader, using an existing SDK 1.30.0 and synthetic
+private fake-runtime/UDS fixtures, discovered 33 unique tools with the exact
+expected schemas for source commit `b531d31b6db9206a5a5c15ba2efb7d406931fc64`.
+This is bounded loader/cache/discovery evidence, not backend or model acceptance.
+See the [archive identity, evidence and limits](../docs/codex-install.md#completed-local-loader-and-discovery-evidence).
+Later source archives are not covered by that historical run.
+
 ## Remaining product acceptance and directory-release gates
 
 - Recheck source origin, secret exclusion and modification notices for later changes.
   The present owner-authorized source scope does not authorize a directory submission.
-- Verify the assembled package on the target host through the actual plugin
-  loader, not only a direct CLI or synthetic test. Recheck the 33-tool catalog.
+- Recheck the actual target-host loader and 33-tool catalog after launcher,
+  runtime, manifest or target configuration changes. The historical check above
+  does not accept later packages, real backends or ChatGPT client discovery.
 - Provide and test a clean-host daemon/policy/isolation/setup flow. Existing-host
   success does not establish second-PC portability, other Python versions or
   8-16 GB VRAM acceptance.
@@ -143,9 +153,10 @@ same receipt after an uncertain result, never submit a new attempt as a retry.
   review cases and applicable attestations. No URLs, credentials, legal promises,
   country targeting or review approvals are invented in this package.
 
-The current tests are source/configuration and synthetic ZIP checks only. No
-real service, new SDK child, account, GPU/model or public deployment was tested by
-this packaging work. Earlier runtime evidence has its own documented scope.
+Packaging unit checks remain source/configuration and synthetic ZIP checks.
+Actual SDK startup/discovery has only the historical scope above. No real service,
+account, GPU/model, public deployment or live backend adoption is accepted by
+that loader check. Earlier runtime evidence retains its own documented scope.
 
 ## Source-complete scope, not automatic provisioning
 

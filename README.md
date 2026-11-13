@@ -37,8 +37,10 @@ source is retained; the portable manifest itself launches stdio, not an HTTP end
 
 See [existing-owner-host setup](docs/integrated-plugin-install.md). This is not a
 complete clean-host Quick Start. Model/SDK/vendor assets and private account,
-service, tunnel and runtime state are not included. Clean-host provisioning,
-plugin loader and Chat acceptance remain separate gates.
+service, tunnel and runtime state are not included. Actual Codex 0.167.0 loader,
+cache and SDK-backed MCP discovery passed for source commit `b531d31` only; see the
+[scoped evidence](docs/codex-install.md#completed-local-loader-and-discovery-evidence).
+Clean-host provisioning, backend actions and Chat acceptance remain separate gates.
 
 For Codex registration and the local marketplace option, see [Codex install](docs/codex-install.md).
 

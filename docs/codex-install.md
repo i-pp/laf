@@ -74,11 +74,43 @@ Choose this OR direct MCP registration, not both, to avoid duplicate tools.
 The marketplace is local source and has no account/app binding. Installation
 copies source into Codex's plugin cache; it neither provisions the daemon nor
 installs SDKs/models. Never edit the cache as the development source.
-Actual loader, startup and tool-call acceptance are recorded separately from
-metadata checks. A successful install alone is not all-33-functional acceptance.
+The completed check below used the actual Codex loader and MCP SDK, not only
+metadata inspection. Neither that discovery result nor installation alone
+establishes that all 33 tools' backend actions work.
 
 See [provider catalog and reasoning-effort selection](codex-model-selection.md)
 for the added read-only tool and immutable input settings.
+
+## Completed local loader and discovery evidence
+
+This historical acceptance belongs to source commit
+[`b531d31b6db9206a5a5c15ba2efb7d406931fc64`](https://github.com/y-ooya-ipp/laf/commit/b531d31b6db9206a5a5c15ba2efb7d406931fc64).
+Its source-only ZIP contained 363 members, with SHA-256
+`027aa71249d722df9af8af678e64cc6f177a56d0fd624a94e2731229dbc01122`.
+Every source/cache file matched byte-for-byte. No later all-source ZIP, including
+one containing these documentation edits, is covered by that run. The
+[public PR record](https://github.com/i-pp/laf/pull/12) records the evidence;
+[source CI for the same commit](https://github.com/i-pp/laf/actions/runs/43419504551)
+is separate from loader acceptance.
+
+- Official Codex CLI 0.167.0 used a new isolated HOME/CODEX_HOME and plugin cache,
+  synthetic private fake-runtime/UDS fixtures, and an existing SDK 1.30.0.
+- From a separate empty working directory, the actual loader resolved the
+  relative `.mcp.json` working directory and launcher. SDK-backed MCP discovery
+  reported `laf@laf-experimental`, 33 unique tools with the exact expected
+  schemas, `serverInfo.version` 0.1.0 and `toolsError` null.
+- The only outer RPCs were `initialize`, `initialized`, `plugin/installed` and
+  `mcpServerStatus/list`. Fixture contacts, audited tool calls and receipts were
+  all zero. All nine tracked processes, including observed descendants, were
+  confirmed absent after cleanup; directly owned children were reaped.
+- Resource observations were sampled, not continuous measurements or an OS
+  sandbox. Independent read-only evidence review passed.
+
+This establishes loader/cache/discovery only, not clean-host setup, all 33 tool
+operations, real-account/provider model or reasoning-effort execution, billing,
+zero native TCP activity, 8-16 GB VRAM suitability, live backend adoption or
+public-directory release. Existing daemon, policy, grants, helper, Router/SDK and
+private configuration prerequisites still apply.
 
 ## Versions and limits
 
@@ -93,8 +125,7 @@ policy, auth, model and owner-socket prerequisites. Clean-host/second-PC setup,
 8-16 GB VRAM hardware acceptance and all 33 tools' backend functionality remain open.
 See the legacy-helper transport limitation in the prerequisite guide.
 
-The commands were checked against the installed CLI's `--help`. Local marketplace
-registration, install and list also succeeded in an isolated HOME/CODEX_HOME;
-this is metadata/cache acceptance, not MCP startup or model acceptance. These
-examples are not an instruction to alter an existing host automatically. No tool output,
+The commands were checked against the installed CLI's `--help`; the completed
+loader/discovery check has the exact historical scope above. These examples are
+not an instruction to alter an existing host automatically. No private tool output,
 credentials, model output or SDK binary is included in this source package.

@@ -317,8 +317,10 @@ result accounting without installing SDK packages or starting real providers.
 Publish the reviewed local compatibility/integration source and operator tooling
 in one personal-fork PR, preserving public PR11 ancestry and third-party notices.
 Update the root plugin description, README, install guides and origin records
-to distinguish authorized source publication from still-unverified clean-host,
-plugin-loader, complete 32-tool functionality and directory-release acceptance.
+to distinguish authorized source publication from acceptance gates still open at
+that proposal stage: clean-host setup, plugin loading, complete 32-tool
+functionality and directory release. The later loader/discovery result below
+supersedes only that historical plugin-loading gap for its exact source archive.
 No credential, runtime state, private Git history, model, SDK, service unit binding
 or operational evidence is included. This source change does not install, switch
 or merge anything.
@@ -422,3 +424,23 @@ Add direct and proxy/daemon/HostGateway OAuth regressions to
 the model-selection/testing/origin guides. Tests use only temporary databases
 and fake transports. No new RPC, live auth/config, service, SDK, model or ordinary
 pool change is made. Independent re-review remains required.
+
+
+## 2026-11-13: record scoped Codex loader and discovery evidence
+
+Update `README.md`, `docs/codex-install.md`, `docs/integrated-plugin-install.md`
+and the matching `packaging/INTEGRATED_PLUGIN_GUIDE.md` to replace the open loader
+gate with completed historical evidence for source commit
+`b531d31b6db9206a5a5c15ba2efb7d406931fc64`. Official Codex CLI 0.167.0 loaded the
+source-only package from a new isolated cache, resolved its relative launcher
+from an empty working directory, and discovered the exact 33-tool catalog through
+an existing SDK 1.30.0 with synthetic private runtime/UDS fixtures. The Codex
+install guide records the archive identity, public evidence links and boundaries.
+
+This documentation correction is not a rerun of any later source ZIP. It does
+not accept clean-host provisioning, all tool actions, real-account/provider
+model or effort execution, billing, hardware, live backend adoption or directory
+release. The unresolved legacy-helper transport limit and existing private
+configuration prerequisites remain. Commands, source/header rights and third-party
+terms are unchanged; no runtime, manifest, dependency, service or account changes
+are made.
