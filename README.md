@@ -40,12 +40,14 @@ complete clean-host Quick Start. Model/SDK/vendor assets and private account,
 service, tunnel and runtime state are not included. Actual Codex 0.167.0 loader,
 cache and SDK-backed MCP discovery passed for source commit `b531d31` only; see the
 [scoped evidence](docs/codex-install.md#completed-local-loader-and-discovery-evidence).
-Clean-host provisioning, backend actions and Chat acceptance remain separate gates.
+Clean-host provisioning, general backend functionality and Chat acceptance remain separate gates.
 
 For Codex registration and the local marketplace option, see [Codex install](docs/codex-install.md).
 
 For provider-advertised Codex models and immutable reasoning effort, see
-[model selection](docs/codex-model-selection.md). The existing configuration
+[model selection](docs/codex-model-selection.md). One bounded `gpt-6.1-sol`/`max`
+application-path turn completed; its [verification scope](docs/codex-model-selection.md#bounded-solmax-application-path-result)
+does not verify provider effort or normal installation. The existing configuration
 profile name `integrated-32` is retained for compatibility.
 
 ## Source layout and package build

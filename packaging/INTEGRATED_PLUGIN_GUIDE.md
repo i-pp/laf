@@ -138,6 +138,10 @@ This is bounded loader/cache/discovery evidence, not backend or model acceptance
 See the [archive identity, evidence and limits](../docs/codex-install.md#completed-local-loader-and-discovery-evidence).
 Later source archives are not covered by that historical run.
 
+A separate [bounded Sol/max application-path trial](../docs/codex-model-selection.md#bounded-solmax-application-path-result)
+completed through a private carrier. It does not accept normal installation,
+verify provider effort or broaden this loader/archive evidence.
+
 ## Remaining product acceptance and directory-release gates
 
 - Recheck source origin, secret exclusion and modification notices for later changes.

@@ -49,6 +49,10 @@ that a provider executed the selected effort. Existing-host installation still
 requires the [separate prerequisites](integrated-plugin-install.md); this is not
 a clean-host Quick Start.
 
+A bounded application-path trial requested exact `gpt-6.1-sol` with `max` and
+completed. The [verification scope](#bounded-solmax-application-path-result)
+below separates selection and completion evidence from unverified provider effort.
+
 Updating this checkout does not automatically update an existing daemon or its
 live settings. Backend installation/restart and client catalog refresh require
 separate authorization and verification; the source checks perform neither.
@@ -146,3 +150,35 @@ the full JSON-RPC/HTTP envelope, not only raw catalog JSON.
 See [testing and exact-commit GitHub evidence](testing.md). Passing offline checks
 is not deployment, live account/provider acceptance, a complete plugin-loader
 check or a release approval.
+
+
+## Bounded Sol/max application-path result
+
+One real-provider turn used the public `Pipeline`/`ProtocolClient` application
+path from source commit `b531d31b6db9206a5a5c15ba2efb7d406931fc64`, through a
+private bounded native carrier (R3), not a normal plugin installation. That
+runtime source is unchanged at `df24c5cda624eebd5e07dd2077141002dfe07ef9`.
+The exact advertised strings `gpt-6.1-sol` and `max` were selected without alias
+conversion; catalog freshness and broader entitlement remain unverified.
+See the [public evidence record](https://github.com/i-pp/laf/pull/12);
+[source CI at df24c5c](https://github.com/i-pp/laf/actions/runs/43448063414) is a
+separate gate, not evidence of provider execution.
+
+- Durable thread/task selection and operation fingerprints, the raw turn request
+  model/effort and remote correlation matched. The thread-start provider echo
+  matched `max`; the turn was acknowledged and reached `COMPLETED` with exact
+  output `LAF_EFFORT_OK`.
+- The actual turn's provider-effort echo was unavailable. Both context and turn
+  retained `actual_execution_verified=false`. This does not verify internal
+  reasoning strength, hidden reasoning or billing.
+- Normal existing global instructions/context were used, not synthetic-only
+  context. No tool events, server approval requests or interrupt were observed
+  in this one trial. That is not a zero-capability or zero-network guarantee.
+- Host observations were sampled, not continuous. Normal native exit 0, process
+  absence and passing cleanup/host-guard checks were confirmed. Independent read-only
+  review matched necessary ledger fields with sanitized evidence and the source
+  freeze; raw usage events were not retained.
+
+This result does not accept all models, all 33 tools, normal installation,
+clean-host setup or live backend adoption. It does not rerun or extend the
+[historical loader archive check](codex-install.md#completed-local-loader-and-discovery-evidence).

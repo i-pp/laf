@@ -112,6 +112,10 @@ zero native TCP activity, 8-16 GB VRAM suitability, live backend adoption or
 public-directory release. Existing daemon, policy, grants, helper, Router/SDK and
 private configuration prerequisites still apply.
 
+A separate [bounded Sol/max application-path trial](codex-model-selection.md#bounded-solmax-application-path-result)
+completed through a private carrier, not a normal plugin installation. It does
+not extend this historical loader/archive scope or verify provider effort.
+
 ## Versions and limits
 
 The source plugin and integrated MCP `serverInfo.version` are 0.1.0. The standalone

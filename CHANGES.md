@@ -444,3 +444,22 @@ release. The unresolved legacy-helper transport limit and existing private
 configuration prerequisites remain. Commands, source/header rights and third-party
 terms are unchanged; no runtime, manifest, dependency, service or account changes
 are made.
+
+
+## 2026-11-13: record bounded Sol/max application-path completion
+
+Update `docs/codex-model-selection.md`, the README and both install guides,
+including `packaging/INTEGRATED_PLUGIN_GUIDE.md`, with a source-bound one-turn
+result through a private bounded native carrier. The public b531 Pipeline/protocol
+path (unchanged at df24c5c) requested exact `gpt-6.1-sol`/`max`, persisted matching
+selection/fingerprints and reached `COMPLETED` with `LAF_EFFORT_OK`. Thread-start
+echo matched; actual-turn effort echo was unavailable and execution-verification
+flags remain false. The model-selection guide links the public evidence and
+separate exact-commit source CI, and records the normal-context and sampled scope.
+
+This is not proof of internal reasoning strength or billing, nor acceptance of
+all models/tools, normal installation, clean-host setup or live backend adoption.
+The historical b531 loader/archive boundary remains unchanged. No private paths,
+identifiers, logs, instructions or account details are published. Commands,
+source/header rights and third-party terms are unchanged; this documentation
+change does not modify runtime, manifests, dependencies, tests or services.
