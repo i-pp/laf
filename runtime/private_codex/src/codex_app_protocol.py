@@ -9,6 +9,7 @@ messages. It MUST bound IO by timeout_s; this client cannot preempt host code.
 Schema inspection and fake exchanges do not establish a live connection.
 """
 
+# Modified 2026-11-13: bounded provider catalog and narrow reasoning-effort transport.
 import json
 import math
 import os
@@ -16,6 +17,7 @@ import re
 import selectors
 import subprocess
 import time
+import unicodedata
 from collections.abc import Callable
 
 
@@ -23,7 +25,8 @@ SCHEMA_VERSION = "codex-cli 0.165.0"
 # Installed service binary was also inspected with generate-json-schema only.
 # Across 26 relevant schemas, differences are confined to CodexErrorInfo
 # variants, which this boundary does not interpret or export.
-COMPATIBLE_SCHEMA_VERSIONS = ('0.165.0', '0.164.0-alpha.11.1')
+# Stable 0.167 subset was separately inspected; see scripts/fixtures/codex-0.167-contract.json.
+COMPATIBLE_SCHEMA_VERSIONS = ('0.165.0', '0.164.0-alpha.11.1', '0.167.0')
 
 
 def schema_version_supported(user_agent):
@@ -61,7 +64,7 @@ METHOD_SCHEMAS = {
 }
 ALLOWED_METHODS = frozenset(METHOD_SCHEMAS)
 _THREAD_FIELDS = {"model", "cwd", "baseInstructions", "developerInstructions",
-                  "approvalPolicy", "approvalsReviewer", "sandbox"}
+                  "approvalPolicy", "approvalsReviewer", "sandbox", "config"}
 _FIELDS = {
     "initialize": {"clientInfo"},
     "model/list": {"cursor", "limit", "includeHidden"},
@@ -192,7 +195,7 @@ def _params(method, params):
             raise ProtocolError("account/read requires refreshToken=false")
         return
     for key, value in params.items():
-        if key in {"clientInfo", "input", "sandboxPolicy"}:
+        if key in {"clientInfo", "input", "sandboxPolicy", "config"}:
             continue
         if key in {"includeHidden", "ephemeral", "excludeTurns", "includeTurns", "archived"}:
             if type(value) is not bool:
@@ -209,6 +212,14 @@ def _params(method, params):
     }.items():
         if key in params and params[key] not in allowed:
             raise ProtocolError("unsupported parameter value")
+    if "effort" in params and not valid_reasoning_effort(params["effort"]):
+        raise ProtocolError("invalid reasoning effort")
+    if "config" in params:
+        # Reviewed per-thread override only, never an arbitrary config bridge.
+        config = params["config"]
+        _object(config, {"model_reasoning_effort"}, {"model_reasoning_effort"})
+        if not valid_reasoning_effort(config["model_reasoning_effort"]):
+            raise ProtocolError("invalid reasoning effort config")
     if "clientInfo" in params:
         info = params["clientInfo"]
         _object(info, {"name", "title", "version"}, {"name", "version"})
@@ -229,6 +240,60 @@ def _params(method, params):
         # separately reviewed host policy, not arbitrary nested configuration.
         if params["sandboxPolicy"] != {"type": "readOnly"}:
             raise ProtocolError("only readOnly sandboxPolicy is supported")
+
+
+def valid_reasoning_effort(value):
+    """A bounded provider token, not a hardcoded native-model effort enum."""
+    return _catalog_text(value, 64, label=True)
+
+def _catalog_text(value, limit, *, label=False):
+    if type(value) is not str:
+        return False
+    try:
+        if len(value.encode('utf-8')) > limit: return False
+    except UnicodeError:
+        return False
+    return not label or (bool(value.strip()) and not any(
+        unicodedata.category(c).startswith('C') or unicodedata.category(c) in ('Zl', 'Zp') for c in value))
+
+def validate_model_page(result):
+    """Validate bounded discovery metadata even for injected host clients.
+
+    Descriptions are checked for size but never projected by the pipeline.
+    Provider labels/options are data, not instructions or execution receipts.
+    """
+    if type(result) is not dict or type(result.get('data')) is not list or len(result['data']) > 100:
+        raise ProtocolError('invalid model catalog page')
+    cursor = result.get('nextCursor')
+    if cursor is not None and not _catalog_text(cursor, 512, label=True):
+        raise ProtocolError('invalid model catalog cursor')
+    ids, models = set(), set()
+    for model in result['data']:
+        if type(model) is not dict:
+            raise ProtocolError('invalid model catalog entry')
+        for field, seen in [('id', ids), ('model', models)]:
+            value = model.get(field)
+            if (type(value) is not str or re.fullmatch(r'[A-Za-z0-9_.:-]{1,160}', value) is None
+                    or value in seen): raise ProtocolError('invalid or duplicate model catalog identifier')
+            seen.add(value)
+        if (type(model.get('hidden')) is not bool or type(model.get('isDefault')) is not bool
+                or not _catalog_text(model.get('displayName'), 160, label=True)
+                or not _catalog_text(model.get('description'), 4096)
+                or not valid_reasoning_effort(model.get('defaultReasoningEffort'))):
+            raise ProtocolError('invalid model catalog metadata')
+        options = model.get('supportedReasoningEfforts')
+        if type(options) is not list or not 1 <= len(options) <= 16:
+            raise ProtocolError('invalid reasoning effort options')
+        efforts = set()
+        for option in options:
+            if (type(option) is not dict or not valid_reasoning_effort(option.get('reasoningEffort'))
+                    or not _catalog_text(option.get('description'), 1024)
+                    or option['reasoningEffort'] in efforts):
+                raise ProtocolError('invalid or duplicate reasoning effort option')
+            efforts.add(option['reasoningEffort'])
+        if model['defaultReasoningEffort'] not in efforts:
+            raise ProtocolError('model default is not advertised as supported')
+    return result
 
 
 def _result(method, result):
@@ -267,13 +332,11 @@ def _result(method, result):
                 or type(turn.get("items")) is not list or type(turn.get("status")) is not str):
             raise ProtocolError("invalid turn shape")
     if method == "model/list":
-        model_fields = {"id": str, "model": str, "displayName": str, "description": str,
-                        "hidden": bool, "isDefault": bool, "defaultReasoningEffort": str,
-                        "supportedReasoningEfforts": list}
-        for model in result["data"]:
-            if (type(model) is not dict or any(type(model.get(k)) is not t
-                                              for k, t in model_fields.items())):
-                raise ProtocolError("invalid model catalog entry")
+        validate_model_page(result)
+    if method in ("thread/start", "thread/resume"):
+        effort = result.get("reasoningEffort")
+        if effort is not None and not valid_reasoning_effort(effort):
+            raise ProtocolError("invalid effective reasoning effort")
     if method == "thread/list" and any(type(t) is not dict or type(t.get("id")) is not str
                                        or not t["id"] for t in result["data"]):
         raise ProtocolError("invalid thread list entry")

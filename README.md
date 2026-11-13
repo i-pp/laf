@@ -30,7 +30,7 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Local AI Fabric integrated plugin (experimental source)
 
-The root plugin selects the integrated 27 legacy/Codex tools plus five Router tools,
+The root plugin selects the existing 27 legacy/Codex tools, one new Codex catalog read and five Router tools,
 with six explicit operator opt-ins. Local Core/Router inference needs no OpenAI
 account; Codex is an optional separately authorized integration. HTTP-compatible
 source is retained; the portable manifest itself launches stdio, not an HTTP endpoint.
@@ -42,6 +42,10 @@ plugin loader and Chat acceptance remain separate gates.
 
 For Codex registration and the local marketplace option, see [Codex install](docs/codex-install.md).
 
+For provider-advertised Codex models and immutable reasoning effort, see
+[model selection](docs/codex-model-selection.md). The existing configuration
+profile name `integrated-32` is retained for compatibility.
+
 ## Source layout and package build
 
 `runtime/` is the fixed reviewed compatibility implementation for the root launcher.
@@ -50,7 +54,7 @@ source from the PR11 integration base, not overwritten by that older snapshot.
 The standalone five-tool `mcp/` is retained as an optional component, not the root
 plugin. Changes to root source do not silently change the pinned runtime subset.
 The previous public component guide is preserved at [component source guide](docs/public-source-component-guide.md). See [origin and changes](SOURCE_ORIGIN.md). Future consolidation must preserve
-32-tool schemas and runtime guards.
+33-tool schemas and runtime guards.
 
 Build source-only from this checkout without a private input ZIP:
 
@@ -64,8 +68,8 @@ metadata is a later submission concern, not a prerequisite to reviewing this sou
 
 ## Legacy helper compatibility boundary
 
-The integrated 32-tool catalog and startup/read checks do not establish that all
-32 tools work against the modern Router. Prefer the five `laf_router_*` tools for
+The integrated 33-tool catalog and startup/read checks do not establish that all
+33 tools work against the modern Router. Prefer the five `laf_router_*` tools for
 the modern owner-scoped Router interface. The full profile also requires an
 existing local-LLM helper directory and configured runtime, mailbox and grant
 state. The compatibility tools `aceis_local_llm_generate`,
@@ -75,4 +79,4 @@ route currently has an unresolved transport failure; its functionality is not
 accepted by the modern Router checks. Do not silently translate helper calls to
 Router load/unload operations, fabricate helper configuration, or weaken guards.
 This known limitation does not prevent source Alpha review, but this is neither
-an all-32-functional claim nor a complete clean-host setup.
+an all-33-functional claim nor a complete clean-host setup.

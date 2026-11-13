@@ -1,4 +1,5 @@
 """Daemon-owned, opt-in native gateway. No listener or authentication changes."""
+# Modified 2026-11-13: reserve the existing host budget for model-catalog reads.
 import hashlib
 from contextlib import closing
 import json
@@ -587,7 +588,7 @@ class HostGateway:
 
     def dispatch(self, tool, arguments):
         validate_arguments(tool, arguments)
-        remote = tool in ('codex_capabilities', 'codex_thread_start', 'codex_chat_steer', 'codex_thread_archive')
+        remote = tool in ('codex_capabilities', 'codex_models_list', 'codex_thread_start', 'codex_chat_steer', 'codex_thread_archive')
         result = None
         if remote and not self.reserve(): raise PipelineError('SHARED_BUDGET_HELD')
         try:

@@ -415,7 +415,11 @@
         "scripts/check_english_source.py",
         "scripts/test_english_source.py",
         "scripts/test_common_policy_language.py",
-        "docs/source-language-policy.md"
+        "docs/source-language-policy.md",
+        "scripts/test_codex_selection_boundary.py",
+        "scripts/test_codex_catalog_effort.py",
+        "scripts/fixtures/codex-0.167-contract.json",
+        "docs/codex-model-selection.md"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",

@@ -386,3 +386,39 @@ source proposal does not install or restart services, adopt an existing runtime,
 prove provider entitlement, or accept real parallel models. Verification results
 belong to their executed revision and public CI evidence, not a test-total
 specification. New Codex catalog/effort work is a separate unintegrated candidate.
+
+
+## 2026-11-13: provider catalog and immutable reasoning effort
+
+Feature-only port in `runtime/private_codex/src/codex_app_protocol.py`,
+`codex_host.py`, `codex_pipeline.py`, `mcp_adapter.py` and
+`notification_outbox.py`. Add `codex_models_list`, optional `reasoning_effort`,
+fresh advertised defaults, stored selection provenance and bounded full-wire
+catalog/owner pages. Admit the deliberately inspected 0.167 stable subset through
+the shared compatibility gate. Keep existing tools, OAuth/shared-tool ACLs,
+notify-only approvals, ordinary-pool configuration and version 0.1.0.
+
+Add fake protocol/ledger/dispatch/gateway/OAuth HTTP/notification regressions and
+the versioned method fixture under `scripts/`, with explicit strict-runner and
+license-policy registration. Update current tool-discovery descriptions and add
+`docs/codex-model-selection.md`; the `integrated-32` configuration key is preserved.
+Selected source behavior is not proof of provider execution, entitlement or
+billing. No runtime, service, account, SDK, model or deployment is changed.
+Independent adapted-source review and exact-commit CI are separate gates.
+
+
+## 2026-11-13: keep OAuth access to proven persisted blocked inputs
+
+Correct the adapted catalog feature's composed submission path in
+`runtime/private_codex/src/mcp_adapter.py` and `notification_outbox.py`. A new
+pre-turn BLOCKED input can receive its original owner's binding only after a
+bounded read-only match of the same runtime ledger, caller-intent operation,
+resource IDs and immutable selection. Preserve the existing Events authorizer,
+foreign-origin conflict checks, error result and no-replay rules. Do not bind
+unknown, failed, forged or mismatched results through this new path.
+
+Add direct and proxy/daemon/HostGateway OAuth regressions to
+`scripts/test_codex_catalog_effort.py`, update its strict runner selection and
+the model-selection/testing/origin guides. Tests use only temporary databases
+and fake transports. No new RPC, live auth/config, service, SDK, model or ordinary
+pool change is made. Independent re-review remains required.

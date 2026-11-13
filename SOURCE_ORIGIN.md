@@ -52,7 +52,8 @@ Distributed changed paths relative to that baseline:
 
 Locally added runtime paths: `src/oauth_auth.py`, `src/legacy_tool_adapter.py`, `src/experiments.py`, from captured HTTP snapshot 167c32320d78eea5cbee75d06f6d935ca2eb5d08. Legacy adapter is an extraction of the earlier adapter; local runtime-scope/identity changes remain. The six integration modules are local glue. The owner explicitly authorized publishing the project-authored local changes under KOL-v1 to the personal public fork and proposing them to i-pp/laf. Third-party ownership, licenses and notices remain unchanged; this is not an authorization to publish secrets, private state or operational evidence.
 
-Differences include OAuth/HTTP identity, runtime scope, notification composition, bounded NSS resolver, older policy pin and older Codex protocol/pipeline behavior. No claim of newer upstream remote-approval features. Tests and operational comparison evidence are not included.
+Differences include OAuth/HTTP identity, runtime scope, notification composition, bounded NSS resolver, older policy pin and older Codex protocol/pipeline behavior. No claim of newer upstream remote-approval features. Original snapshot tests and operational comparison evidence are not included;
+new project-authored offline regression tests are identified below.
 
 LAF source is preserved from the reviewed bundle, including its CHANGES, KOL notices and component-specific SDK MIT notice. The independent MCP component stdio-only notice does not describe the integrated HTTP surface. External Codex, SDK, cryptography, model assets, firmware and C++ Ace-Core implementations are not bundled or relicensed.
 
@@ -95,3 +96,51 @@ body. Keep production service/guards unchanged; send only declared headers for
 and propagate unexpected send failures. Two RED-to-GREEN fixture regressions
 cover payload omission and cleanup without suppressing errors. Synchronize the
 bundled source-test copy. The original failed hosted run remains recorded.
+
+
+## 2026-11-13: feature-only Codex catalog and reasoning-effort port
+
+Adapt the project-authored provider catalog and immutable effort behavior from
+[agent-orchestrator](https://github.com/i-pp/agent-orchestrator), not its full
+later source snapshot. Modified runtime source is limited to
+`codex_app_protocol.py`, `codex_host.py`, `codex_pipeline.py`, `mcp_adapter.py`
+and `notification_outbox.py` under `runtime/private_codex/src/`. Both MCP facades
+reuse the shared pipeline schema/validation; legacy dispatch is not replaced.
+Preserve LAF's OAuthPrincipal ownership, shared-tool ACL and notify-only approval
+surface. Do not import the canonical approval-response APIs, LocalPrincipal
+per-user model, native-role aliases, auth configuration or policy pins.
+
+The existing operator-only proven-empty-context replacement gains only immutable
+selection checking, fixed effort transport and echo evidence. Its proof,
+remote-ID, history and single-attempt constraints remain; legacy input is not
+backfilled. Ordinary-session pool code/config, Router lifecycle and package
+version 0.1.0 remain unchanged. The integrated-32 configuration key is retained;
+the fully opted-in schema adds only the catalog read, yielding 33 tools.
+
+New selected canonical and LAF-specific fake regressions are in
+`scripts/test_codex_catalog_effort.py` and `scripts/test_codex_selection_boundary.py`.
+`scripts/fixtures/codex-0.167-contract.json` records the inspected stable method
+and reasoning subset only; unrelated approval schemas are omitted. These are
+project-authored tests/metadata under the repository KOL scope. No Codex/SDK
+implementation or external schema corpus is bundled or relicensed. Fixture
+construction uses isolated temporary anchors, not private runtime records.
+See the model-selection, testing and installation guides for scope and limits.
+
+
+## 2026-11-13: preserve OAuth access to proven persisted blockers
+
+Independent adapted-source review found that a newly persisted pre-turn BLOCKED
+input was treated only as a failed dispatch, skipping its OAuth origin binding.
+The source correction in `mcp_adapter.py` and `notification_outbox.py` under
+`runtime/private_codex/src/` adds only an exact, bounded read-only creation-proof
+path. It checks the same runtime ledger, caller-intent operation, task/thread and
+immutable selection before using the existing Events authorizer and immutable
+origin transaction. It does not treat UNKNOWN/FAILED/foreign results as ownership
+proof or add a daemon RPC, identity source or permission surface.
+
+Composed OAuth regressions in `scripts/test_codex_catalog_effort.py` cover direct
+and proxy/daemon/HostGateway paths with temporary databases and fake transport,
+including the review reproduction and negative uncertainty/forgery/lock/size
+controls. Documentation and the strict selection guard describe this addition.
+This correction requires independent re-review and exact-commit CI before use;
+no prior source-review result approves it automatically.

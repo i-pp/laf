@@ -24,8 +24,8 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # LAF integrated plugin: experimental source
 
-This package preserves the integrated 27 Codex/orchestration/legacy tools plus
-five owner-scoped Router tools. The owner has authorized publication of the
+This package preserves the existing 27 Codex/orchestration/legacy tools, adds
+`codex_models_list`, and retains five owner-scoped Router tools. The owner has authorized publication of the
 project-authored source changes under KOL-v1, with third-party terms preserved.
 This is an experimental source proposal, not a complete clean-host Quick Start,
 a directory publication approval, or a safety-critical product certification.
@@ -84,6 +84,10 @@ following exact fields using the actual existing local paths and model IDs:
 }
 ```
 
+The profile name `integrated-32` is retained for configuration compatibility;
+with Codex catalog discovery enabled, its current complete inventory is 33 tools.
+See [Codex model selection](../docs/codex-model-selection.md).
+
 Those paths are schema illustrations, **not runnable defaults**. Selecting the
 six opt-ins acknowledges their existing configured scope, not a grant of new
 workspace/identity/network permissions. Do not use this profile when those
@@ -100,7 +104,7 @@ This checks configuration and entrypoint/interpreter metadata only. It does not
 prove SDK version, daemon availability, policy acceptance, actual tool discovery,
 model execution or authentication. It starts no child. Install/reload the local
 plugin only through the target host's supported, separately authorized flow.
-Then verify real startup, all 32 expected tools, one harmless status read and the
+Then verify real startup, all 33 expected tools, one harmless status read and the
 retained Codex read paths. A local process plugin does not by itself make the
 server accessible from ChatGPT web/mobile.
 
@@ -130,7 +134,7 @@ same receipt after an uncertain result, never submit a new attempt as a retry.
 - Recheck source origin, secret exclusion and modification notices for later changes.
   The present owner-authorized source scope does not authorize a directory submission.
 - Verify the assembled package on the target host through the actual plugin
-  loader, not only a direct CLI or synthetic test. Recheck the 32-tool catalog.
+  loader, not only a direct CLI or synthetic test. Recheck the 33-tool catalog.
 - Provide and test a clean-host daemon/policy/isolation/setup flow. Existing-host
   success does not establish second-PC portability, other Python versions or
   8-16 GB VRAM acceptance.

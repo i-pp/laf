@@ -95,3 +95,34 @@ in this guide. Machine checks may still reject empty, duplicate or incomplete
 selections before execution. Those inventory guards prevent missing validation;
 they do not measure behavioral coverage or replace the stated verification scope.
 Dated historical records remain historical rather than requirements for new runs.
+
+
+## Integrated Codex selection checks
+
+```sh
+python3 -B scripts/test_codex_selection_boundary.py
+python3 -B scripts/test_codex_catalog_effort.py
+python3 -B scripts/run_integrated_source_checks.py
+```
+
+These source/fake-peer checks cover provider catalogs, immutable caller intent,
+offline explicit input storage, fresh omitted defaults, legacy fail-closed
+behavior, raw effort transport, inspected version admission and OAuth owner
+pagination inside the full HTTP response. The handler is called in memory; no
+socket, real app-server, SDK child or model is started by the selection tests.
+The strict runner also includes the existing source, ACK and ordinary-pool checks.
+The standalone Core/Router Python suite above does not validate the vendored
+Codex backend, and a forwarding-only test is not backend acceptance.
+
+See repository-root `docs/codex-model-selection.md` for the behavioral contract.
+The bundled `runtime/public_laf` copy of this guide documents the standalone
+component; run the integrated commands from the repository/package root.
+
+
+The integrated selection checks also submit through the OAuth Adapter into the
+real temporary Pipeline, Events service and Outbox, and through the existing
+DaemonPipelineProxy/daemon/HostGateway route with fake owned transport. They
+verify owner access to definitively persisted pre-turn blockers, foreign denial,
+immutable origin conflicts, uncertainty/forgery refusal and bounded read-only
+ledger proof. A binding test that prearranges task ownership is not a substitute
+for this composed submission path. No socket or model is used.

@@ -62,3 +62,11 @@ change its hash, or relax heading/pin checks to satisfy a language check.
 
 This source policy does not relicense or rewrite external license material.
 No current bundled canonical license text needs a language exception.
+
+
+The integrated `scripts/test_codex_catalog_effort.py` uses ASCII Unicode escapes
+and `chr(...)` to construct multibyte provider labels, effort tokens, invalid
+Unicode/control values and request IDs. These are deliberately byte/escaping
+regressions, not translated prose. Its module docstring and fixture comments
+identify that purpose; it needs no raw-Unicode source exception or broader
+production-code allowlist.
