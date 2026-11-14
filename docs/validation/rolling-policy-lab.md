@@ -38,8 +38,9 @@ This record is not acceptance of a complete inference deployment.
 - Restoring real telemetry and completing a real quiet recovery interval produced
   a new epoch. Neither container restarted automatically.
 - Only containers and an internal network created for this trial were removed,
-  after identity/ownership checks. Their removal was checked again. The existing
-  inference and MCP services retained their process identities and active state.
+  after identity/ownership checks. Subsequent read-only inspection found no
+  remaining lab containers or network and found the existing inference/MCP
+  services active. This was not continuous noninterference monitoring.
 
 The source was copied through the Core image build-context allowlist and mounted
 read-only into an existing immutable local image. This was not a new production
