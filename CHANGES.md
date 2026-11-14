@@ -24,6 +24,20 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: optional shared rolling-pressure policy
+
+Add versioned opt-in Host/Core rolling swap policy, fresh admission and provider
+checks, capacity-aware quiet/cooldown recovery, and owned-provider stop wiring.
+Keep the existing bounded lifetime policy as the default and preserve hard
+reserves, epoch/generation fences, ownership, no-replay and explicit recovery.
+Include the policy module in the Core image source allowlist. Top-level and
+bundled source and regression selections are kept together.
+
+`docs/validation/rolling-policy-lab.md` records the isolated Docker/UDS/owned-stop
+trial and its stand-in-provider limits. Real model load calibration, complete
+Core application acceptance and live configuration replacement remain unverified.
+No running service is changed by this source update.
+
 ## Unreleased: observed new-prefix frontend installation
 
 Added a curated validation record at

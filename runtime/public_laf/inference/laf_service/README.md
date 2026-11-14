@@ -218,3 +218,34 @@ See [host supervisor recovery](../../docs/laf-host-supervisor.md) for the
 operator contract and [issue #13](https://github.com/i-pp/laf/issues/13) for
 validation tracking. Source/fake coverage is not a split-deployment or soak-test
 acceptance claim.
+
+### Experimental shared rolling-pressure policy
+
+The split HostSupervisor and Core can opt into an identical
+`rolling_swap_policy` object. It contains explicit `window_seconds`,
+`max_gap_seconds`, `io_limit_bytes` (per direction), `min_free_swap_bytes`,
+`quiet_seconds`, `cooldown_seconds`, `max_pause_seconds`, and native `page_bytes`.
+`max_gap_seconds` must be at least one second for the half-second host sampler.
+No production threshold values are implied by the synthetic tests. Existing
+configuration continues to use the bounded lifetime policy.
+
+The host advertises this contract with `policy_version: 2`. Core rejects absent,
+changed, or mismatched contracts before constructing its backend. One host-owned
+window governs monitoring, fresh Core telemetry/admission, and provider-start
+checks. In this opt-in mode Core does not independently apply its lifetime swap
+budget; hard RAM/VRAM/PSI reserves remain, and every resource read must first pass
+host admission. Quiet occupied swap alone is not a reason to reject work.
+
+Start the host first and allow a complete healthy sampling window before starting
+Core. Starting Core during warmup fails closed. Pressure uses the existing owned
+Core/Ollama stop barrier rather than assuming that work is idle. Cleanup failure
+keeps the safety latch. Explicit owner recovery still requires verified provider
+stops and the quiet interval, invalidates the epoch, and begins a new warmup.
+Neither models nor Core restart automatically. Failed/uncertain jobs never replay.
+The standalone lifecycle adapter cannot enable this policy without a supervisor.
+
+This is source/fake-tested experimental wiring, not live split-host acceptance.
+Production sampling calibration, controlled deployment, and long-duration trials
+remain required before replacing a running configuration. No automatic `swapoff`,
+`swapon`, cache dropping, or global kernel tuning is used. Pressure advice is not
+an execution permit: every provider operation retains its lifecycle fences.

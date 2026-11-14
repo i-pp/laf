@@ -280,3 +280,48 @@ class PolicyTests(unittest.TestCase):
         port.epoch='b'*32
         with self.assertRaises(ServiceError):client.status()
         with self.assertRaises(ServiceError):client.resource_policy()
+
+
+class RollingHandshakeTests(unittest.TestCase):
+    def test_core_rejects_mismatched_rolling_parameters_before_backend(self):
+        import json, tempfile
+        from pathlib import Path
+        from unittest.mock import Mock
+        from dataclasses import asdict
+        from .test_swap_window import monitor
+        from .core_server import run_core
+        from .test_configured_profiles import selection
+        parameters=asdict(monitor().policy)
+        config={'state_dir':'/state','runtime_dir':'/runtime','lifecycle_runtime_dir':'/lifecycle',**selection(),'rolling_swap_policy':parameters}
+        client=Mock();client.resource_policy.return_value={'epoch':'a'*32,'swap_limit_mib':512,'policy_version':2,'rolling_swap_policy':{**parameters,'io_limit_bytes':8192}}
+        factory=Mock()
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary)/'config.json';path.write_text(json.dumps(config));path.chmod(0o600)
+            with self.assertRaisesRegex(ServiceError,'rolling policy mismatch'):
+                run_core(path,backend_factory=factory,client_factory=lambda _:client,install_signals=False)
+        factory.assert_not_called()
+
+    def test_policy_is_pinned_even_with_same_epoch(self):
+        from .lifecycle_client import LifecycleClient
+        result={'epoch':'a'*32,'swap_limit_mib':512}
+        client=LifecycleClient(lambda *args:dict(result))
+        client.resource_policy()
+        result['swap_limit_mib']=2048
+        with self.assertRaisesRegex(ServiceError,'policy changed'):
+            client.resource_policy()
+
+    def test_resource_observation_cannot_outlive_host_fence(self):
+        from .lifecycle import HostLifecycle, LifecycleFault
+        from .test_lifecycle import Provider, sample
+        from unittest.mock import Mock
+        authority=Mock()
+        host=HostLifecycle(Provider(),sample,resource_authority=authority)
+        def observe():
+            host.safety_fault='concurrent emergency'
+            host.generation+=1
+            return sample()
+        authority.admission.side_effect=observe
+        with self.assertRaises(LifecycleFault):
+            host.dispatch({'operation':'ensure','epoch':host.epoch,'generation':host.generation})
+        with self.assertRaises(LifecycleFault):
+            host.dispatch({'operation':'sample'})

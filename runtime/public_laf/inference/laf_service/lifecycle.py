@@ -69,7 +69,8 @@ class HostLifecycle:
     Transport authentication, watchdog and crash reconciliation are deliberately
     not implemented here. Do not deploy this prototype as a security boundary.
     """
-    def __init__(self, provider, read_resources, *, read_endpoint=lambda: None, panic_callback=None, swap_limit_mib=512):
+    def __init__(self, provider, read_resources, *, read_endpoint=lambda: None, panic_callback=None, swap_limit_mib=512, resource_authority=None):
+        self.resource_authority = resource_authority
         self.swap_limit_mib = swap_limit_mib
         self.provider = provider
         self.read_endpoint = read_endpoint
@@ -119,7 +120,14 @@ class HostLifecycle:
                 raise LifecycleFault('host lifecycle closed')
             if self.safety_fault or self.fault:
                 raise LifecycleFault(self.safety_fault or self.fault)
-        check_resources(validate_sample(self.read_resources()), self.baseline, self.swap_limit_mib)
+        if self.resource_authority is not None:
+            self.resource_authority.admission()
+        else:
+            check_resources(validate_sample(self.read_resources()), self.baseline, self.swap_limit_mib)
+        with self.state_lock:
+            if (epoch != self.epoch or generation != self.generation or self.closed
+                    or self.stopping or self.safety_fault or self.fault):
+                raise LifecycleFault('resource observation superseded by lifecycle fence')
 
     def dispatch(self, request, *, deadline=None):
         with self.state_lock:
@@ -133,16 +141,24 @@ class HostLifecycle:
                 raise ValueError('operation accepts no parameters')
             if op == 'resource_policy':
                 with self.state_lock:
-                    return {'epoch': self.epoch, 'swap_limit_mib': self.swap_limit_mib}
+                    result = {'epoch': self.epoch, 'swap_limit_mib': self.swap_limit_mib}
+                    if self.resource_authority is not None:
+                        result.update(policy_version=2, rolling_swap_policy=dict(self.resource_authority.parameters))
+                    return result
             if op == 'sample':
                 with self.state_lock:
                     if self.safety_fault:
                         raise LifecycleFault(self.safety_fault)
+                    identity = self.epoch, self.generation
                 # No cached samples: Core's watchdog must use host observations.
-                resources = validate_sample(self.read_resources())
+                resources = (self.resource_authority.admission() if self.resource_authority is not None
+                             else validate_sample(self.read_resources()))
                 with self.state_lock:
+                    if (self.closed or self.stopping or self.safety_fault
+                            or identity != (self.epoch, self.generation)):
+                        raise LifecycleFault('host telemetry admission invalidated')
                     self.last_sample = time.monotonic()
-                return {'epoch': self.epoch, 'resources': resources}
+                    return {'epoch': self.epoch, 'resources': resources}
             with self._operation(deadline):
                 running = self.provider.running()
                 if type(running) is not bool:

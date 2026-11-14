@@ -201,13 +201,18 @@ class OwnedCoreStop:
 class HostSupervisor:
     def __init__(self, config, config_path, *, ollama_factory=OwnedOllama,
                  core_factory=OwnedCoreStop, read_resources=snapshot,
-                 server_factory=UnixLifecycleServer, clock=time.monotonic):
+                 server_factory=UnixLifecycleServer, clock=time.monotonic, pressure_reader=None):
         self.locks, self.servers, self.threads = [], [], []
         self.closed = threading.Event()
         self.clock, self.port = clock, None
+        self.resource_authority = None
+        if 'rolling_swap_policy' in config:
+            from .swap_window import HostPressureAuthority
+            self.resource_authority = HostPressureAuthority(
+                config['rolling_swap_policy'], pressure_reader or (lambda: snapshot(swap_capacity=True)), clock)
         self.panic_lock = threading.RLock()
         self.panic_serial = 0
-        self.awaiting_core = False
+        self.awaiting_core = self.resource_authority is not None
         self.started = False
         self.released = False
         self.cleanup_confirmed = False
@@ -231,7 +236,8 @@ class HostSupervisor:
                 raise ServiceError('active Ollama must be stopped explicitly before supervisor startup')
             self.port = HostLifecycle(provider, read_resources,
                                       read_endpoint=lambda: provider.backend.address, panic_callback=self.panic,
-                                      swap_limit_mib=config.get('swap_limit_mib', 512))
+                                      swap_limit_mib=config.get('swap_limit_mib', 512),
+                                      resource_authority=self.resource_authority)
             for control in (False, True):
                 self.servers.append(server_factory(self.port, runtime, control=control))
             self.started_at = clock()
@@ -261,7 +267,16 @@ class HostSupervisor:
                     self.panic(fault)
                 return
             try:
-                check_resources(validate_sample(self.port.read_resources()), self.port.baseline, self.port.swap_limit_mib)
+                if self.resource_authority is None:
+                    check_resources(validate_sample(self.port.read_resources()), self.port.baseline, self.port.swap_limit_mib)
+                else:
+                    decision = self.resource_authority.observe()
+                    if decision['action'] not in {'admit', 'warmup'}:
+                        raise ServiceError('rolling host pressure guard')
+                    if decision['action'] == 'warmup' and self.core.running() is False:
+                        if self.port.provider.running() is not False:
+                            raise ServiceError('provider running during host warmup')
+                        return
                 if self.awaiting_core:
                     if self.core.running() is False:
                         if self.port.provider.running() is not False:
@@ -275,6 +290,38 @@ class HostSupervisor:
                     raise ServiceError('Core sample lease expired')
             except Exception:
                 self.panic('host resource guard or Core lease failed')
+
+    def observe_pressure(self, window, now, sample):
+        """Host-local experimental pressure hook; never exposed over Core RPC.
+
+        Admission/drain coordination is not wired yet. Conservatively use the
+        existing panic barrier on pressure instead of assuming the Core is idle.
+        This supplements, and does not replace, the existing resource guard.
+        A returned advisory is never an execution permit; provider operations
+        must still validate their current epoch/generation and safety state.
+        """
+        with self.panic_lock:
+            with self.port.state_lock:
+                if self.port.closed or self.closed.is_set():
+                    raise ServiceError('host supervisor stopping')
+                if self.port.safety_fault:
+                    return {'action': 'stop', 'reason': 'existing host safety latch'}
+                identity = (self.port.epoch, self.port.generation, self.panic_serial)
+            try:
+                decision = window.observe(now, sample, idle=False)
+            except Exception:
+                decision = window.stop('pressure observation failed')
+            with self.port.state_lock:
+                if (self.port.closed or self.closed.is_set() or self.port.safety_fault
+                        or identity != (self.port.epoch, self.port.generation, self.panic_serial)):
+                    return {'action': 'stop', 'reason': 'pressure observation superseded'}
+            if decision['action'] in {'stop', 'drain', 'unload_owned'}:
+                # panic fences generations before stopping only verified owned
+                # Core/Ollama processes. Unknown cleanup keeps the latch.
+                confirmed = self.panic('rolling pressure guard requested stop')
+                return {'action': 'stopped' if confirmed else 'stop_unconfirmed',
+                        'reason': decision['reason']}
+            return decision
 
     def _monitor(self):
         while not self.closed.wait(.5):
@@ -337,17 +384,35 @@ class HostSupervisor:
                 if self.panic_serial != serial:
                     raise ServiceError('host recovery superseded by another panic')
                 epoch, generation = self.port.epoch, self.port.generation
-            first = validate_sample(self.port.read_resources())
-            for _ in range(10):
+            authority = self.resource_authority
+            read_quiet = (authority.recovery_sample if authority is not None
+                          else lambda: validate_sample(self.port.read_resources()))
+            # Rolling cooldown starts after confirmed cleanup. Waiting the full
+            # duration here is conservative even if the original pause is older.
+            duration = (max(5.0, authority.policy.quiet_seconds, authority.policy.cooldown_seconds)
+                        if authority is not None else 5.0)
+            started = previous_time = self.clock()
+            first = read_quiet()
+            for _ in range(math.ceil(duration / .5)):
                 if self.closed.is_set() or cancelled():
                     raise ServiceError('host supervisor stopping')
                 time.sleep(0.5)
-                current = validate_sample(self.port.read_resources())
+                current = read_quiet()
                 check_resources(current, current, self.port.swap_limit_mib)
+                if authority is not None:
+                    now = self.clock()
+                    if now <= previous_time or now - previous_time > authority.policy.max_gap_seconds:
+                        raise ServiceError('rolling recovery telemetry interval invalid')
+                    previous_time = now
+                quiet_fields = ('swap_used', 'pswpin', 'pswpout')
+                if authority is not None:
+                    quiet_fields += ('swap_total', 'swap_free')
                 if current['psi_full_avg10'] > 1 or any(
-                    current[key] != first[key] for key in ('swap_used', 'pswpin', 'pswpout')
+                    current[key] != first[key] for key in quiet_fields
                 ):
-                    raise ServiceError('host recovery requires five quiet seconds')
+                    raise ServiceError('host recovery requires continuous quiet telemetry')
+            if authority is not None and self.clock() - started < duration:
+                raise ServiceError('rolling recovery quiet duration incomplete')
             if self.core.running() is not False or self.port.provider.running() is not False:
                 raise ServiceError('recovery providers no longer stopped')
             with self.port.state_lock:
@@ -355,6 +420,8 @@ class HostSupervisor:
                         or self.panic_serial != serial or self.port.epoch != epoch
                         or self.port.generation != generation or not self.cleanup_confirmed):
                     raise ServiceError('host recovery invalidated')
+                if self.resource_authority is not None:
+                    self.resource_authority.reset_after_owner_recovery()
                 self.port.baseline = current
                 self.port.epoch = uuid.uuid4().hex
                 self.port.generation = 0

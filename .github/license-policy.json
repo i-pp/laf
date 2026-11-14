@@ -171,7 +171,10 @@
         "scripts/test_bootstrap.py",
         "scripts/test_bootstrap_bindings.py",
         "docs/bootstrap.md",
-        "docs/bootstrap-policy-provenance.md"
+        "docs/bootstrap-policy-provenance.md",
+        "inference/laf_service/swap_window.py",
+        "inference/laf_service/test_swap_window.py",
+        "docs/validation/rolling-policy-lab.md"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",
@@ -430,7 +433,9 @@
         "scripts/test_codex_selection_boundary.py",
         "scripts/test_codex_catalog_effort.py",
         "scripts/fixtures/codex-0.167-contract.json",
-        "docs/codex-model-selection.md"
+        "docs/codex-model-selection.md",
+        "runtime/public_laf/inference/laf_service/swap_window.py",
+        "runtime/public_laf/inference/laf_service/test_swap_window.py"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",

@@ -40,7 +40,7 @@ def validate_base(value):
 CORE_FILES = (
     '__init__.py', 'core.py', 'server.py', 'npu_bridge.py', 'lifecycle.py',
     'lifecycle_client.py', 'lifecycle_uds.py', 'core_backends.py',
-    'core_flash_worker.py', 'core_server.py',
+    'core_flash_worker.py', 'core_server.py', 'swap_window.py',
 )
 
 

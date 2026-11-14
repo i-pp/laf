@@ -36,7 +36,7 @@ class ServiceError(Exception):
     pass
 
 
-def snapshot():
+def snapshot(*, swap_capacity=False):
     mem = {}
     for line in Path('/proc/meminfo').read_text().splitlines():
         k, v = line.split(':', 1)
@@ -48,10 +48,13 @@ def snapshot():
     gpu = devices[0].parent
     full = next(l for l in Path('/proc/pressure/memory').read_text().splitlines() if l.startswith('full '))
     psi = dict(x.split('=') for x in full.split()[1:])
-    return {'mem_available': mem['MemAvailable'], 'swap_used': mem['SwapTotal'] - mem['SwapFree'],
+    result = {'mem_available': mem['MemAvailable'], 'swap_used': mem['SwapTotal'] - mem['SwapFree'],
             'vram_total': int((gpu / 'mem_info_vram_total').read_text()),
             'vram_used': int((gpu / 'mem_info_vram_used').read_text()),
             'pswpin': int(vm['pswpin']), 'pswpout': int(vm['pswpout']), 'psi_full_avg10': float(psi['avg10'])}
+    if swap_capacity:
+        result.update(swap_total=mem['SwapTotal'], swap_free=mem['SwapFree'])
+    return result
 
 
 def check_resources(s, baseline, swap_limit_mib=512):
@@ -118,8 +121,9 @@ class Job:
 
 
 class Controller:
-    def __init__(self, backend, read_resources=snapshot, start=True, swap_limit_mib=512):
+    def __init__(self, backend, read_resources=snapshot, start=True, swap_limit_mib=512, host_admission=False):
         self.backend = backend
+        self.host_admission = host_admission
         self.swap_limit_mib = swap_limit_mib
         self.models = frozenset(getattr(backend, 'models', MODELS))
         self.requires_flash = getattr(backend, 'requires_flash', True)
@@ -148,6 +152,8 @@ class Controller:
 
     def submit(self, body):
         model, messages, n, timeout = validate_request(body, self.models)
+        if self.host_admission:
+            self.safety()
         with self.lock:
             self.prune()
             if self.stop.is_set() or self.fault:
@@ -167,7 +173,9 @@ class Controller:
         # Never acquire Controller.lock here (it would invert lock ordering).
         s = self.read_resources()
         self.latest = s
-        check_resources(s, self.baseline, self.swap_limit_mib)
+        # A split host reader has already enforced the shared rolling verdict.
+        # Keep hard local reserves; never bypass admission in the reader.
+        check_resources(s, s if self.host_admission else self.baseline, self.swap_limit_mib)
         return s
 
     def watch(self):

@@ -33,6 +33,7 @@ COPY inference/laf_service/lifecycle_uds.py inference/laf_service/lifecycle_uds.
 COPY inference/laf_service/core_backends.py inference/laf_service/core_backends.py
 COPY inference/laf_service/core_flash_worker.py inference/laf_service/core_flash_worker.py
 COPY inference/laf_service/core_server.py inference/laf_service/core_server.py
+COPY inference/laf_service/swap_window.py inference/laf_service/swap_window.py
 ENV PYTHONDONTWRITEBYTECODE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 USER 1000:1000
 ENTRYPOINT ["python3", "-B", "-m", "inference.laf_service.core_server"]

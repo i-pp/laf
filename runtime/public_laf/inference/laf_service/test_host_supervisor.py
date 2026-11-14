@@ -85,6 +85,122 @@ class SupervisorTest(unittest.TestCase):
         sup.close()
         self.assertFalse((self.root / 'runtime/lifecycle.sock').exists())
 
+    def test_rolling_recovery_honors_policy_quiet_and_cooldown(self):
+        from dataclasses import asdict
+        from .test_swap_window import monitor, sample as pressure_sample
+        self.config['rolling_swap_policy'] = dict(asdict(monitor().policy), quiet_seconds=6, cooldown_seconds=8)
+        resources=pressure_sample(swap_used=48*(1<<30))
+        self.kwargs['pressure_reader'] = lambda: dict(resources)
+        sup=self.make()
+        sup.panic('test emergency')
+        old=sup.port.epoch
+        started=self.now[0]
+        with patch('inference.laf_service.host_supervisor.time.sleep', side_effect=lambda seconds: self.now.__setitem__(0,self.now[0]+seconds)):
+            sup.recover()
+        self.assertGreaterEqual(self.now[0]-started,8)
+        self.assertNotEqual(sup.port.epoch,old)
+        self.assertEqual(sup.resource_authority.decision['action'],'warmup')
+
+    def test_rolling_recovery_rejects_swap_topology_change(self):
+        from dataclasses import asdict
+        from .test_swap_window import monitor, sample as pressure_sample
+        self.config['rolling_swap_policy'] = dict(asdict(monitor().policy), cooldown_seconds=8)
+        resources=pressure_sample(swap_used=48*(1<<30))
+        self.kwargs['pressure_reader'] = lambda: dict(resources)
+        sup=self.make();sup.panic('test emergency');old=sup.port.epoch
+        def sleep(seconds):
+            self.now[0]+=seconds
+            if self.now[0]==101:
+                resources['swap_total']+=1<<30
+                resources['swap_free']+=1<<30
+        with patch('inference.laf_service.host_supervisor.time.sleep',side_effect=sleep):
+            with self.assertRaises(ServiceError):sup.recover()
+        self.assertEqual(sup.port.epoch,old)
+        self.assertTrue(sup.port.safety_fault)
+
+    def test_rolling_recovery_rejects_low_free_swap(self):
+        from dataclasses import asdict
+        from .test_swap_window import monitor, sample as pressure_sample
+        self.config['rolling_swap_policy'] = asdict(monitor().policy)
+        self.kwargs['pressure_reader'] = lambda: pressure_sample(swap_used=64*(1<<30),swap_free=0)
+        sup=self.make();sup.panic('test emergency');old=sup.port.epoch
+        with self.assertRaises(ServiceError):sup.recover()
+        self.assertEqual(sup.port.epoch,old)
+        self.assertTrue(sup.port.safety_fault)
+
+    def test_shared_authority_warmup_and_owned_stop(self):
+        from dataclasses import asdict
+        from .test_swap_window import monitor, sample as pressure_sample
+        policy = asdict(monitor().policy)
+        self.config['rolling_swap_policy'] = policy
+        resources = pressure_sample(swap_used=48 * (1 << 30))
+        self.kwargs['pressure_reader'] = lambda: dict(resources)
+        sup = self.make()
+        returned = sup.port.dispatch({'operation': 'resource_policy'})
+        self.assertEqual(returned['policy_version'], 2)
+        self.assertEqual(returned['rolling_swap_policy'], policy)
+        for step in range(9):
+            self.now[0] = 100 + step * .5
+            sup.tick()
+        self.assertFalse(sup.port.safety_fault)
+        self.now[0] = 104.5
+        resources['pswpout'] = 2
+        sup.tick()
+        self.assertTrue(sup.port.safety_fault)
+        self.assertEqual(self.events, ['core', 'ollama'])
+
+    def test_rolling_pressure_uses_owned_stop_barrier(self):
+        from .test_swap_window import monitor, sample as pressure_sample
+        sup = self.make()
+        window = monitor()
+        self.assertEqual(sup.observe_pressure(window, 0, pressure_sample())['action'], 'warmup')
+        result = sup.observe_pressure(window, 1, pressure_sample(pswpout=2))
+        self.assertEqual(result['action'], 'stopped')
+        self.assertEqual(self.events, ['core', 'ollama'])
+        self.assertTrue(sup.port.safety_fault)
+        sup.observe_pressure(window, 2, pressure_sample())
+        self.assertEqual(self.events, ['core', 'ollama'])
+
+    def test_pressure_advisory_rejects_concurrent_emergency(self):
+        sup = self.make()
+        fenced = threading.Event()
+        worker = None
+        original_lock = sup.port.state_lock
+
+        def observe(*args, **kwargs):
+            nonlocal worker
+            def emergency():
+                # Establish the same state fence that panic creates before
+                # waiting for panic_lock; complete cleanup after hook returns.
+                with original_lock:
+                    sup.panic_serial += 1
+                    sup.port.generation += 1
+                    sup.port.safety_fault = 'new emergency'
+                    sup.port.stopping = True
+                fenced.set()
+                sup.panic('new emergency')
+            worker = threading.Thread(target=emergency, daemon=True)
+            worker.start()
+            self.assertTrue(fenced.wait(2))
+            return {'action': 'admit', 'reason': 'old healthy observation'}
+
+        window = Mock()
+        window.observe.side_effect = observe
+        result = sup.observe_pressure(window, 0, {})
+        worker.join(2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(result['action'], 'stop')
+        self.assertTrue(sup.port.safety_fault)
+
+    def test_rolling_pressure_unconfirmed_stop_keeps_latch(self):
+        from .test_swap_window import monitor, sample as pressure_sample
+        sup = self.make()
+        self.provider.stop.side_effect = RuntimeError('stop failed')
+        result = sup.observe_pressure(monitor(), 0, pressure_sample(mem_available=0))
+        self.assertEqual(result['action'], 'stop_unconfirmed')
+        self.assertTrue(sup.port.safety_fault)
+        self.assertFalse(sup.cleanup_confirmed)
+
     def test_locks_nontruncating_and_contention(self):
         self.make()
         with self.assertRaises(BlockingIOError):
