@@ -1,0 +1,335 @@
+{
+  "sdk": {
+    "version": "1.30.0",
+    "requires_python": ">=3.10",
+    "license": "MIT",
+    "release": "https://pypi.org/project/mcp/1.30.0/",
+    "metadata": "https://pypi.org/pypi/mcp/1.30.0/json",
+    "source": "https://github.com/modelcontextprotocol/python-sdk/tree/v1.30.0",
+    "pyproject_git_blob": "6bee7f4923e43865081411a3c48455a4930f2af5",
+    "wheel_sha256": "666edb5009503e1047c9d60346a756f94b261f05cc2625f23d41c728ffc484d0",
+    "sdist_sha256": "445414625fce5c295faa505bb11bacece661ab6f4028d57c935db57820b7a3e4",
+    "status": "Selected 1.30.0 source pin. User-installed SDK passed subsequent native stdio and fake-Router adapter checks on Linux/Python 3.14.4; actual client, live Router, hardware and deployment acceptance remain open.",
+    "support_policy_source": "https://github.com/modelcontextprotocol/python-sdk/blob/main/SECURITY.md",
+    "support_policy_git_blob": "5a69875124adf2ab3a8d5bccc58f6545b0c9712a",
+    "wheel_bytes": 234581,
+    "sdist_bytes": 680511,
+    "runtime_release_accepted": false,
+    "selection_observed_date": "2026-11-11",
+    "support_policy_note": "Only the newest release in the 1.x maintenance line receives fixes; recheck current support and advisories before future installation or release."
+  },
+  "advisory": {
+    "id": "CVE-2026-59951",
+    "affected_transport": "stateful Streamable HTTP",
+    "stdio_explicitly_unaffected": true,
+    "fixed_v1": "1.30.0",
+    "remote_use_not_approved": true,
+    "source": "https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-84m7-p3x7-pcfv",
+    "affected_versions": [
+      "1.8.0 through 1.29.1",
+      "2.0.0 through 2.1.1"
+    ],
+    "stdio_exclusion_quote": "servers using only the stdio or SSE transports",
+    "support_policy": "https://github.com/modelcontextprotocol/python-sdk/security",
+    "selected_sdk_in_affected_range": false
+  },
+  "limitations": [
+    "Official archive identities are metadata evidence, not bundled SDK artifacts. No SDK package was installed by the source migration.",
+    "Historical cloud SDK 1.29.0 tests do not establish SDK 1.30.0 compatibility. Separate native SDK 1.30.0 checks are recorded below and do not establish other SDK or platform support.",
+    "The 29-version SDK installer selection is platform-specific, not a full cross-platform hash lock or exhaustive license/security clearance.",
+    "Python 3.10 metadata minimum is not a measured Python 3.10 test pass. The dependency closure includes rpds-py requiring Python >=3.11.",
+    "User-reported SDK installation checks do not establish adapter runtime, live Router, hardware, small-memory, clean-host, or second-PC acceptance.",
+    "Runtime venv intentionally has no pip/build tools; do not modify it to run package build tests.",
+    "Remote transport, authentication/catalog changes, service activation, model downloads and Docker actions remain outside this source candidate."
+  ],
+  "historical_cloud_observation": {
+    "scope": "Historical prior-candidate SDK 1.29.0 evidence only; not tests of the selected SDK 1.30.0. Original installed archives were not re-downloaded or rehashed.",
+    "observed_python": "3.12.14",
+    "sdk": {
+      "version": "1.29.0",
+      "requires_python": ">=3.10",
+      "license": "MIT",
+      "release": "https://pypi.org/project/mcp/1.29.0/",
+      "metadata": "https://pypi.org/pypi/mcp/1.29.0/json",
+      "source": "https://github.com/modelcontextprotocol/python-sdk/tree/v1.29.0",
+      "pyproject_git_blob": "6bee7f4923e43865081411a3c48455a4930f2af5",
+      "wheel_sha256": "f5a075bb611f23d6f4d080c6a1699fa62772eebc562ba9e66b306ddde1c755f7",
+      "sdist_sha256": "52d01f334de1868cc3bb2d6604931126a67631f99a6c5d3b82ba47290315ec36",
+      "supported_runtime_release": false,
+      "status": "Existing local test dependency only; select current supported SDK release before runtime release.",
+      "support_policy_source": "https://github.com/modelcontextprotocol/python-sdk/blob/main/SECURITY.md",
+      "support_policy_git_blob": "5a69875124adf2ab3a8d5bccc58f6545b0c9712a"
+    },
+    "installed_dependency_inventory": [
+      {
+        "name": "annotated-types",
+        "version": "0.8.0",
+        "requires_python": ">=3.10",
+        "license": "MIT"
+      },
+      {
+        "name": "anyio",
+        "version": "4.14.2",
+        "requires_python": ">=3.10",
+        "license": "MIT"
+      },
+      {
+        "name": "attrs",
+        "version": "26.1.0",
+        "requires_python": ">=3.9",
+        "license": "MIT"
+      },
+      {
+        "name": "certifi",
+        "version": "2026.10.19",
+        "requires_python": ">=3.7",
+        "license": "MPL-2.0"
+      },
+      {
+        "name": "click",
+        "version": "8.4.2",
+        "requires_python": ">=3.10",
+        "license": "BSD-3-Clause"
+      },
+      {
+        "name": "h11",
+        "version": "0.16.0",
+        "requires_python": ">=3.8",
+        "license": "MIT"
+      },
+      {
+        "name": "httpcore",
+        "version": "1.0.9",
+        "requires_python": ">=3.8",
+        "license": "BSD-3-Clause"
+      },
+      {
+        "name": "httpx",
+        "version": "0.28.1",
+        "requires_python": ">=3.8",
+        "license": "BSD-3-Clause"
+      },
+      {
+        "name": "httpx-sse",
+        "version": "0.4.3",
+        "requires_python": ">=3.9",
+        "license": "MIT"
+      },
+      {
+        "name": "idna",
+        "version": "3.18",
+        "requires_python": ">=3.9",
+        "license": "BSD-3-Clause"
+      },
+      {
+        "name": "jsonschema",
+        "version": "4.26.0",
+        "requires_python": ">=3.10",
+        "license": "MIT"
+      },
+      {
+        "name": "jsonschema-specifications",
+        "version": "2025.9.1",
+        "requires_python": ">=3.9",
+        "license": "MIT"
+      },
+      {
+        "name": "mcp",
+        "version": "1.29.0",
+        "requires_python": ">=3.10",
+        "license": "MIT"
+      },
+      {
+        "name": "pydantic",
+        "version": "2.13.4",
+        "requires_python": ">=3.9",
+        "license": "MIT"
+      },
+      {
+        "name": "pydantic-settings",
+        "version": "2.15.0",
+        "requires_python": ">=3.10",
+        "license": "MIT"
+      },
+      {
+        "name": "pydantic_core",
+        "version": "2.46.4",
+        "requires_python": ">=3.9",
+        "license": "MIT"
+      },
+      {
+        "name": "PyJWT",
+        "version": "2.13.0",
+        "requires_python": ">=3.9",
+        "license": "MIT"
+      },
+      {
+        "name": "python-dotenv",
+        "version": "1.2.2",
+        "requires_python": ">=3.10",
+        "license": "BSD-3-Clause"
+      },
+      {
+        "name": "python-multipart",
+        "version": "0.0.32",
+        "requires_python": ">=3.10",
+        "license": "Apache-2.0"
+      },
+      {
+        "name": "referencing",
+        "version": "0.37.0",
+        "requires_python": ">=3.10",
+        "license": "MIT"
+      },
+      {
+        "name": "rpds-py",
+        "version": "2026.6.3",
+        "requires_python": ">=3.11",
+        "license": "MIT"
+      },
+      {
+        "name": "sse-starlette",
+        "version": "3.4.8",
+        "requires_python": ">=3.10",
+        "license": "BSD-3-Clause"
+      },
+      {
+        "name": "starlette",
+        "version": "1.6.0",
+        "requires_python": ">=3.10",
+        "license": "BSD-3-Clause"
+      },
+      {
+        "name": "typing-inspection",
+        "version": "0.4.3",
+        "requires_python": ">=3.10",
+        "license": "MIT"
+      },
+      {
+        "name": "typing_extensions",
+        "version": "4.16.0",
+        "requires_python": ">=3.9",
+        "license": "PSF-2.0"
+      },
+      {
+        "name": "typing_extensions",
+        "version": "4.16.0",
+        "requires_python": ">=3.9",
+        "license": "PSF-2.0"
+      },
+      {
+        "name": "uvicorn",
+        "version": "0.52.1",
+        "requires_python": ">=3.10",
+        "license": "BSD-3-Clause"
+      }
+    ]
+  },
+  "user_reported_sdk_installation": {
+    "scope": "Reported SDK-only installation checks on 2026-11-11, not adapter protocol, hardware, live Router, or deployment acceptance.",
+    "system": "Ubuntu 26.04.1 x86_64",
+    "python": "3.14.4",
+    "sdk": "1.30.0",
+    "pyjwt": "2.15.1",
+    "checks": [
+      "pip check using host pip --python against isolated venv",
+      "low-level Server and stdio client imports",
+      "exact 29 package versions",
+      "isolated prefix"
+    ],
+    "package_versions": {
+      "annotated-types": "0.8.0",
+      "anyio": "4.14.2",
+      "attrs": "26.1.0",
+      "certifi": "2026.10.19",
+      "cffi": "2.1.1",
+      "click": "8.4.2",
+      "cryptography": "50.0.0",
+      "h11": "0.16.0",
+      "httpcore": "1.0.9",
+      "httpx": "0.28.1",
+      "httpx-sse": "0.4.3",
+      "idna": "3.18",
+      "jsonschema": "4.26.0",
+      "jsonschema-specifications": "2025.9.1",
+      "mcp": "1.30.0",
+      "pycparser": "3.0",
+      "pydantic": "2.13.4",
+      "pydantic-core": "2.46.4",
+      "pydantic-settings": "2.15.0",
+      "pyjwt": "2.15.1",
+      "python-dotenv": "1.2.2",
+      "python-multipart": "0.0.32",
+      "referencing": "0.37.0",
+      "rpds-py": "2026.6.3",
+      "sse-starlette": "3.4.8",
+      "starlette": "1.6.0",
+      "typing-extensions": "4.16.0",
+      "typing-inspection": "0.4.3",
+      "uvicorn": "0.52.1"
+    },
+    "build_tools_in_runtime_venv": false,
+    "candidate_protocol_checks": "Subsequent native SDK 1.30.0 validation passed; see native_sdk_1_30_0_validation. Installation and adapter validation are distinct evidence."
+  },
+  "modification_note": "Modified 2026-11-12: add recovered native SDK 1.30.0 evidence and explicit limits; preserve historical SDK 1.29.0 inventory separately.",
+  "native_sdk_1_30_0_validation": {
+    "date_utc": "2026-11-11",
+    "python": "3.14.4",
+    "sdk": "1.30.0",
+    "scope": "Unmodified source candidate, user-installed SDK, private test sockets, synthetic providers and owned child processes only; no SDK installation or existing Router/service/model changes by these checks.",
+    "mcp_runtime": {
+      "run": 86,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "actual_sdk_protocol_cases_included": 12,
+      "package_build_cases_included": false
+    },
+    "router_core_client_python": {
+      "run": 513,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "mcp_and_package_build_cases_included": false
+    },
+    "overlap_note": "Focused portable/socket/Flash checks overlap the 513-case source suite and must not be added to it. These counts are not a combined coverage or certification score.",
+    "recovery_limits": [
+      "Raw JSON/logs recovered on 2026-11-12; artifact save times normalized from host +09:00 to UTC, not execution start/end times.",
+      "Successful 513-case command was not preserved; preceding direct isolated script invocation failed to import its sibling helper. Do not count that failed invocation as a pass.",
+      "Two additional adapter package cases were reported passing, but their raw log location was not recovered; excluded from the independently recovered count.",
+      "SDK integrity check compared four saved file content/size/mtime samples, not every file in the installed prefix."
+    ],
+    "validation_record": "docs/laf-mcp-validation.md",
+    "runtime_release_accepted": false,
+    "additional_launcher_harness": {
+      "run": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "private_uds_synthetic_provider_cases": 3,
+      "missing_sdk_startup_refusal_cases": 1
+    }
+  },
+  "post_validation_main_integration": {
+    "date_utc": "2026-11-12",
+    "public_main": "03ddf8b92d6eb49b97768d98deffe638065a9bda",
+    "native_evidence_base": "116a4192f168c912491a5d40c4ceeca531f6b80e",
+    "scope": "Add upstream CI/license-evidence files, upstream test-only early oversized/Origin rejection fixes, local license-policy classification and SDK-free CI steps; production runtime, dependencies and pins remain unchanged from the native-tested candidate.",
+    "full_native_suite_rerun": false,
+    "reason": "Do not duplicate completed native suites; preserve exact evidence boundaries. Rebased-tree full/native acceptance remains separate.",
+    "local_checks": [
+      "Python/JSON/shell syntax",
+      "plugin source manifest",
+      "declared license evidence, checker v0.1.0, 145 indexed files, zero exceptions"
+    ],
+    "legal_or_runtime_release_accepted": false,
+    "local_source_only_ci": {
+      "mcp_cases": 74,
+      "installer_cases": 56,
+      "actual_sdk_cases_included": false,
+      "sdk_installed_or_downloaded": false,
+      "package_build_cases_included": false,
+      "yaml_and_shell_syntax": "PASS"
+    }
+  }
+}

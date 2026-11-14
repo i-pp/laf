@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "laf": {
+      "command": "python3",
+      "args": [
+        "-B",
+        "./launcher.py"
+      ],
+      "cwd": "."
+    }
+  }
+}

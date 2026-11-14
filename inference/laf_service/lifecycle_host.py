@@ -74,5 +74,8 @@ class OwnedOllama:
 
 
 def fixed_host_lifecycle(config, config_path):
+    if 'rolling_swap_policy' in config:
+        raise ServiceError('rolling policy requires the host supervisor')
     provider = OwnedOllama(config, config_path)
-    return HostLifecycle(provider, snapshot, read_endpoint=lambda: provider.backend.address)
+    return HostLifecycle(provider, snapshot, read_endpoint=lambda: provider.backend.address,
+                         swap_limit_mib=config.get('swap_limit_mib', 512))

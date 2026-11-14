@@ -61,14 +61,20 @@ Discover the active model IDs with `GET /v1/models` before submitting a job.
 The default legacy profile returns HTTP 200 with:
 
 ```json
-{"models":["coder-next","flash","gpt-oss-120b"],"context_limit":8192,"max_output_tokens":1024,"max_large_models_loaded":1}
+{"models":["coder-next","flash","gpt-oss-120b"],"context_limit":8192,"max_output_tokens":1024,"max_large_models_loaded":1,"default_model":"gpt-oss-120b","flash_enabled":true}
 ```
 
 `POST /v1/jobs` submits exactly once. Required: model, messages. Optional:
 max_tokens (default 256, integer 1 to 1024), timeout_seconds (default 180, integer 1 to 300).
 Only IDs in the selected instance catalog are accepted; the three above belong
-to the default legacy profile. The opt-in [Core candidate profiles](../../docs/laf-candidate-profiles.md)
-can instead select configured `test-*` IDs and do not require Flash. Each message
+to the default legacy profile. Normal
+[operator profiles](../../docs/laf-configured-models.md) instead select pinned
+model IDs, an explicit default and optional Flash. The isolated
+[candidate profiles](../../docs/laf-candidate-profiles.md) retain `test-*` IDs,
+no default and no Flash. `default_model` is a selected ID or null;
+`flash_enabled` agrees with Flash's catalog membership. Both are also reported
+under `gpu` in capabilities. The client validates a fresh catalog before each
+submission; older four-field catalogs keep legacy compatibility. Each message
 has exactly role (system/user/assistant) and text content. There are 1 to 32 messages and at most 24576
 UTF-8 text bytes; the stricter conservative admission budget is
 `text_bytes + 64 * message_count + max_tokens + 256 <= 8192`. No tools, URL fetching or URL input objects,
@@ -125,8 +131,10 @@ proof of server rejection. There is no idempotency key or automatic POST retry.
 One GPU execution lane, queue depth 8, sixteen HTTP handlers. All selected models
 use the same queue and deadlines include queueing, loading and generation. In the
 default legacy profile, Flash is resident and only one of Next/120B is loaded.
-The opt-in Core candidate profile has no resident Flash and permits only one
-configured Ollama model to be loaded. Each profile checks physical RAM/VRAM
+Normal configured Core profiles permit one configured Ollama model alongside
+optional resident Flash, according to the explicit Flash policy. The isolated
+Core candidate profile has no resident Flash and permits one configured Ollama
+model. Each profile checks physical RAM/VRAM
 reclamation before a model switch. Deadlines and cancellation do not retry user work. Resources,
 stop ownership and bounded recovery are enforced on the server, not entrusted to
 the client. Multiple pending clients are bounded, not parallel GPU execution.

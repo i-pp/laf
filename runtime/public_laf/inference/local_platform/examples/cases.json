@@ -1,0 +1,6 @@
+[
+  {"function":"clamped_add","args":[2,3,10],"expected":5},
+  {"function":"clamped_add","args":[8,7,10],"expected":10},
+  {"function":"clamped_add","args":[-2,3,10],"expected":1},
+  {"function":"clamped_add","args":[0,0,10],"expected":0}
+]

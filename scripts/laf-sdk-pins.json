@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "purpose": "Candidate Linux x86_64 CPython 3.12/3.14 SDK-only closure. Not an acquired artifact lock or completed runtime test.",
+  "license": "LicenseRef-KOL-v1",
+  "packages": {
+    "annotated-types": {
+      "version": "0.8.0"
+    },
+    "anyio": {
+      "version": "4.14.2"
+    },
+    "attrs": {
+      "version": "26.1.0"
+    },
+    "certifi": {
+      "version": "2026.10.19"
+    },
+    "cffi": {
+      "version": "2.1.1"
+    },
+    "click": {
+      "version": "8.4.2"
+    },
+    "cryptography": {
+      "version": "50.0.0"
+    },
+    "h11": {
+      "version": "0.16.0"
+    },
+    "httpcore": {
+      "version": "1.0.9"
+    },
+    "httpx": {
+      "version": "0.28.1"
+    },
+    "httpx-sse": {
+      "version": "0.4.3"
+    },
+    "idna": {
+      "version": "3.18"
+    },
+    "jsonschema": {
+      "version": "4.26.0"
+    },
+    "jsonschema-specifications": {
+      "version": "2025.9.1"
+    },
+    "mcp": {
+      "version": "1.30.0",
+      "wheel_sha256": "666edb5009503e1047c9d60346a756f94b261f05cc2625f23d41c728ffc484d0",
+      "wheel_size": 234581
+    },
+    "pycparser": {
+      "version": "3.0"
+    },
+    "pydantic": {
+      "version": "2.13.4"
+    },
+    "pydantic-core": {
+      "version": "2.46.4"
+    },
+    "pydantic-settings": {
+      "version": "2.15.0"
+    },
+    "pyjwt": {
+      "version": "2.15.1"
+    },
+    "python-dotenv": {
+      "version": "1.2.2"
+    },
+    "python-multipart": {
+      "version": "0.0.32"
+    },
+    "referencing": {
+      "version": "0.37.0"
+    },
+    "rpds-py": {
+      "version": "2026.6.3"
+    },
+    "sse-starlette": {
+      "version": "3.4.8"
+    },
+    "starlette": {
+      "version": "1.6.0"
+    },
+    "typing-extensions": {
+      "version": "4.16.0"
+    },
+    "typing-inspection": {
+      "version": "0.4.3"
+    },
+    "uvicorn": {
+      "version": "0.52.1"
+    }
+  },
+  "copyright": "2026 I-plusplus Inc.",
+  "created": "2026-11-11"
+}

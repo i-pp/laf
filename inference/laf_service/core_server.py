@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Changed 2026-11-13: bounded swap policy and explicit quiet resource recovery.
+
 """Explicit Core-only entrypoint. The legacy host entrypoint remains unchanged."""
 from __future__ import annotations
 import argparse
@@ -29,7 +31,7 @@ import signal
 import stat
 import threading
 from .core import Controller, ServiceError
-from .core_backends import CoreBackends, acceptance_profiles
+from .core_backends import CoreBackends, acceptance_profiles, configured_selection
 from .lifecycle_client import LifecycleClient
 from .lifecycle_uds import FramedExchange, UnixConnector, decode
 from .server import Handler, Server, private_dir
@@ -45,16 +47,31 @@ def load_config(path):
             or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1 or info.st_size > 32768):
         raise ServiceError('owned mode-0600 Core configuration required')
     config = decode(path.read_bytes())
+    # Changed 2026-11-11: normal owner-selected catalogs explicitly include/exclude Flash.
     candidate = type(config) is dict and 'acceptance_ollama_profiles' in config
-    required = {'state_dir', 'runtime_dir', 'lifecycle_runtime_dir', 'acceptance_ollama_profiles'} if candidate else REQUIRED
-    if type(config) is not dict or not required <= set(config) or set(config) - required - {'npu_socket'}:
+    normal = type(config) is dict and any(key in config for key in ('ollama_profiles', 'flash_enabled', 'default_model'))
+    if normal:
+        _, flash, _ = configured_selection(config)
+        required = {'state_dir', 'runtime_dir', 'lifecycle_runtime_dir', 'ollama_profiles', 'flash_enabled', 'default_model'}
+        if flash:
+            required |= {'strata_source', 'tokenizer_python', 'strata_command'}
+    else:
+        required = {'state_dir', 'runtime_dir', 'lifecycle_runtime_dir', 'acceptance_ollama_profiles'} if candidate else REQUIRED
+    if type(config) is not dict or not required <= set(config) or set(config) - required - {'npu_socket', 'swap_limit_mib', 'rolling_swap_policy'}:
         raise ServiceError('explicit Core configuration fields required')
+    if 'rolling_swap_policy' in config:
+        from .swap_window import WindowPolicy
+        if type(config['rolling_swap_policy']) is not dict:
+            raise ServiceError('explicit rolling policy required')
+        WindowPolicy(**config['rolling_swap_policy'])
+    if 'swap_limit_mib' in config and (type(config['swap_limit_mib']) is not int or not 512 <= config['swap_limit_mib'] <= 2048):
+        raise ServiceError('swap_limit_mib must be an integer from 512 through 2048')
     if candidate:
         acceptance_profiles(config['acceptance_ollama_profiles'])
-    for name in required - {'strata_command', 'acceptance_ollama_profiles'}:
+    for name in required - {'strata_command', 'acceptance_ollama_profiles', 'ollama_profiles', 'flash_enabled', 'default_model'}:
         if type(config[name]) is not str or not Path(config[name]).is_absolute():
             raise ServiceError('absolute container-native Core paths required')
-    if not candidate:
+    if 'strata_command' in required:
         command = config['strata_command']
         if (type(command) is not list or not command or len(command) > 128
                 or any(type(x) is not str or not x or len(x) > 4096 for x in command)
@@ -76,6 +93,13 @@ def run_core(path, *, backend_factory=CoreBackends, client_factory=lifecycle_cli
     path = Path(path)
     config = load_config(path)
     client = client_factory(config)
+    policy = client.resource_policy()
+    if policy['swap_limit_mib'] != config.get('swap_limit_mib', 512):
+        raise ServiceError('Core and host swap policy mismatch')
+    if policy.get('rolling_swap_policy') != config.get('rolling_swap_policy'):
+        raise ServiceError('Core and host rolling policy mismatch')
+    if 'rolling_swap_policy' in config and policy.get('policy_version') != 2:
+        raise ServiceError('rolling host policy version mismatch')
     # Namespace/UID refusal precedes any Core runtime-directory creation.
     backend = backend_factory(config, path, client)
     state, runtime = private_dir(config['state_dir']), private_dir(config['runtime_dir'])
@@ -88,7 +112,8 @@ def run_core(path, *, backend_factory=CoreBackends, client_factory=lifecycle_cli
                 or lock_info.st_nlink != 1 or stat.S_IMODE(lock_info.st_mode) != 0o600):
             raise ServiceError('Core singleton lock identity invalid')
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        controller = Controller(backend, client.read_resources, start=False)
+        controller = Controller(backend, client.read_resources, start=False, swap_limit_mib=config.get('swap_limit_mib', 512),
+                                host_admission='rolling_swap_policy' in config)
         # Refresh the host lease and enforce host resource limits during startup.
         controller.monitor.start()
         def shutdown(*_):

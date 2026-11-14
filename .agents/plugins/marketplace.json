@@ -1,0 +1,20 @@
+{
+  "name": "laf-experimental",
+  "interface": {
+    "displayName": "Local AI Fabric experimental"
+  },
+  "plugins": [
+    {
+      "name": "laf",
+      "source": {
+        "source": "local",
+        "path": "."
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

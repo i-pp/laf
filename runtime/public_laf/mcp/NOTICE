@@ -1,0 +1,21 @@
+Local AI Fabric source
+
+SPDX-FileCopyrightText: 2026 I-plusplus Inc.
+SPDX-License-Identifier: LicenseRef-KOL-v1
+
+This distribution includes AceIS, developed by I-plusplus and the AceIS contributors.
+
+Here, AceIS identifies the AceIS-named service adapter components in this source
+tree. This is not a complete AceIS system, a runtime image, or a model distribution.
+The tree includes Local AI Fabric client and router adapters. Covered first-party
+material is covered by the top-level LICENSE throughout this repository and
+its subdirectories, as explained in LICENSING.md. SPDX comments identify the
+same first-party scope where comment syntax is available.
+
+Referenced runtimes, SDKs, libraries, models, tokenizer assets and container images
+remain under their own terms. They are not relicensed by this NOTICE or LICENSE.
+No third-party runtime or model payload is included in this source snapshot.
+
+This NOTICE supplies attribution information only. It does not add conditions to
+or modify KISS Open License Version 1.0. Attribution does not imply endorsement.
+Applicable original notices must be preserved.

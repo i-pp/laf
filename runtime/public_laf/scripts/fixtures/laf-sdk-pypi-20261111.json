@@ -1,0 +1,1089 @@
+{
+  "schema": 1,
+  "observed_at_utc": "2026-11-11T14:20:10.355364+00:00",
+  "scope": "Offline regression facts selected from official PyPI JSON. Descriptive prose, sdist entries and unrelated fields are omitted. No artifact bytes, acquired wheel lock, source-file hash inventory or runtime evidence.",
+  "packages": {
+    "annotated-types": {
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "requires_dist": null,
+      "provides_extra": null,
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "MIT",
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/annotated-types/0.8.0/json",
+      "vulnerabilities": []
+    },
+    "anyio": {
+      "name": "anyio",
+      "version": "4.14.2",
+      "requires_dist": [
+        "exceptiongroup>=1.0.2; python_version < \"3.11\"",
+        "idna>=2.8",
+        "typing_extensions>=4.5; python_version < \"3.13\"",
+        "trio>=0.32.0; extra == \"trio\""
+      ],
+      "provides_extra": [
+        "trio"
+      ],
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "MIT",
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/anyio/4.14.2/json",
+      "vulnerabilities": []
+    },
+    "attrs": {
+      "name": "attrs",
+      "version": "26.1.0",
+      "requires_dist": null,
+      "provides_extra": null,
+      "requires_python": ">=3.9",
+      "license": null,
+      "license_expression": "MIT",
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/attrs/26.1.0/json",
+      "vulnerabilities": []
+    },
+    "certifi": {
+      "name": "certifi",
+      "version": "2026.10.19",
+      "requires_dist": null,
+      "provides_extra": null,
+      "requires_python": ">=3.7",
+      "license": "MPL-2.0",
+      "license_expression": null,
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/certifi/2026.10.19/json",
+      "vulnerabilities": []
+    },
+    "cffi": {
+      "name": "cffi",
+      "version": "2.1.1",
+      "requires_dist": [
+        "pycparser; implementation_name != \"PyPy\""
+      ],
+      "provides_extra": null,
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "MIT-0",
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/cffi/2.1.1/json",
+      "vulnerabilities": []
+    },
+    "click": {
+      "name": "click",
+      "version": "8.4.2",
+      "requires_dist": [
+        "colorama; platform_system == \"Windows\""
+      ],
+      "provides_extra": null,
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "BSD-3-Clause",
+      "license_files": [
+        "LICENSE.txt"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/click/8.4.2/json",
+      "vulnerabilities": []
+    },
+    "cryptography": {
+      "name": "cryptography",
+      "version": "50.0.0",
+      "requires_dist": [
+        "cffi>=2.0.0; platform_python_implementation != \"PyPy\"",
+        "typing-extensions>=4.13.2; python_full_version < \"3.11\"",
+        "bcrypt>=3.1.5; extra == \"ssh\""
+      ],
+      "provides_extra": [
+        "ssh"
+      ],
+      "requires_python": "!=3.9.0,!=3.9.1,>=3.9",
+      "license": null,
+      "license_expression": "Apache-2.0 OR BSD-3-Clause",
+      "license_files": [
+        "LICENSE",
+        "LICENSE.APACHE",
+        "LICENSE.BSD"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/cryptography/50.0.0/json",
+      "vulnerabilities": []
+    },
+    "h11": {
+      "name": "h11",
+      "version": "0.16.0",
+      "requires_dist": null,
+      "provides_extra": null,
+      "requires_python": ">=3.8",
+      "license": "MIT",
+      "license_expression": null,
+      "license_files": [
+        "LICENSE.txt"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/h11/0.16.0/json",
+      "vulnerabilities": []
+    },
+    "httpcore": {
+      "name": "httpcore",
+      "version": "1.0.9",
+      "requires_dist": [
+        "certifi",
+        "h11>=0.16",
+        "anyio<5.0,>=4.0; extra == \"asyncio\"",
+        "h2<5,>=3; extra == \"http2\"",
+        "socksio==1.*; extra == \"socks\"",
+        "trio<1.0,>=0.22.0; extra == \"trio\""
+      ],
+      "provides_extra": [
+        "asyncio",
+        "http2",
+        "socks",
+        "trio"
+      ],
+      "requires_python": ">=3.8",
+      "license": null,
+      "license_expression": "BSD-3-Clause",
+      "license_files": [
+        "LICENSE.md"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/httpcore/1.0.9/json",
+      "vulnerabilities": []
+    },
+    "httpx": {
+      "name": "httpx",
+      "version": "0.28.1",
+      "requires_dist": [
+        "anyio",
+        "certifi",
+        "httpcore==1.*",
+        "idna",
+        "brotli; platform_python_implementation == \"CPython\" and extra == \"brotli\"",
+        "brotlicffi; platform_python_implementation != \"CPython\" and extra == \"brotli\"",
+        "click==8.*; extra == \"cli\"",
+        "pygments==2.*; extra == \"cli\"",
+        "rich<14,>=10; extra == \"cli\"",
+        "h2<5,>=3; extra == \"http2\"",
+        "socksio==1.*; extra == \"socks\"",
+        "zstandard>=0.18.0; extra == \"zstd\""
+      ],
+      "provides_extra": [
+        "brotli",
+        "cli",
+        "http2",
+        "socks",
+        "zstd"
+      ],
+      "requires_python": ">=3.8",
+      "license": "BSD-3-Clause",
+      "license_expression": null,
+      "license_files": null,
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/httpx/0.28.1/json",
+      "vulnerabilities": []
+    },
+    "httpx-sse": {
+      "name": "httpx-sse",
+      "version": "0.4.3",
+      "requires_dist": null,
+      "provides_extra": null,
+      "requires_python": ">=3.9",
+      "license": "MIT",
+      "license_expression": null,
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/httpx-sse/0.4.3/json",
+      "vulnerabilities": []
+    },
+    "idna": {
+      "name": "idna",
+      "version": "3.18",
+      "requires_dist": [
+        "ruff>=0.6.2; extra == \"all\"",
+        "mypy>=1.11.2; extra == \"all\"",
+        "pytest>=8.3.2; extra == \"all\""
+      ],
+      "provides_extra": [
+        "all"
+      ],
+      "requires_python": ">=3.9",
+      "license": null,
+      "license_expression": "BSD-3-Clause",
+      "license_files": [
+        "LICENSE.md"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/idna/3.18/json",
+      "vulnerabilities": []
+    },
+    "jsonschema": {
+      "name": "jsonschema",
+      "version": "4.26.0",
+      "requires_dist": [
+        "attrs>=22.2.0",
+        "jsonschema-specifications>=2023.03.6",
+        "referencing>=0.28.4",
+        "rpds-py>=0.25.0",
+        "fqdn; extra == \"format\"",
+        "idna; extra == \"format\"",
+        "isoduration; extra == \"format\"",
+        "jsonpointer>1.13; extra == \"format\"",
+        "rfc3339-validator; extra == \"format\"",
+        "rfc3987; extra == \"format\"",
+        "uri-template; extra == \"format\"",
+        "webcolors>=1.11; extra == \"format\"",
+        "fqdn; extra == \"format-nongpl\"",
+        "idna; extra == \"format-nongpl\"",
+        "isoduration; extra == \"format-nongpl\"",
+        "jsonpointer>1.13; extra == \"format-nongpl\"",
+        "rfc3339-validator; extra == \"format-nongpl\"",
+        "rfc3986-validator>0.1.0; extra == \"format-nongpl\"",
+        "rfc3987-syntax>=1.1.0; extra == \"format-nongpl\"",
+        "uri-template; extra == \"format-nongpl\"",
+        "webcolors>=24.6.0; extra == \"format-nongpl\""
+      ],
+      "provides_extra": [
+        "format",
+        "format-nongpl"
+      ],
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "MIT",
+      "license_files": [
+        "COPYING"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/jsonschema/4.26.0/json",
+      "vulnerabilities": []
+    },
+    "jsonschema-specifications": {
+      "name": "jsonschema-specifications",
+      "version": "2025.9.1",
+      "requires_dist": [
+        "referencing>=0.31.0"
+      ],
+      "provides_extra": null,
+      "requires_python": ">=3.9",
+      "license": null,
+      "license_expression": "MIT",
+      "license_files": [
+        "COPYING"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/jsonschema-specifications/2025.9.1/json",
+      "vulnerabilities": []
+    },
+    "mcp": {
+      "name": "mcp",
+      "version": "1.30.0",
+      "requires_dist": [
+        "anyio>=4.5",
+        "httpx-sse>=0.4",
+        "httpx<1.0.0,>=0.27.1",
+        "jsonschema>=4.20.0",
+        "pydantic-settings>=2.5.2",
+        "pydantic<3.0.0,>=2.11.0; python_version < \"3.14\"",
+        "pydantic<3.0.0,>=2.12.0; python_version >= \"3.14\"",
+        "pyjwt[crypto]>=2.10.1",
+        "python-multipart>=0.0.9",
+        "pywin32>=310; sys_platform == \"win32\" and python_version < \"3.14\"",
+        "pywin32>=311; sys_platform == \"win32\" and python_version >= \"3.14\"",
+        "sse-starlette>=1.6.1",
+        "starlette>=0.27; python_version < \"3.14\"",
+        "starlette>=0.48.0; python_version >= \"3.14\"",
+        "typing-extensions>=4.9.0",
+        "typing-inspection>=0.4.1",
+        "uvicorn>=0.31.1; sys_platform != \"emscripten\"",
+        "python-dotenv>=1.0.0; extra == \"cli\"",
+        "typer>=0.16.0; extra == \"cli\"",
+        "rich>=13.9.4; extra == \"rich\"",
+        "websockets>=15.0.1; extra == \"ws\""
+      ],
+      "provides_extra": [
+        "cli",
+        "rich",
+        "ws"
+      ],
+      "requires_python": ">=3.10",
+      "license": "MIT",
+      "license_expression": null,
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/mcp/1.30.0/json",
+      "vulnerabilities": []
+    },
+    "pycparser": {
+      "name": "pycparser",
+      "version": "3.0",
+      "requires_dist": null,
+      "provides_extra": null,
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "BSD-3-Clause",
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/pycparser/3.0/json",
+      "vulnerabilities": []
+    },
+    "pydantic": {
+      "name": "pydantic",
+      "version": "2.13.4",
+      "requires_dist": [
+        "annotated-types>=0.6.0",
+        "pydantic-core==2.46.4",
+        "typing-extensions>=4.14.1",
+        "typing-inspection>=0.4.2",
+        "email-validator>=2.0.0; extra == \"email\"",
+        "tzdata; (python_version >= \"3.9\" and platform_system == \"Windows\") and extra == \"timezone\""
+      ],
+      "provides_extra": [
+        "email",
+        "timezone"
+      ],
+      "requires_python": ">=3.9",
+      "license": null,
+      "license_expression": "MIT",
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/pydantic/2.13.4/json",
+      "vulnerabilities": []
+    },
+    "pydantic-core": {
+      "name": "pydantic_core",
+      "version": "2.46.4",
+      "requires_dist": [
+        "typing-extensions>=4.14.1"
+      ],
+      "provides_extra": null,
+      "requires_python": ">=3.9",
+      "license": null,
+      "license_expression": "MIT",
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/pydantic-core/2.46.4/json",
+      "vulnerabilities": []
+    },
+    "pydantic-settings": {
+      "name": "pydantic-settings",
+      "version": "2.15.0",
+      "requires_dist": [
+        "pydantic>=2.7.0",
+        "python-dotenv>=0.21.0",
+        "typing-inspection>=0.4.0",
+        "boto3>=1.35.0; extra == \"aws-secrets-manager\"",
+        "azure-identity>=1.16.0; extra == \"azure-key-vault\"",
+        "azure-keyvault-secrets>=4.8.0; extra == \"azure-key-vault\"",
+        "google-cloud-secret-manager>=2.23.1; extra == \"gcp-secret-manager\"",
+        "tomli>=2.0.1; extra == \"toml\"",
+        "pyyaml>=6.0.1; extra == \"yaml\""
+      ],
+      "provides_extra": [
+        "aws-secrets-manager",
+        "azure-key-vault",
+        "gcp-secret-manager",
+        "toml",
+        "yaml"
+      ],
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "MIT",
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/pydantic-settings/2.15.0/json",
+      "vulnerabilities": []
+    },
+    "pyjwt": {
+      "name": "PyJWT",
+      "version": "2.15.1",
+      "requires_dist": [
+        "typing_extensions>=4.0; python_version < \"3.11\"",
+        "cryptography>=3.4.0; extra == \"crypto\""
+      ],
+      "provides_extra": [
+        "crypto"
+      ],
+      "requires_python": ">=3.9",
+      "license": null,
+      "license_expression": "MIT",
+      "license_files": [
+        "LICENSE",
+        "AUTHORS.rst"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/pyjwt/2.15.1/json",
+      "vulnerabilities": []
+    },
+    "python-dotenv": {
+      "name": "python-dotenv",
+      "version": "1.2.2",
+      "requires_dist": [
+        "click>=5.0; extra == \"cli\""
+      ],
+      "provides_extra": [
+        "cli"
+      ],
+      "requires_python": ">=3.10",
+      "license": "BSD-3-Clause",
+      "license_expression": null,
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/python-dotenv/1.2.2/json",
+      "vulnerabilities": []
+    },
+    "python-multipart": {
+      "name": "python-multipart",
+      "version": "0.0.32",
+      "requires_dist": null,
+      "provides_extra": null,
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "Apache-2.0",
+      "license_files": [
+        "LICENSE.txt"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/python-multipart/0.0.32/json",
+      "vulnerabilities": []
+    },
+    "referencing": {
+      "name": "referencing",
+      "version": "0.37.0",
+      "requires_dist": [
+        "attrs>=22.2.0",
+        "rpds-py>=0.7.0",
+        "typing-extensions>=4.4.0; python_version < \"3.13\""
+      ],
+      "provides_extra": null,
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "MIT",
+      "license_files": [
+        "COPYING"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/referencing/0.37.0/json",
+      "vulnerabilities": []
+    },
+    "rpds-py": {
+      "name": "rpds-py",
+      "version": "2026.6.3",
+      "requires_dist": null,
+      "provides_extra": null,
+      "requires_python": ">=3.11",
+      "license": null,
+      "license_expression": "MIT",
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/rpds-py/2026.6.3/json",
+      "vulnerabilities": []
+    },
+    "sse-starlette": {
+      "name": "sse-starlette",
+      "version": "3.4.8",
+      "requires_dist": [
+        "starlette>=0.49.1",
+        "anyio>=4.7.0",
+        "uvicorn>=0.34.0; extra == \"examples\"",
+        "fastapi>=0.115.12; extra == \"examples\"",
+        "pydantic>=2; extra == \"examples\"",
+        "sqlalchemy[asyncio]>=2.0.41; extra == \"examples-db\"",
+        "aiosqlite>=0.21.0; extra == \"examples-db\"",
+        "uvicorn>=0.34.0; extra == \"uvicorn\"",
+        "granian>=2.3.1; extra == \"granian\"",
+        "daphne>=4.2.0; extra == \"daphne\""
+      ],
+      "provides_extra": [
+        "examples",
+        "examples-db",
+        "uvicorn",
+        "granian",
+        "daphne"
+      ],
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "BSD-3-Clause",
+      "license_files": [
+        "LICENSE",
+        "AUTHORS"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/sse-starlette/3.4.8/json",
+      "vulnerabilities": []
+    },
+    "starlette": {
+      "name": "starlette",
+      "version": "1.6.0",
+      "requires_dist": [
+        "anyio<5,>=3.6.2",
+        "typing-extensions>=4.10.0; python_version < \"3.13\"",
+        "httpx2>=2.0.0; extra == \"full\"",
+        "httpx<0.29.0,>=0.27.0; extra == \"full\"",
+        "itsdangerous; extra == \"full\"",
+        "jinja2; extra == \"full\"",
+        "python-multipart>=0.0.18; extra == \"full\"",
+        "pyyaml; extra == \"full\""
+      ],
+      "provides_extra": [
+        "full"
+      ],
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "BSD-3-Clause",
+      "license_files": [
+        "LICENSE.md"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/starlette/1.6.0/json",
+      "vulnerabilities": []
+    },
+    "typing-extensions": {
+      "name": "typing-extensions",
+      "version": "4.16.0",
+      "requires_dist": null,
+      "provides_extra": null,
+      "requires_python": ">=3.9",
+      "license": null,
+      "license_expression": "PSF-2.0",
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/typing-extensions/4.16.0/json",
+      "vulnerabilities": []
+    },
+    "typing-inspection": {
+      "name": "typing-inspection",
+      "version": "0.4.3",
+      "requires_dist": [
+        "typing-extensions>=4.15.0"
+      ],
+      "provides_extra": null,
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "MIT",
+      "license_files": [
+        "LICENSE"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/typing-inspection/0.4.3/json",
+      "vulnerabilities": []
+    },
+    "uvicorn": {
+      "name": "uvicorn",
+      "version": "0.52.1",
+      "requires_dist": [
+        "click>=7.0",
+        "h11>=0.8",
+        "typing-extensions>=4.0; python_version < \"3.11\"",
+        "httptools>=0.8.0; extra == \"standard\"",
+        "python-dotenv>=0.13; extra == \"standard\"",
+        "pyyaml>=5.1; extra == \"standard\"",
+        "uvloop>=0.15.1; (sys_platform != \"win32\" and (sys_platform != \"cygwin\" and platform_python_implementation != \"PyPy\")) and extra == \"standard\"",
+        "watchfiles>=0.20; extra == \"standard\"",
+        "websockets>=13.0; extra == \"standard\""
+      ],
+      "provides_extra": [
+        "standard"
+      ],
+      "requires_python": ">=3.10",
+      "license": null,
+      "license_expression": "BSD-3-Clause",
+      "license_files": [
+        "LICENSE.md"
+      ],
+      "yanked": false,
+      "source_url": "https://pypi.org/pypi/uvicorn/0.52.1/json",
+      "vulnerabilities": []
+    }
+  },
+  "pyjwt_releases": {
+    "2.13.0": {
+      "source_url": "https://pypi.org/pypi/pyjwt/2.13.0/json",
+      "info": {
+        "name": "PyJWT",
+        "version": "2.13.0",
+        "requires_python": ">=3.9",
+        "requires_dist": [
+          "typing_extensions>=4.0; python_version < \"3.11\"",
+          "cryptography>=3.4.0; extra == \"crypto\""
+        ],
+        "provides_extra": [
+          "crypto"
+        ],
+        "license": null,
+        "license_expression": "MIT",
+        "license_files": [
+          "LICENSE",
+          "AUTHORS.rst"
+        ]
+      },
+      "urls": [
+        {
+          "comment_text": null,
+          "core-metadata": {
+            "sha256": "0d1b1321a5a688caacd763e006fbbe11f60110e9fe27ff8d23a679863d01a63c"
+          },
+          "digests": {
+            "blake2b_256": "a35eecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1",
+            "md5": "c92c19fdacfbe513cb0b27f5bb8db617",
+            "sha256": "66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728"
+          },
+          "downloads": -1,
+          "filename": "pyjwt-2.13.0-py3-none-any.whl",
+          "has_sig": false,
+          "md5_digest": "c92c19fdacfbe513cb0b27f5bb8db617",
+          "packagetype": "bdist_wheel",
+          "python_version": "py3",
+          "requires_python": ">=3.9",
+          "size": 31274,
+          "upload_time": "2026-05-21T19:54:35",
+          "upload_time_iso_8601": "2026-05-21T19:54:35.362086Z",
+          "url": "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl",
+          "yanked": false,
+          "yanked_reason": null
+        }
+      ],
+      "vulnerabilities": [
+        {
+          "aliases": [
+            "CVE-2026-102274"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "GHSA-w6j9-cwv2-h6wq",
+          "link": "https://osv.dev/vulnerability/GHSA-w6j9-cwv2-h6wq",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-101917"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "GHSA-2gx3-rcp4-g85q",
+          "link": "https://osv.dev/vulnerability/GHSA-2gx3-rcp4-g85q",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102273"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "GHSA-w2cx-738m-mc7w",
+          "link": "https://osv.dev/vulnerability/GHSA-w2cx-738m-mc7w",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102269"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "GHSA-hxm8-2xgr-2p9m",
+          "link": "https://osv.dev/vulnerability/GHSA-hxm8-2xgr-2p9m",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102267"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "GHSA-9v7f-9g4p-ffgj",
+          "link": "https://osv.dev/vulnerability/GHSA-9v7f-9g4p-ffgj",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102268"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "GHSA-ffc3-869f-jxw9",
+          "link": "https://osv.dev/vulnerability/GHSA-ffc3-869f-jxw9",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102272"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "GHSA-r6x4-923q-g947",
+          "link": "https://osv.dev/vulnerability/GHSA-r6x4-923q-g947",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102271"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "GHSA-p4g4-x82p-q773",
+          "link": "https://osv.dev/vulnerability/GHSA-p4g4-x82p-q773",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102265"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "GHSA-8wjv-2p76-3863",
+          "link": "https://osv.dev/vulnerability/GHSA-8wjv-2p76-3863",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102266"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "GHSA-9j54-fg26-wv3r",
+          "link": "https://osv.dev/vulnerability/GHSA-9j54-fg26-wv3r",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102270"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "GHSA-jwrc-g2q2-pq5p",
+          "link": "https://osv.dev/vulnerability/GHSA-jwrc-g2q2-pq5p",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-101918"
+          ],
+          "fixed_in": [
+            "2.15.0"
+          ],
+          "id": "GHSA-42vr-xj54-vc7v",
+          "link": "https://osv.dev/vulnerability/GHSA-42vr-xj54-vc7v",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-103001"
+          ],
+          "fixed_in": [],
+          "id": "GHSA-gvp8-978c-rx2q",
+          "link": "https://osv.dev/vulnerability/GHSA-gvp8-978c-rx2q",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102268",
+            "GHSA-ffc3-869f-jxw9"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "PYSEC-2026-4145",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4145",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-103001",
+            "GHSA-gvp8-978c-rx2q"
+          ],
+          "fixed_in": [],
+          "id": "PYSEC-2026-4146",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4146",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102271",
+            "GHSA-p4g4-x82p-q773"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "PYSEC-2026-4149",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4149",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102274",
+            "GHSA-w6j9-cwv2-h6wq"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "PYSEC-2026-4152",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4152",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102267",
+            "GHSA-9v7f-9g4p-ffgj"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "PYSEC-2026-4144",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4144",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102266",
+            "GHSA-9j54-fg26-wv3r"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "PYSEC-2026-4143",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4143",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102270",
+            "GHSA-jwrc-g2q2-pq5p"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "PYSEC-2026-4148",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4148",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-101917",
+            "GHSA-2gx3-rcp4-g85q"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "PYSEC-2026-4140",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4140",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-101918",
+            "GHSA-42vr-xj54-vc7v"
+          ],
+          "fixed_in": [
+            "2.15.0"
+          ],
+          "id": "PYSEC-2026-4141",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4141",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102269",
+            "GHSA-hxm8-2xgr-2p9m"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "PYSEC-2026-4147",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4147",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102273",
+            "GHSA-w2cx-738m-mc7w"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "PYSEC-2026-4151",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4151",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102272",
+            "GHSA-r6x4-923q-g947"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "PYSEC-2026-4150",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4150",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102265",
+            "GHSA-8wjv-2p76-3863"
+          ],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "PYSEC-2026-4142",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4142",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102275"
+          ],
+          "fixed_in": [
+            "2.15.0"
+          ],
+          "id": "GHSA-x33g-cr3x-6449",
+          "link": "https://osv.dev/vulnerability/GHSA-x33g-cr3x-6449",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [
+            "CVE-2026-102275",
+            "GHSA-x33g-cr3x-6449"
+          ],
+          "fixed_in": [
+            "2.15.0"
+          ],
+          "id": "PYSEC-2026-4183",
+          "link": "https://osv.dev/vulnerability/PYSEC-2026-4183",
+          "source": "osv",
+          "withdrawn": null
+        },
+        {
+          "aliases": [],
+          "fixed_in": [
+            "2.14.0"
+          ],
+          "id": "GHSA-pxh4-856f-4h89",
+          "link": "https://osv.dev/vulnerability/GHSA-pxh4-856f-4h89",
+          "source": "osv",
+          "withdrawn": null
+        }
+      ]
+    },
+    "2.15.1": {
+      "source_url": "https://pypi.org/pypi/pyjwt/2.15.1/json",
+      "info": {
+        "name": "PyJWT",
+        "version": "2.15.1",
+        "requires_python": ">=3.9",
+        "requires_dist": [
+          "typing_extensions>=4.0; python_version < \"3.11\"",
+          "cryptography>=3.4.0; extra == \"crypto\""
+        ],
+        "provides_extra": [
+          "crypto"
+        ],
+        "license": null,
+        "license_expression": "MIT",
+        "license_files": [
+          "LICENSE",
+          "AUTHORS.rst"
+        ]
+      },
+      "urls": [
+        {
+          "comment_text": null,
+          "core-metadata": {
+            "sha256": "1ea0c9f139b8c928276b3628af165955f6f764491448a6ad8f103cdcbb382da3"
+          },
+          "digests": {
+            "blake2b_256": "50ca44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e",
+            "md5": "926cc7e28279513ebd670c59f7cafd4c",
+            "sha256": "42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193"
+          },
+          "downloads": -1,
+          "filename": "pyjwt-2.15.1-py3-none-any.whl",
+          "has_sig": false,
+          "md5_digest": "926cc7e28279513ebd670c59f7cafd4c",
+          "packagetype": "bdist_wheel",
+          "python_version": "py3",
+          "requires_python": ">=3.9",
+          "size": 33860,
+          "upload_time": "2026-09-28T18:40:41",
+          "upload_time_iso_8601": "2026-09-28T18:40:41.429003Z",
+          "url": "https://files.pythonhosted.org/packages/50/ca/44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e/pyjwt-2.15.1-py3-none-any.whl",
+          "yanked": false,
+          "yanked_reason": null
+        }
+      ],
+      "vulnerabilities": []
+    }
+  }
+}

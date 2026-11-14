@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-11: preserve job safety assertions with required catalog discovery.
+
 import os
 from pathlib import Path
 import socket
@@ -27,47 +29,58 @@ from unittest.mock import patch
 from .cli import ask, checked_socket, ClientError
 
 JOB='a'*32
+CATALOG={'models':['flash','coder-next','gpt-oss-120b'], 'context_limit':8192,
+         'max_output_tokens':1024, 'max_large_models_loaded':1}
 
 class TestCLI(unittest.TestCase):
     def test_ask_submits_once_and_only_polls(self):
         calls=[]
         def call(path,method,route,body=None):
             calls.append((method,route,body))
+            if route=='/v1/models':return CATALOG
             if method=='POST':return {'id':JOB,'status':'queued'}
             return {'id':JOB,'model':'gpt-oss-120b','status':'completed',
                     'result':{'content':'advice','thinking':'not exported','finish_reason':'length','completion_tokens':10}}
         out=ask('/unused','gpt-oss-120b','fixture',call=call)
-        self.assertEqual([c[0] for c in calls],['POST','GET'])
+        self.assertEqual([c[0] for c in calls],['GET','POST','GET'])
         self.assertFalse(out['code_executed']);self.assertNotIn('thinking',out)
     def test_submit_timeout_never_retries(self):
         calls=[]
-        def call(*args):calls.append(args);raise TimeoutError()
+        def call(*args):
+            calls.append(args)
+            if args[2]=='/v1/models':return CATALOG
+            raise TimeoutError()
         with self.assertRaises(ClientError):ask('/unused','gpt-oss-120b','fixture',call=call)
-        self.assertEqual(len(calls),1)
+        self.assertEqual(len(calls),2)
     def test_invalid_submit_response_never_retries(self):
         calls=[]
-        def call(*args):calls.append(args);raise ValueError('invalid JSON')
+        def call(*args):
+            calls.append(args)
+            if args[2]=='/v1/models':return CATALOG
+            raise ValueError('invalid JSON')
         with self.assertRaises(ClientError):ask('/unused','gpt-oss-120b','fixture',call=call)
-        self.assertEqual(len(calls),1)
+        self.assertEqual(len(calls),2)
     def test_cancel_preserves_id_and_calls_delete_once(self):
         from .cli import ClientCancelled
         calls=[]
         def call(path,method,route,body=None):
             calls.append(method)
+            if route=='/v1/models':return CATALOG
             if method=='POST':return {'id':JOB}
             if method=='GET':raise KeyboardInterrupt()
             return {'status':'cancellation_requested'}
         with self.assertRaises(ClientCancelled) as caught:
             ask('/unused','gpt-oss-120b','fixture',call=call)
         self.assertEqual(caught.exception.job_id,JOB)
-        self.assertEqual(calls,['POST','GET','DELETE'])
+        self.assertEqual(calls,['GET','POST','GET','DELETE'])
     def test_bad_input_does_not_submit(self):
-        for args in [('other','x',512,180),('flash','x'*8193,512,180),('flash','x',True,180),('flash','x',512,301)]:
+        for args in [('bad/id','x',512,180),('flash','x'*8193,512,180),('flash','x',True,180),('flash','x',512,301)]:
             with patch('inference.local_platform.cli.request') as call:
                 with self.assertRaises(ClientError):ask('/unused',*args)
                 call.assert_not_called()
     def test_job_identity_is_fixed(self):
         def call(path,method,route,body=None):
+            if route=='/v1/models':return CATALOG
             return {'id':JOB} if method=='POST' else {'id':'b'*32,'model':'gpt-oss-120b','status':'completed'}
         with self.assertRaises(ClientError):ask('/unused','gpt-oss-120b','fixture',call=call)
     def test_private_socket_boundary(self):
@@ -114,6 +127,7 @@ class TestClassificationCLI(unittest.TestCase):
 class TestKnownOutcome(unittest.TestCase):
     def test_poll_error_preserves_received_job_identifier(self):
         def call(path,method,route,body=None):
+            if route=='/v1/models':return CATALOG
             if method=='POST':return {'id':JOB}
             raise TimeoutError()
         with self.assertRaises(ClientError) as caught:

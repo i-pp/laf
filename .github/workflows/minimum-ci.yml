@@ -68,8 +68,111 @@ jobs:
               raise SystemExit('No source files checked')
           print(f'Syntax checked: {checked} files')
           PYCODE
+      - name: Enforce English and ASCII source with explicit Unicode test data
+        run: python3 -B scripts/check_english_source.py
       - name: Run full offline Python regressions, including Unix sockets
         run: python3 -B scripts/check-laf.py --suite full
+      - name: Validate the local stdio plugin source boundary
+        run: python3 -B scripts/check-laf-plugin.py
+      - name: Run MCP source safety checks without installing an SDK
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHONPATH: mcp/src:mcp/tests
+        run: |
+          python3 -B - <<'PYCODE'
+          import json
+          import unittest
+
+          SCOPE = 'MCP source/mock/manifest only; excludes actual SDK and package builds'
+          names = ['test_application', 'test_attempts', 'test_contracts',
+                   'test_receipts', 'test_router', 'test_sdk_gate',
+                   'test_integrated_router.IntegratedApplicationTests',
+                   'test_package.PackageTests.test_manifest']
+          suite = unittest.defaultTestLoader.loadTestsFromNames(names)
+
+          def cases(group):
+              for item in group:
+                  if isinstance(item, unittest.TestSuite):
+                      yield from cases(item)
+                  else:
+                      yield item
+
+          ids = [case.id() for case in cases(suite)]
+          planned = len(ids)
+          if not planned or len(set(ids)) != planned:
+              raise SystemExit('Empty or duplicate selected tests')
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          passed = (result.wasSuccessful() and result.testsRun == planned
+                    and not result.skipped and not result.expectedFailures
+                    and not result.unexpectedSuccesses)
+          print(json.dumps({'scope': SCOPE, 'planned': planned,
+                            'run': result.testsRun, 'failures': len(result.failures),
+                            'errors': len(result.errors), 'skipped': len(result.skipped),
+                            'expected_failures': len(result.expectedFailures),
+                            'unexpected_successes': len(result.unexpectedSuccesses),
+                            'passed': passed}, sort_keys=True))
+          raise SystemExit(0 if passed else 1)
+          PYCODE
+      - name: Run SDK installer regressions without installing the SDK
+        run: |
+          python3 -B - <<'PYCODE'
+          import json
+          import unittest
+
+          SCOPE = 'SDK installer regressions only; no SDK acquisition or install'
+          suite = unittest.defaultTestLoader.discover('scripts', pattern='test_sdk_installer.py')
+
+          def cases(group):
+              for item in group:
+                  if isinstance(item, unittest.TestSuite):
+                      yield from cases(item)
+                  else:
+                      yield item
+
+          ids = [case.id() for case in cases(suite)]
+          planned = len(ids)
+          if not planned or len(set(ids)) != planned:
+              raise SystemExit('Empty or duplicate selected tests')
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          passed = (result.wasSuccessful() and result.testsRun == planned
+                    and not result.skipped and not result.expectedFailures
+                    and not result.unexpectedSuccesses)
+          print(json.dumps({'scope': SCOPE, 'planned': planned,
+                            'run': result.testsRun, 'failures': len(result.failures),
+                            'errors': len(result.errors), 'skipped': len(result.skipped),
+                            'expected_failures': len(result.expectedFailures),
+                            'unexpected_successes': len(result.unexpectedSuccesses),
+                            'passed': passed}, sort_keys=True))
+          raise SystemExit(0 if passed else 1)
+          PYCODE
+      - name: Check tunnel-only operator transaction without services
+        shell: bash
+        run: |
+          python3 -B - <<'PYCODE'
+          import sys
+          import unittest
+          sys.path.insert(0, 'ops')
+          suite = unittest.defaultTestLoader.loadTestsFromName('test_frontend_cutover')
+          def flatten(group):
+              for item in group:
+                  if isinstance(item, unittest.TestSuite):
+                      yield from flatten(item)
+                  else:
+                      yield item
+          tests = list(flatten(suite))
+          ids = [test.id() for test in tests]
+          if len(ids) != 28 or len(set(ids)) != 28:
+              raise SystemExit('Expected 28 unique operator tests')
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          rejected = (result.failures, result.errors, result.skipped,
+                      result.expectedFailures, result.unexpectedSuccesses)
+          if result.testsRun != 28 or any(rejected) or not result.wasSuccessful():
+              raise SystemExit('Incomplete or non-green operator tests')
+          PYCODE
+      - name: Strict ACK and source-builder checks with negative gate oracles
+        run: python3 -B scripts/run_integrated_source_checks.py
+      - name: Verify portable integrated package source without services
+        run: python3 -B packaging/run_packaging_checks.py
 
   license:
     name: License policy checks

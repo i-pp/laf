@@ -47,7 +47,7 @@ python3 -B -m inference.local_platform.cli model catalog
 ```
 
 The portable runner executes unit/mocked checks, temporary-file operations and
-owned fake subprocesses. It omits exactly 39 enumerated private Unix-socket tests,
+owned fake subprocesses. It omits the explicitly enumerated private Unix-socket tests,
 lists each unexecuted ID, and cannot report a full regression pass. Exit 0 means
 the selected group passed with complete accounting and no skips; exit 1 means
 test failure/error, and exit 2 means invalid execution or test inventory.
@@ -80,3 +80,49 @@ Private historical counts and binary hashes are not acceptance of this tree.
 Some component guides show focused `unittest` commands. Those select narrower
 checks and do not replace the aggregate groups above. Do not omit failures or
 unexecuted stages when recording results from another executor.
+
+## Public evidence, not a fixed test-count specification
+
+Use the [pull request checks](https://github.com/i-pp/laf/pull/12/checks) and the
+[Minimum source CI history](https://github.com/i-pp/laf/actions/workflows/minimum-ci.yml)
+to inspect commands, individual results, failure details and the tested commit.
+A previous successful run does not accept a later source revision. For example,
+[the recorded source run](https://github.com/i-pp/laf/actions/runs/43378069913)
+belongs to commit `24b24b798b6354cd4eccdd9644ff5779f7181b2d`.
+
+Test totals are run evidence, not a product specification or a number to maintain
+in this guide. Machine checks may still reject empty, duplicate or incomplete
+selections before execution. Those inventory guards prevent missing validation;
+they do not measure behavioral coverage or replace the stated verification scope.
+Dated historical records remain historical rather than requirements for new runs.
+
+
+## Integrated Codex selection checks
+
+```sh
+python3 -B scripts/test_codex_selection_boundary.py
+python3 -B scripts/test_codex_catalog_effort.py
+python3 -B scripts/run_integrated_source_checks.py
+```
+
+These source/fake-peer checks cover provider catalogs, immutable caller intent,
+offline explicit input storage, fresh omitted defaults, legacy fail-closed
+behavior, raw effort transport, inspected version admission and OAuth owner
+pagination inside the full HTTP response. The handler is called in memory; no
+socket, real app-server, SDK child or model is started by the selection tests.
+The strict runner also includes the existing source, ACK and ordinary-pool checks.
+The standalone Core/Router Python suite above does not validate the vendored
+Codex backend, and a forwarding-only test is not backend acceptance.
+
+See repository-root `docs/codex-model-selection.md` for the behavioral contract.
+The bundled `runtime/public_laf` copy of this guide documents the standalone
+component; run the integrated commands from the repository/package root.
+
+
+The integrated selection checks also submit through the OAuth Adapter into the
+real temporary Pipeline, Events service and Outbox, and through the existing
+DaemonPipelineProxy/daemon/HostGateway route with fake owned transport. They
+verify owner access to definitively persisted pre-turn blockers, foreign denial,
+immutable origin conflicts, uncertainty/forgery refusal and bounded read-only
+ledger proof. A binding test that prearranges task ownership is not a substitute
+for this composed submission path. No socket or model is used.

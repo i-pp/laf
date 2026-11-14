@@ -19,6 +19,8 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 """Offline model-lifecycle contracts. Never contacts an engine or downloads weights."""
+# Modified 2026-11-11: advertise the Router catalog separately from model storage status.
+
 import copy
 from contextlib import contextmanager
 import fcntl
@@ -281,7 +283,12 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual(models.main(['--config',str(config),'status']),1)
     def test_status_keeps_router_state_and_reports_independent_install_state(self):
         from . import cli
-        with patch.object(cli,'request',return_value={'status':'ready','gpu':{'flash_resident':True,'ollama_selected':'coder-next'}}), \
+        def request(path, method, route, body=None):
+            if route == '/v1/models':
+                return {'models':['flash','coder-next'], 'context_limit':8192,
+                        'max_output_tokens':1024, 'max_large_models_loaded':1}
+            return {'status':'ready','gpu':{'flash_resident':True,'ollama_selected':'coder-next'}}
+        with patch.object(cli,'request',side_effect=request), \
              patch.object(models.ModelManager,'status',return_value={'installed_count':2,'pending':None,'loaded_state':'not_queried'}), \
              patch('sys.stdout',new_callable=io.StringIO) as out:
             self.assertEqual(cli.main(['status']),0)
