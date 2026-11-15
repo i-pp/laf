@@ -88,6 +88,12 @@ that task queued and allows the scan to reach another eligible workspace. The
 page size limits each database result; it does not limit the candidates examined
 or the workers admitted. New arrivals beyond the horizon wait for the next tick.
 Older tasks in the same workspace keep their order when that workspace is free.
+The tick snapshots active workspace IDs and updates that set only after an owned
+child handoff. A cancellation that wins before handoff occupies no capacity and
+the scan continues. Busy-workspace diagnostics use that snapshot, without keeping
+one cache entry or rereading every child for each conflicting queued task.
+A finite horizon limits each tick to existing queue rows, but scan time still
+grows with queue length; it is not a wall-clock latency guarantee.
 
 A queued task without a workspace remains an exclusive FIFO barrier. When older
 workers are active, newer tasks wait so the pool can drain and the exclusive task

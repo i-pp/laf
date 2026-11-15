@@ -825,6 +825,68 @@ class PoolDispatcher(PoolFixture):
                 self.assertEqual(self.reason(obj, 1), reason)
                 self.assertEqual(list(obj.children), [retained])
 
+    def test_busy_scan_reads_each_child_once_without_per_task_busy_cache(self):
+        obj = self.fake_daemon(8)
+        busy = task(1)['workspace_id']
+        for number in range(990, 997):
+            self.active(obj, busy if number == 990 else task(number)['workspace_id'], number)
+        obj.store.db.execute("UPDATE tasks SET workspace_id=? WHERE state='QUEUED'", (busy,))
+        for number in range(20, 220):
+            obj.store.db.execute("INSERT INTO tasks(id,state,workspace_id) VALUES(?,'QUEUED',?)",
+                                 (task(number)['id'], busy))
+        statements = []
+        obj.store.db.set_trace_callback(statements.append)
+        obj.tick()
+        reads = [sql for sql in statements if sql.startswith('SELECT * FROM tasks WHERE id=')]
+        self.assertEqual(len(reads), len(obj.children))
+        self.assertEqual(obj.task_waits, {})
+        self.assertEqual(obj.started, [])
+        self.assertEqual(self.reason(obj, 200), 'workspace_busy')
+
+    def test_cancellation_before_exclusive_handoff_continues_to_eligible_work(self):
+        obj = self.fake_daemon(2)
+        obj.store.db.execute('UPDATE tasks SET workspace_id=NULL WHERE id=?', (task(1)['id'],))
+        original = obj.start_worker
+        obj.runner.binary = '/fixture/codex'
+        control = SimpleNamespace(unit='fixture.scope', descriptor={'unit': 'fixture.scope'})
+        def cancel_before_transaction(*args):
+            with obj.store.db:
+                obj.store.db.execute("UPDATE tasks SET state='CANCELLED' WHERE id=?", (task(1)['id'],))
+            return control
+        def cancel_or_start(candidate):
+            if candidate['id'] == task(1)['id']:
+                daemon.Daemon.start_worker(obj, candidate)
+            else:
+                original(candidate)
+        original_read = Path.read_text
+        def read(path, *args, **kwargs):
+            if str(path) == '/proc/self/cgroup':
+                return '0::/agentorchestrator.slice/fixture-daemon.scope\n'
+            return original_read(path, *args, **kwargs)
+        obj.start_worker = cancel_or_start
+        with patch.object(daemon, 'Control', side_effect=cancel_before_transaction), patch.object(
+                Path, 'read_text', read), patch.object(daemon, 'Process') as launch:
+            obj.tick()
+        launch.assert_not_called()
+        self.assertEqual(obj.started, [task(2)['id'], task(3)['id']])
+        self.assertNotIn(None, obj.busy_workspaces)
+        self.assertIsNone(self.reason(obj, 1))
+
+    def test_new_arrival_beyond_tick_horizon_is_deferred(self):
+        obj = self.fake_daemon(8)
+        obj.store.db.execute("UPDATE tasks SET state='CANCELLED' WHERE id!=?", (task(1)['id'],))
+        original = obj.start_worker
+        def start_and_append(candidate):
+            original(candidate)
+            if candidate['id'] == task(1)['id']:
+                obj.store.db.execute("INSERT INTO tasks(id,state,workspace_id) VALUES(?,'QUEUED',?)",
+                                     (task(100)['id'], task(100)['workspace_id']))
+        obj.start_worker = start_and_append
+        obj.tick()
+        self.assertEqual(obj.started, [task(1)['id']])
+        obj.tick()
+        self.assertEqual(obj.started, [task(1)['id'], task(100)['id']])
+
     def test_changed_generation_blocks_dispatch_without_stopping_children(self):
         obj = self.fake_daemon(8)
         retained = task(999)['id']

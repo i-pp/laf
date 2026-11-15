@@ -48,6 +48,7 @@ class Daemon:
             self.stopping = False
             self.blocked = []
             self.task_waits = {}
+            self.busy_workspaces = set()
             self.queue_wait = 'queue_pending'
             self.pending_recovery = []
             self.reconciled_unknowns = set()
@@ -139,6 +140,7 @@ class Daemon:
         if self.blocked: return self.blocked[0]
         reason = getattr(self, 'task_waits', {}).get(task['id'])
         if reason: return reason
+        if task['workspace_id'] in getattr(self, 'busy_workspaces', set()): return 'workspace_busy'
         if len(self.children) >= self.settings['maximum_sessions']: return 'session_pool_capacity'
         return getattr(self, 'queue_wait', 'queue_pending')
 
@@ -296,6 +298,7 @@ class Daemon:
 
     def tick(self):
         self.task_waits = {}
+        self.busy_workspaces = set()
         self.queue_wait = 'queue_pending'
         for task_id, child in self.children.items():
             if not child.closed:
@@ -332,7 +335,8 @@ class Daemon:
         active = [dict(r) for r in self.store.db.execute("SELECT * FROM tasks WHERE state IN ('RUNNING','VERIFYING')")]
         if any(t["id"] not in self.children for t in active):
             self.blocked.append("external_active_owner"); return
-        if any(not self.store.get(t)["workspace_id"] for t in self.children):
+        self.busy_workspaces = {self.store.get(t)['workspace_id'] for t in self.children}
+        if any(not workspace for workspace in self.busy_workspaces):
             self.blocked.append('exclusive_worker_active'); return
         # A finite rowid horizon prevents a growing queue from extending this tick.
         # Page size bounds each SQLite result, independently of worker capacity.
@@ -360,15 +364,17 @@ class Daemon:
                     self.task_waits[task['id']] = 'exclusive_task_wait'
                     self.queue_wait = 'exclusive_queue_barrier'
                     return
-                if task['workspace_id'] and any(self.store.get(t)['workspace_id'] == task['workspace_id']
-                                                for t in self.children):
-                    self.task_waits[task['id']] = 'workspace_busy'; continue
+                if task['workspace_id'] in self.busy_workspaces: continue
                 try:
                     self.start_worker(task)
                 except scheduler.PoolPolicyError:
                     self.blocked.append('session_pool_policy_changed'); return
                 except ResourceExceeded:
                     self.blocked.append('session_pool_memory_headroom'); return
+                # Cancellation can win inside start_worker's transaction. Only
+                # a confirmed handoff occupies a workspace or an exclusive barrier.
+                if task['id'] not in self.children: continue
+                self.busy_workspaces.add(task['workspace_id'])
                 if not task['workspace_id']:
                     self.queue_wait = 'exclusive_worker_active'; return
 
