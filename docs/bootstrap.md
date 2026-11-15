@@ -224,9 +224,13 @@ gate when that transport is deliberately selected.
 
 Modification notice (2026-11-15): before any database, daemon or receipt use,
 an operator can select a complete private scheduler document whose nested
-resource_admission has schema2 and admission_mode resources. It must omit
-maximum_sessions and pass the existing finite resource/controller/provider
-validators. No top-level schema field or inferred resource values are added.
+resource_admission has schema2 or schema3 and admission_mode resources. It must
+omit maximum_sessions and pass the selected resource/controller/provider
+validators. Schema2 retains the finite-quota contract. Schema3 selects the
+explicit [pipeline provider-feedback contract](provider-feedback-admission.md)
+without inventing a provider concurrency limit; ordinary/standalone online
+dispatch is unsupported in that mode. No top-level schema field or inferred
+resource values are added.
 
     RESOURCE_POLICY="/absolute/selected/private/scheduler-policy.json"
     RESOURCE_SHA256="replace-with-reviewed-raw-file-sha256"
@@ -242,10 +246,12 @@ must also fit16384 bytes. An oversized binding refuses without publication.
 The original packaged scheduler-config.json and executable source stay intact.
 Later source-policy edits/deletion do not change the selected snapshot.
 
-Selection alone enables none of the seven backend groups. Ordinary-only
-selection needs no native/account or pipeline profile. Codex remains a separate
-binding and requires a schema2 pipeline plus its finite pipeline/controller
-profile when activated. Daemon foreground, workers, limit checks, HostGateway
+Selection alone enables none of the seven backend groups and performs no
+native/account probe. Supported schema2 ordinary execution needs no Codex
+pipeline profile; schema3 does not enable ordinary execution. Codex remains a
+separate binding and requires a schema2 pipeline policy plus its finite local
+pipeline/controller profile when activated. That pipeline-policy version is
+distinct from the nested resource-admission schema. Daemon foreground, workers, limit checks, HostGateway
 and standalone all select through the same copied private_codex project;
 HOME/environment variables cannot select another resource policy. Raw policy
 and provenance are private inputs, not MCP configuration or diagnostic output.
@@ -259,8 +265,10 @@ binding edits/rollback are unsupported. Preserve the accepted binding digest
 and old mode-pinned ledger; never adopt another mode by restoring an old marker.
 Updates require a new unused prefix and normal reviewed generation adoption. Configuration does not
 open the shared resource ledger, probe an account/controller, calibrate a model,
-or establish provider entitlement. Unknown/expired quota, ownership and model
-evidence still refuse at normal admission. See [resource calibration](resource-calibration.md).
+or establish provider entitlement. Schema2 unknown/expired finite quota refuses;
+schema3 applies its explicit provider-feedback rules while external capacity
+remains unknown. Missing ownership, model or local resource evidence still
+refuses normal admission. See [resource calibration](resource-calibration.md).
 
 ### Optional owner-daemon metadata
 
