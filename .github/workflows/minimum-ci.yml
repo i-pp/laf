@@ -194,6 +194,16 @@ jobs:
           suite = unittest.defaultTestLoader.loadTestsFromName('test_bootstrap_orchestrator')
           print(run_checked(suite, 20, unittest.TextTestRunner(verbosity=2)))
           PYCODE
+      - name: Check correlated Codex reads and notification races offline
+        run: |
+          python3 -B - <<'PYCODE'
+          import sys
+          import unittest
+          sys.path.insert(0, 'scripts')
+          from run_integrated_source_checks import run_checked
+          suite = unittest.defaultTestLoader.loadTestsFromName('test_codex_read_reliability')
+          print(run_checked(suite, 14, unittest.TextTestRunner(verbosity=2)))
+          PYCODE
 
   license:
     name: License policy checks

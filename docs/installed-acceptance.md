@@ -128,3 +128,13 @@ tests do not prove installation, native loading, an account or a model. Keep
 source/offline, actual loader, real-account and real-model results distinct.
 The four legacy tools retain their separate compatibility boundary; a Router
 canary does not establish that all 33 tools work.
+
+Modification notice (2026-11-15): a correlated native thread/read rejection is
+distinct from a lost or mismatched acknowledgment. A notification can advance
+the owned task during that read; the failed-read observation now returns the
+current ledger state while retaining reconciliation UNKNOWN and no automatic
+retry. Completion/cancellation history and executor release remain separate
+checks. Fixed diagnostic code names and message categories never include raw
+server messages. They do not establish why a native read was rejected. Offline
+regressions cover the observed rejection phase and notification race; they do
+not claim to reproduce or repair the original native cause.

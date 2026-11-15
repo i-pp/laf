@@ -172,6 +172,7 @@
         "scripts/test_bootstrap_bindings.py",
         "scripts/laf_acceptance.py",
         "scripts/test_installed_acceptance.py",
+        "scripts/test_codex_read_reliability.py",
         "scripts/test_bootstrap_orchestrator.py",
         "docs/installed-acceptance.md",
         "docs/backend-configuration.md",

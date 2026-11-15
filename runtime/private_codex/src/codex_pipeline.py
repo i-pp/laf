@@ -839,7 +839,11 @@ class Pipeline:
                 return self._view(task)
             return self._mutate(reconcile)
         except (ProtocolUnknown, RpcError):
-            return {**self._view(task), 'reconciliation': 'UNKNOWN', 'automatic_retry': False}
+            # Modified 2026-11-15: notifications can advance the task while the
+            # read is in flight. Keep that state without treating a failed read
+            # as verified history or permission to replay the turn.
+            return self._mutate(lambda s: {**self._view(self._task(s, task_id)),
+                'reconciliation': 'UNKNOWN', 'automatic_retry': False})
 
     def steer(self, thread_id, prompt, request_key):
         def prepare(s):

@@ -24,6 +24,16 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: current task state after rejected reads (2026-11-15)
+
+Return the authoritative current task state if a native read fails after an
+interleaved completion, interruption or approval notification. Preserve UNKNOWN
+reconciliation, history verification, executor cleanup and no-replay fences.
+Add fixed, private diagnostic code/category labels and dedicated offline
+protocol/Gateway race regressions. The recorded native thread/read rejection's
+cause remains unknown; this fixes the separately reproduced stale-status race.
+Update the acceptance guide, minimum CI and explicit license path declaration.
+
 ## Unreleased: explicit owner-daemon metadata binding (2026-11-15)
 
 Add a new-prefix orchestrator binding using the existing owner control socket.

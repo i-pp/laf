@@ -1,6 +1,7 @@
 """Daemon-owned, opt-in native gateway. No listener or authentication changes."""
 # Modified 2026-11-13: reserve the existing host budget for model-catalog reads.
 # Modified 2026-11-13: read NEW-prefix executor/policy from one atomic binding record.
+# Modified 2026-11-15: retain fixed read-rejection diagnostics without raw messages.
 import hashlib
 from contextlib import closing
 import json
@@ -33,12 +34,19 @@ def rpc_failure(method, error, client=None):
     result = {'method': method, 'exception_class': type(error).__name__}
     if isinstance(error, RpcError):
         result['rpc_error_code'] = error.code
+        # This names the protocol code; it does not establish the native cause.
+        result['rpc_code_name'] = {-32700: 'PARSE_ERROR', -32600: 'INVALID_REQUEST',
+            -32601: 'METHOD_NOT_FOUND', -32602: 'INVALID_PARAMS',
+            -32603: 'INTERNAL_ERROR'}.get(error.code, 'OTHER')
         message = error.server_message.lower()
         patterns = [('no rollout found', 'NO_ROLLOUT'), ('not materialized', 'NOT_MATERIALIZED'),
                     ('before first user message', 'BEFORE_FIRST_MESSAGE'),
                     ('thread not found', 'THREAD_NOT_FOUND'), ('invalid argument', 'INVALID_ARGUMENT'),
-                    ('experimental', 'EXPERIMENTAL_FEATURE_REQUIRED')]
-        result['reason_categories'] = [name for text, name in patterns if text in message]
+                    ('experimental', 'EXPERIMENTAL_FEATURE_REQUIRED'),
+                    ('method not found', 'METHOD_NOT_FOUND'), ('unknown method', 'METHOD_NOT_FOUND'),
+                    ('unsupported method', 'METHOD_NOT_FOUND'), ('paginated', 'PAGINATED_HISTORY'),
+                    ('not supported', 'UNSUPPORTED_OPERATION'), ('deprecated', 'DEPRECATED_OPERATION')]
+        result['reason_categories'] = list(dict.fromkeys(name for text, name in patterns if text in message))
         if not result['reason_categories']: result['reason_categories'] = ['UNCLASSIFIED_SERVER_REJECTION']
     if client is not None:
         diag = client.diagnostics()
