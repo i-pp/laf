@@ -35,6 +35,51 @@ normal guarded daemon and the operator's existing authorized account. Run the
 bootstrap admission check before attempting a new daemon. Retain ownership,
 isolation, resource and uncertainty guards.
 
+## Existing stdio Tunnel acceptance
+
+Modification notice (2026-11-15): an existing stdio Tunnel/control-plane route
+uses its approved binding and API-key-file reference. Keep those references and
+the existing authenticated client. Do not display/copy key contents, reuse the
+Tunnel key as an OAuth token, register a new client or broaden permissions for
+acceptance. OAuth/HTTPS receiver setup is a separate future transport gate.
+
+The service owner must first review the exact candidate, unused prefix, normal
+daemon admission, current unit generations and rollback. Preserve the old
+runtime/history. The bootstrap prefix's supported MCP command is:
+
+    /usr/bin/python3 -B "$PREFIX/launcher.py" --config "$PREFIX/plugin.json"
+
+The older `ops/frontend_cutover.py` transaction expects a `stdio/` archive and
+targets the old runtime with raw Router arguments. It does not deploy this root
+plugin ZIP or its new-prefix daemon. Use an explicitly adapted, reviewed owner
+procedure; preserve its archive, ownership and uncertainty guards. A stale or
+foreign Tunnel invocation must refuse. Never rewrite ownership or use a bare
+manager command as a fallback.
+
+After an authorized owner switch, check the same Tunnel's readiness and fresh
+control-plane poll without reading its key. Then refresh the same connected
+client and fetch the actual catalog: version 0.1.0, all 33 exact contracts and no
+tools error, including `codex_models_list`. A cached 32-tool client inventory or
+transport-ready response does not establish that the new candidate is served.
+Private owner evidence must also bind the running source/prefix to its archive.
+
+Through that same existing client, read Router readiness, ordinary status and
+owned Codex metadata. Require no active/held/pending work, no recovery and
+confirmed executor release before the separately coordinated inference window.
+Use fresh advertised model/effort data. Submit each bounded Flash/Codex action
+once with identifiers saved before dispatch, and reconcile the same action after
+lost replies. Do not create a second job through the local runner to replace an
+uncertain remote result. Keep acknowledgments, terminal history, physical stop
+and resource release as distinct evidence. No model/provider restart follows
+from an acceptance refusal.
+
+The local installed-runner checks below remain separate from that external
+client path. Future HTTP OAuth metadata/discovery, client authorization and
+signed receiver delivery also require their own selected references and proof;
+public discovery alone establishes none of them.
+
+## Isolated installed runner
+
 Build a new source-only archive and use the supported
 [Codex marketplace installation](codex-install.md#codex-local-marketplace-option)
 with a new isolated HOME/CODEX_HOME and plugin cache. Activate the new private

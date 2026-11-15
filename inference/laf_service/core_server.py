@@ -20,6 +20,8 @@
 
 # Changed 2026-11-13: bounded swap policy and explicit quiet resource recovery.
 
+# Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+
 """Explicit Core-only entrypoint. The legacy host entrypoint remains unchanged."""
 from __future__ import annotations
 import argparse
@@ -57,8 +59,24 @@ def load_config(path):
             required |= {'strata_source', 'tokenizer_python', 'strata_command'}
     else:
         required = {'state_dir', 'runtime_dir', 'lifecycle_runtime_dir', 'acceptance_ollama_profiles'} if candidate else REQUIRED
-    if type(config) is not dict or not required <= set(config) or set(config) - required - {'npu_socket', 'swap_limit_mib', 'rolling_swap_policy'}:
+    if type(config) is not dict or not required <= set(config) or set(config) - required - {'npu_socket', 'swap_limit_mib', 'rolling_swap_policy', 'resource_admission_generation', 'resource_model_sha256', 'resource_flash_assets'}:
         raise ServiceError('explicit Core configuration fields required')
+    if 'resource_admission_generation' in config or 'resource_model_sha256' in config:
+        import re
+        digest=config.get('resource_admission_generation');pins=config.get('resource_model_sha256')
+        if (not normal or config.get('npu_socket') is not None or not isinstance(digest,str)
+                or not re.fullmatch(r'[0-9a-f]{64}',digest) or not isinstance(pins,dict)):
+            raise ServiceError('Explicit resource admission generation required')
+        profiles,flash,_=configured_selection(config)
+        if set(pins)!=(set(profiles)|({'flash'} if flash else set())) or any(pins[key]!=profiles[key]['digest'][7:] for key in profiles):
+            raise ServiceError('Exact resource model manifest pins required')
+        if flash:
+            from .flash_resources import manifest
+            manifest(config)
+        elif 'resource_flash_assets' in config:
+            raise ServiceError('Flash assets require an enabled resource-owned Flash model')
+    elif 'resource_flash_assets' in config:
+        raise ServiceError('Flash asset pins require resource admission')
     if 'rolling_swap_policy' in config:
         from .swap_window import WindowPolicy
         if type(config['rolling_swap_policy']) is not dict:
@@ -100,6 +118,8 @@ def run_core(path, *, backend_factory=CoreBackends, client_factory=lifecycle_cli
         raise ServiceError('Core and host rolling policy mismatch')
     if 'rolling_swap_policy' in config and policy.get('policy_version') != 2:
         raise ServiceError('rolling host policy version mismatch')
+    if policy.get('resource_admission_generation') != config.get('resource_admission_generation'):
+        raise ServiceError('Core and host resource admission generation mismatch')
     # Namespace/UID refusal precedes any Core runtime-directory creation.
     backend = backend_factory(config, path, client)
     state, runtime = private_dir(config['state_dir']), private_dir(config['runtime_dir'])

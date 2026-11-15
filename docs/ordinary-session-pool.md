@@ -31,6 +31,12 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 ## In brief
 
+This page describes legacy slot mode. Optional schema-2
+[resource-led admission](resource-led-admission.md) implements ordinary and
+pipeline CPU/RAM reservation without a fixed LAF worker count. It requires
+complete profiles, shared owners and provider evidence, and is not enabled in
+the checked-in configuration.
+
 - Set `maximum_sessions` to an integer from 1 through 8 in
   [`scheduler-config.json`](../runtime/private_codex/scheduler-config.json).
   This source candidate explicitly selects 8. An older valid configuration
@@ -115,9 +121,9 @@ pause, stopping and policy guards are checked on read. Non-queued tasks report
 null. Reading diagnostics neither dispatches work nor changes task state.
 
 These changes correct queue starvation within the existing guarded pool. The
-[resource-led admission contract](resource-led-admission.md) defines the staged
-replacement for fixed local slots and the whole-pool memory envelope. That
-replacement is not implemented by this queue correction.
+[resource-led admission contract](resource-led-admission.md) implements a versioned optional
+replacement for fixed local slots and the whole-pool memory envelope. The
+checked-in configuration continues to select the legacy policy.
 
 ## Held work still counts
 

@@ -32,7 +32,8 @@ from chat_mailbox import Mailbox, MailboxError, TOOLS as MAILBOX_TOOLS, validate
 from experiments import (TOOLS as EXPERIMENT_TOOLS, EvidenceError, ExperimentStore,
                          tool_definitions as experiment_tools, validate_arguments as experiment_arguments)
 from legacy_tool_adapter import Invalid as ExistingToolInvalid
-from backend_state import load_unconfigured, tool_backend, blocked_result
+from backend_state import (load_state, state_sha256, check_snapshot,
+                           tool_backend, blocked_result)
 
 PROJECT = Path(__file__).resolve().parents[1]
 PROTOCOL = '2025-11-25'
@@ -187,10 +188,16 @@ class Adapter:
     def __init__(self, root, allow_writes=False, *, allow_codex_pipeline=False, pipeline=None,
                  events_service=None, principal_provider=None, notification_runtime=None,
                  shared_tool_adapter=None, allow_shared_tools_http=False,
-                 shared_tools_principal=None, runtime_project_root=None):
+                 shared_tools_principal=None, runtime_project_root=None,
+                 backend_state_sha256=None):
         self.runtime_project_root = resolve_project_root(runtime_project_root)
         self.root = runtime_path(root, project_root=self.runtime_project_root)
-        self.unconfigured = load_unconfigured(self.root)
+        backend_state, backend_raw = load_state(self.root)
+        self.unconfigured = frozenset() if backend_state is None else frozenset(backend_state['unconfigured'])
+        if backend_state_sha256 is not None and state_sha256(backend_raw) != backend_state_sha256:
+            raise ValueError('Backend binding changed during startup')
+        self.backend_state_sha256 = (state_sha256(backend_raw) if backend_state_sha256 is not None
+                                    or backend_state is not None and backend_state['schema'] == 2 else None)
         if pipeline is not None and not allow_codex_pipeline:
             raise ValueError('Pipeline activation is explicit')
         if allow_codex_pipeline and pipeline is None:
@@ -388,7 +395,13 @@ class Adapter:
             # The input may exist: never create/resubmit/rebind it as recovery.
             return False
 
+    def _check_backend_binding(self):
+        expected = getattr(self, 'backend_state_sha256', None)
+        if expected is not None:
+            check_snapshot(self.root, expected)
+
     def call_tool(self, name, arguments, rpc_id, request_principal=None):
+        self._check_backend_binding()
         if name not in {t['name'] for t in self.tools}: raise Invalid('Tool is not enabled')
         if name in self.shared_tool_names:
             if request_principal is not None:
@@ -527,6 +540,7 @@ class Adapter:
                 maximum = raw.get('maximum_sessions')
                 data = {'paused': raw.get('paused') is True, 'stopping': raw.get('stopping') is True,
                         'maximum_sessions': maximum if type(maximum) is int and 1 <= maximum <= 8 else None,
+                        'admission_mode': raw.get('admission_mode') if raw.get('admission_mode') in ('legacy', 'resources') else None,
                         'blocked_count': len(raw.get('blocked', [])),
                         'pending_recovery_count': len(raw.get('pending_recovery', [])),
                         'active_task_ids': [v for v in raw.get('active_tasks', []) if uuid_value(v)],
@@ -649,6 +663,7 @@ class Adapter:
                 result = self.call_tool(params['name'], params.get('arguments', {}), identifier,
                                         request_principal=request_principal)
             elif method in ('events/list', 'events/subscribe', 'events/unsubscribe'):
+                self._check_backend_binding()
                 if not self.events_enabled:
                     return self.error(identifier, -32601, 'Method not found')
                 try:
@@ -791,6 +806,8 @@ def main():
     parser.add_argument('--laf-router-socket', type=Path)
     parser.add_argument('--laf-router-state', type=Path)
     parser.add_argument('--laf-router-model', action='append', default=None)
+    parser.add_argument('--laf-bootstrap-bindings', action='store_true',
+                        help='Use one explicit bootstrap binding snapshot; no raw Router options')
     args = parser.parse_args()
     os.umask(0o077)
     pipeline = None
@@ -801,12 +818,17 @@ def main():
     try:
         if args.allow_laf_router:
             if (args.transport != 'http' or not args.allow_existing_tools
-                    or args.laf_router_socket is None or args.laf_router_state is None
-                    or not args.laf_router_model):
+                    or (not args.laf_bootstrap_bindings
+                        and (args.laf_router_socket is None or args.laf_router_state is None
+                             or not args.laf_router_model))):
                 raise ValueError('Router composition requires explicit HTTP/shared/config opt-in')
         elif (args.laf_router_socket is not None or args.laf_router_state is not None
               or args.laf_router_model is not None):
             raise ValueError('Router options require explicit Router activation')
+        if args.laf_bootstrap_bindings and (not args.allow_laf_router
+                or any(value is not None for value in
+                       (args.laf_router_socket, args.laf_router_state, args.laf_router_model))):
+            raise ValueError('Bootstrap bindings require Router activation without raw Router options')
         if args.local_single_user_http and args.transport != 'http':
             raise ValueError('--local-single-user-http requires --transport http')
         if args.transport == 'http' and not args.allow_codex_pipeline:
@@ -816,6 +838,20 @@ def main():
             raise ValueError('--runtime-project-root is restricted to explicit local single-user HTTP mode')
         runtime_project_root = resolve_project_root(args.runtime_project_root)
         runtime = runtime_path(args.runtime, project_root=runtime_project_root)
+        binding_options = {}
+        router_binding = None
+        backend_state, backend_raw = load_state(runtime)
+        if args.laf_bootstrap_bindings:
+            from backend_state import bootstrap_paths
+            bootstrap_paths(runtime)
+            if backend_state is None:
+                raise ValueError('Explicit bootstrap binding state required')
+            binding_options = {'backend_state_sha256': state_sha256(backend_raw)}
+            router_binding = backend_state.get('router')
+            if router_binding is None and 'router' not in backend_state['unconfigured']:
+                raise ValueError('Explicit Router state required')
+        elif args.allow_laf_router and backend_state is not None:
+            raise ValueError('Explicit runtime Router state requires bootstrap binding mode')
         if args.transport == 'http' and args.allow_writes:
             raise ValueError('HTTP mode does not expose legacy orchestrator write tools')
         if args.allow_existing_tools and args.transport != 'http':
@@ -844,7 +880,7 @@ def main():
                 allow_chat_mailbox=args.allow_chat_mailbox,
                 allow_mailbox_grants=False, allow_codex_pipeline=False,
                 pipeline=None, allow_experiments=args.allow_experiments,
-                runtime_project_root=runtime_project_root)
+                runtime_project_root=runtime_project_root, **binding_options)
         if args.transport == 'http' and not args.local_single_user_http:
             resource_url = os.environ.get('ACEIS_OAUTH_RESOURCE_URL', '')
             authorization_server = os.environ.get(
@@ -878,14 +914,24 @@ def main():
         adapter_class = Adapter
         if args.allow_laf_router:
             from laf_shared_tools import (CompositeSharedTools, IntegratedAdapter,
-                                          build_router_application)
-            router_app = build_router_application(socket_path=args.laf_router_socket,
-                state_directory=args.laf_router_state, models=args.laf_router_model)
+                                          UnconfiguredRouterApplication, build_router_application)
+            if args.laf_bootstrap_bindings:
+                if router_binding is None:
+                    router_app = UnconfiguredRouterApplication()
+                else:
+                    router_app = build_router_application(socket_path=router_binding['socket'],
+                        state_directory=router_binding['receipts'], models=router_binding['models'],
+                        socket_identity=router_binding['socket_identity'], binding_runtime=runtime,
+                        binding_sha256=binding_options['backend_state_sha256'])
+            else:
+                router_app = build_router_application(socket_path=args.laf_router_socket,
+                    state_directory=args.laf_router_state, models=args.laf_router_model)
             try:
                 legacy_adapter = CompositeSharedTools(legacy_adapter, router_app,
                                                        server_info=SERVER_INFO)
             except Exception:
-                router_app.receipts.close()
+                close = getattr(getattr(router_app, 'receipts', None), 'close', None)
+                if callable(close): close()
                 raise
             adapter_class = IntegratedAdapter
         adapter = adapter_class(runtime, args.allow_writes,
@@ -895,7 +941,7 @@ def main():
                           allow_shared_tools_http=(args.transport == 'http'
                                                    and args.allow_existing_tools),
                           shared_tools_principal=shared_tools_principal,
-                          runtime_project_root=runtime_project_root)
+                          runtime_project_root=runtime_project_root, **binding_options)
         if args.transport == 'http':
             if legacy_adapter is None:
                 # The legacy daemon task APIs have no per-HTTP-principal ACL.

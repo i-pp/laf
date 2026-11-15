@@ -236,8 +236,14 @@ class _LazyClient:
 class HostGateway:
     def __init__(self, runtime, binary, project, ordinary_busy, *, transport_factory=HostTransport,
                  notification_worker_factory=None, allow_external_notifications=False,
-                 notification_runtime=None):
+                 notification_runtime=None, resource_settings=None, resource_controller=None):
         self.root, self.binary = Path(runtime), binary
+        import scheduler
+        self.resource_settings = resource_settings or scheduler.configuration(codex_pipeline=True)
+        self.resource_gate = None
+        if scheduler.resource_only(self.resource_settings):
+            from pipeline_resource_admission import PipelineAdmission
+            self.resource_gate = PipelineAdmission(self, self.resource_settings, resource_controller)
         self.require_host()
         self.snapshot, policy = executor_configuration(runtime, binary)
         self.ordinary_busy = ordinary_busy
@@ -274,7 +280,16 @@ class HostGateway:
         bundle = load_project_policy(project)
         if bundle.sha256 != self.snapshot['common_policy_sha256']: raise PipelineError('COMMON_POLICY_CHANGED')
         self.pipeline = Pipeline(runtime, policy, _LazyClient(self), instructions=developer_instructions(bundle),
-            policy_sha256=bundle.sha256, admission=self.admit_turn)
+            policy_sha256=bundle.sha256, admission=self.admit_turn, resource_gate=self.resource_gate)
+        if self.resource_gate is not None and self.pipeline.policy['schema'] != 2:
+            raise PipelineError('RESOURCE_MODE_REQUIRES_CONCURRENT_POLICY')
+        if notification_runtime is not None:
+            from notification_runtime import NotificationRuntime
+            if isinstance(notification_runtime, NotificationRuntime):
+                notification_runtime.activate_after_pipeline(self.pipeline)
+                enabled = notification_runtime.enabled
+                self.notification_worker_factory = notification_runtime.worker_factory if enabled else None
+                self.allow_external_notifications = enabled
 
     def _start_notification_worker(self):
         """Start isolated delivery without allowing its failure to stop Codex."""
@@ -442,6 +457,7 @@ class HostGateway:
         if any(op.get('kind')=='dispatch' for op in state['ops'].values()):
             raise PipelineError('TURN_DISPATCH_REQUIRES_SEPARATE_RECONCILIATION')
         self.require_host()
+        if getattr(self, 'resource_gate', None) is not None: self.resource_gate.ready()
         self.budget=lease(self.root/'runner.lock')
         result={'thread_id':thread_id,'inference_calls':0,'new_threads':0,'checks':[]}
         client=None
@@ -526,6 +542,9 @@ class HostGateway:
     def held(self): return pipeline_held(self.root)
 
     def reserve(self):
+        if getattr(self, 'resource_gate', None) is not None:
+            try: self.resource_gate.ready()
+            except RuntimeError: return False
         if self.budget is not None: return True
         if self.ordinary_busy(): return False
         try: self.budget = lease(self.root / 'runner.lock')
@@ -557,8 +576,15 @@ class HostGateway:
             self.record_failure('initialize',error)
             raise
 
-    def rpc(self, method, params):
+    def rpc(self, method, params, *, timeout=None):
         self.connect()
+        if method == 'turn/start' and getattr(self, 'resource_gate', None) is not None:
+            self.resource_gate.before_turn(params.get('clientUserMessageId'))
+        client = self.protocol
+        original_timeout = getattr(client, 'timeout_s', None)
+        if timeout is not None:
+            if type(original_timeout) not in (int, float): raise PipelineError('INVALID_PROTOCOL_DEADLINE')
+            client.timeout_s = min(original_timeout, timeout)
         try: return self.protocol.request(method, params)
         except RpcError as error:
             # A correlated rejection of a read is not a lost connection or a
@@ -576,8 +602,12 @@ class HostGateway:
             self.failed = True
             self.record_failure(method,error)
             raise
+        finally:
+            if original_timeout is not None: client.timeout_s = original_timeout
 
     def release_idle(self, *, force=False):
+        resource_gate = getattr(self, 'resource_gate', None)
+        if resource_gate is not None: resource_gate.reap()
         if self.pipeline._mutate(lambda s: any(t['state'] in HELD for t in s['tasks'].values())): return
         if self.protocol is not None and not force:
             threads=self.pipeline._mutate(lambda s:[dict(t) for t in s['threads'].values()
@@ -587,8 +617,10 @@ class HostGateway:
                 tasks=self.pipeline._mutate(lambda s:[dict(t) for t in s['tasks'].values() if t['thread_id']==thread['id']])
                 turned=[t for t in tasks if t.get('remote_turn')]
                 if turned:
+                    if resource_gate is not None and resource_gate.pending(thread['id']): return
                     try:
-                        remote=self.rpc('thread/read',{'threadId':thread['remote_id'],'includeTurns':True})['thread']
+                        read_options = {'timeout': 1} if resource_gate is not None else {}
+                        remote=self.rpc('thread/read',{'threadId':thread['remote_id'],'includeTurns':True}, **read_options)['thread']
                         expected={'COMPLETED':'completed','FAILED':'failed','CANCELLED':'interrupted'}
                         observed={t.get('id'):t.get('status') for t in remote.get('turns',[])}
                         if (remote.get('id')!=thread['remote_id'] or
@@ -601,6 +633,7 @@ class HostGateway:
                         self.failed=True
                         self.pipeline._mutate(lambda s:s['threads'][thread['id']].update(native_context_state='HISTORY_UNKNOWN'))
                 elif not self.failed:
+                    if resource_gate is not None and any(t['state'] == 'QUEUED' for t in tasks) and resource_gate.pending(thread['id']): return
                     deadline=self.context_deadlines.setdefault(thread['id'],time.monotonic()+self.pipeline.policy['timeout_seconds'])
                     if time.monotonic()<deadline:return
                     self.pipeline._mutate(lambda s:s['threads'][thread['id']].update(native_context_state='EMPTY_CONTEXT_EXPIRED'))

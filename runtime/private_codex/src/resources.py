@@ -19,8 +19,7 @@ CONFIG = PROJECT / "resource-limits.json"
 KEYS = {"cpu_percent", "cpu_budget_ms", "memory_bytes", "pids", "file_bytes", "runtime_bytes", "free_bytes", "log_bytes"}
 
 
-class ResourceExceeded(RuntimeError):
-    pass
+from resource_admission_core import ResourceExceeded, AdmissionWait, scope_stat, scope_empty
 
 
 def policy(value=None):
@@ -162,11 +161,12 @@ class Control:
         data = self.read()
         if data:
             stats = data.get("counters", {})
-            if self.cgroup.exists():
-                try:
-                    stats = counters(self.cgroup)
-                except FileNotFoundError:
-                    pass  # Final receipt, or conservative missing-receipt result at close.
+            try:
+                if scope_stat(self.cgroup) is not None:
+                    try:stats = counters(self.cgroup)
+                    except FileNotFoundError:pass  # Finish independently requires positive empty scope proof.
+            except AdmissionWait as error:
+                raise ResourceExceeded("Resource scope metadata is unknown") from error
             cause = violation(stats, self.limits)
             if cause:
                 self.exceeded = cause
@@ -182,7 +182,7 @@ class Control:
     def finish(self):
         try:
             self.check()
-        except ResourceExceeded:
+        except (OSError,ValueError,ResourceExceeded,AdmissionWait):
             pass
         malformed = False
         try:
@@ -191,12 +191,10 @@ class Control:
             data, malformed = self.last, True
         if data:
             self.exceeded = self.exceeded or data.get("violation")
-        released = bool(data and not self.cgroup.exists())
-        if data and self.cgroup.exists():
-            try:
-                released = counters(self.cgroup)["cgroup.events"].get("populated") == 0
-            except FileNotFoundError:
-                released = True
+        released = False
+        if data:
+            try:released=scope_empty(self.cgroup)
+            except (OSError,ValueError,AdmissionWait):pass
         return {**self.descriptor, "receipt_data": data, "exceeded": self.exceeded,
                 "confirmed": bool(data and data.get("state") == "FINISHED" and not malformed), "released": released,
                 "receipt_invalid": malformed}
@@ -238,6 +236,6 @@ def scope_released(descriptor):
         if (data["unit"] != unit or group.name != unit or group.parent.name != "agentorchestrator.slice"
                 or not group.is_relative_to('/sys/fs/cgroup')):
             return False
-        return not group.exists() or counters(group)["cgroup.events"].get("populated") == 0
-    except (OSError, ValueError, KeyError, TypeError):
+        return scope_empty(group)
+    except (OSError, ValueError, KeyError, TypeError, AdmissionWait):
         return False

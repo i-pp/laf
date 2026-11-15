@@ -39,6 +39,7 @@ class NotificationRuntime:
         self.disabled_reason = 'EXTERNAL_DELIVERY_DISABLED'
         self.outbox = None
         self.events_service = None
+        self._pending_pipeline = None
 
         if (type(allow_external_callbacks) is not bool
                 or type(allow_external_notifications) is not bool
@@ -104,10 +105,21 @@ class NotificationRuntime:
         if not isinstance(owner_hash_key, bytes) or len(owner_hash_key) < 32:
             self.disabled_reason = 'OWNER_HASH_KEY_UNAVAILABLE'
             return
-        if not self._private_runtime_ready():
+        configuration = (secret_cipher, owner_hash_key, resolver, sender,
+                         callback_verifier, authorize_task, owner_access_check,
+                         authenticated_principals)
+        root_identity, source_state = self._private_pipeline_state()
+        if source_state != 'READY':
             self.disabled_reason = 'PRIVATE_PIPELINE_LEDGER_UNAVAILABLE'
+            if source_state == 'MISSING':
+                self._pending_pipeline = (self.runtime_root, root_identity,
+                                          configuration)
             return
+        self._enable_storage(configuration)
 
+    def _enable_storage(self, configuration):
+        (secret_cipher, owner_hash_key, resolver, sender, callback_verifier,
+         authorize_task, owner_access_check, authenticated_principals) = configuration
         try:
             outbox = NotificationOutbox(
                 self.outbox_path, source_db_path=self.source_path,
@@ -123,23 +135,63 @@ class NotificationRuntime:
             return
         self.outbox = outbox
         self.events_service = service
+        self.sender = sender
         self.authenticated_principals = authenticated_principals
         self.enabled = True
         self.disabled_reason = None
 
-    def _private_runtime_ready(self):
+    def _private_root_identity(self):
         root = self.runtime_root
         if any(path.is_symlink() for path in [root, *root.parents]):
-            return False
+            return None
         try:
-            info = root.stat()
-            source = self.source_path.lstat()
+            info = root.lstat()
         except OSError:
+            return None
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) != 0o700):
+            return None
+        return (info.st_dev, info.st_ino)
+
+    def _private_pipeline_state(self):
+        identity = self._private_root_identity()
+        if identity is None:
+            return None, 'UNSAFE'
+        try:
+            source = self.source_path.lstat()
+        except FileNotFoundError:
+            state = 'MISSING'
+        except OSError:
+            return None, 'UNSAFE'
+        else:
+            state = ('READY' if stat.S_ISREG(source.st_mode)
+                     and source.st_uid == os.getuid()
+                     and stat.S_IMODE(source.st_mode) == 0o600 else 'UNSAFE')
+        if self._private_root_identity() != identity:
+            return None, 'UNSAFE'
+        return identity, state
+
+    def activate_after_pipeline(self, pipeline):
+        """Consume one fresh-ledger deferral after the real Pipeline exists.
+
+        All providers and principals were validated before deferral. This does
+        not reload credentials, retry failed storage, start a worker or deliver
+        a callback. Other disabled states cannot acquire delivery authority.
+        """
+        pending, self._pending_pipeline = self._pending_pipeline, None
+        if pending is None:
+            return self.enabled
+        root, identity, configuration = pending
+        database = getattr(pipeline, 'db', None)
+        current_identity, source_state = self._private_pipeline_state()
+        if (self.runtime_root != root
+                or self.source_path != root / 'codex-pipeline.sqlite3'
+                or self.outbox_path != root / 'mcp-events.sqlite3'
+                or database is None or Path(database).absolute() != self.source_path
+                or current_identity != identity or source_state != 'READY'):
             return False
-        return (root.is_dir() and info.st_uid == os.getuid()
-                and stat.S_IMODE(info.st_mode) == 0o700
-                and stat.S_ISREG(source.st_mode) and source.st_uid == os.getuid()
-                and stat.S_IMODE(source.st_mode) == 0o600)
+        self._enable_storage(configuration)
+        return self.enabled
 
     def adapter_options(self):
         """Return only supported Adapter kwargs; disabled composition exports none."""

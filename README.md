@@ -37,10 +37,16 @@ source is retained; the portable manifest itself launches stdio, not an HTTP end
 
 See [existing-owner-host setup](docs/integrated-plugin-install.md). This is not a
 complete clean-host Quick Start. Model/SDK/vendor assets and private account,
-service, tunnel and runtime state are not included. Actual Codex 0.167.0 loader,
-cache and SDK-backed MCP discovery passed for source commit `b531d31` only; see the
-[scoped evidence](docs/codex-install.md#completed-local-loader-and-discovery-evidence).
-Clean-host provisioning, general backend functionality and Chat acceptance remain separate gates.
+service, tunnel and runtime state are not included. The installation guide keeps
+the [historical loader evidence](docs/codex-install.md#completed-local-loader-and-discovery-evidence)
+scoped to its original source. Later local predecessors were checked separately:
+`c2ab056` completed installed stdio Flash and Codex canaries, correlated terminal
+history and same-runtime restart/reconciliation; `438b2aa` passed installed
+private-policy setup and 33-tool discovery with an expired synthetic policy.
+The canaries used legacy admission with resource mode off. Those observations
+do not accept a newer package, production resource policy, provider quota or
+the production Tunnel/client path. Use the [installed acceptance procedure](docs/installed-acceptance.md)
+for the selected package. Raw account, process and receipt evidence stays private.
 
 For Codex registration and the local marketplace option, see [Codex install](docs/codex-install.md).
 
@@ -57,9 +63,11 @@ profile name `integrated-32` is retained for compatibility.
 
 ## Source layout and package build
 
-`runtime/` is the fixed reviewed compatibility implementation for the root launcher.
-Top-level `inference/`, `laf`, `mcp/`, docs and scripts remain the public development
-source from the PR11 integration base, not overwritten by that older snapshot.
+`runtime/` retains the reviewed compatibility base plus the explicit changes
+recorded in [CHANGES.md](CHANGES.md) and [SOURCE_ORIGIN.md](SOURCE_ORIGIN.md).
+Top-level `inference/`, `laf` and `mcp/` remain separate development/component
+source. The shared resource protocol and selected Core/Router changes are
+mirrored in top-level and bundled inference source.
 The standalone five-tool `mcp/` is retained as an optional component, not the root
 plugin. Changes to root source do not silently change the pinned runtime subset.
 The previous public component guide is preserved at [component source guide](docs/public-source-component-guide.md). See [origin and changes](SOURCE_ORIGIN.md). Future consolidation must preserve
@@ -79,9 +87,9 @@ metadata is a later submission concern, not a prerequisite to reviewing this sou
 
 The integrated 33-tool catalog and startup/read checks do not establish that all
 33 tools work against the modern Router. Prefer the five `laf_router_*` tools for
-the modern owner-scoped Router interface. The full profile also requires an
-existing local-LLM helper directory and configured runtime, mailbox and grant
-state. The compatibility tools `aceis_local_llm_generate`,
+the modern owner-scoped Router interface. Optional legacy operations additionally
+require their separately configured helper, mailbox or grant prerequisites.
+The compatibility tools `aceis_local_llm_generate`,
 `aceis_local_model_status`, `aceis_local_model_generate` and
 `aceis_local_model_prepare` depend on their separate legacy backend. That helper
 route currently has an unresolved transport failure; its functionality is not

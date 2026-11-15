@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+
 """Only service-owned Strata processes and labeled Docker containers are controlled."""
 from __future__ import annotations
 import http.client
@@ -58,6 +60,8 @@ def provider_policy(value):
 
 class Backends:
     def __init__(self, config, config_path):
+        if 'resource_admission' in config or 'resource_admission_generation' in config:
+            raise ServiceError('Resource-only mode requires the owned split host/Core protocol')
         self.config, self.config_path = config, str(config_path)
         self.custom_provider = 'ollama_provider' in config
         self.provider = provider_policy(config['ollama_provider']) if self.custom_provider else {

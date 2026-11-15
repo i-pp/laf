@@ -159,11 +159,108 @@ fetches fresh provider advertisements and effort options and retains unknown/
 unavailable states. Per-call efforts are exact advertised strings, not a new
 bootstrap enum or alias map.
 
-The dedicated `PREFIX/workspace` is the only initial workspace (`default`).
+The canary mode above uses only `PREFIX/workspace` (`default`).
 The existing pipeline enforces read-only sandboxing and on-request approvals.
 Its finite schema1 HostGateway policy has concurrency1, four thread records,
 sixteen task records and a120s turn budget. This does not change ordinary
 `maximum_sessions=8`, claim eight Codex turns, or establish provider quota.
+
+### Import an explicitly selected operator schema2 policy
+
+Modification notice (2026-11-15): an existing-host deployment can instead import
+an actual operator-selected schema2 policy. This mode preserves its validated
+workspace paths, model allowlist and numeric bounds without filling defaults or
+translating the canary profile. The source must be a non-secret, regular,
+single-link owner0600 JSON file under protected symlink-free ancestry. It must
+fit16384 bytes and pass the existing pipeline policy validator. Workspaces must
+already exist; the import creates none.
+
+    OPERATOR_POLICY="/absolute/selected/private/pipeline-policy.json"
+    POLICY_SHA256="replace-with-reviewed-raw-file-sha256"
+    python3 -B "$BOOT" configure-codex --prefix "$PREFIX" \
+      --native "$NATIVE" --sha256 "$NATIVE_SHA256" \
+      --policy-file "$OPERATOR_POLICY" --policy-sha256 "$POLICY_SHA256" --dry-run
+    python3 -B "$BOOT" configure-codex --prefix "$PREFIX" \
+      --native "$NATIVE" --sha256 "$NATIVE_SHA256" \
+      --policy-file "$OPERATOR_POLICY" --policy-sha256 "$POLICY_SHA256"
+
+Select exactly one mode: policy-file/hash or canary workspace/models. Native
+path/hash remain mandatory. The policy hash above pins raw source bytes,
+including formatting; it is not the canonical embedded-policy hash or a model
+catalog projection. Readiness/capability output cannot reconstruct the missing
+source policy. Source identity, bytes and workspace validation are checked again
+before atomic publication. The final binding has its own16384-byte bound.
+
+Writable source ancestry remains refused before policy bytes are read. An owner
+may separately authorize an exact-byte export to a NEW protected location,
+pinned to a trusted raw-file hash and verified source identity, with a private
+provenance receipt. Keep the original bytes/permissions unchanged. This is an
+explicit owner-produced input, never an automatic fallback, ACL assumption or
+permission repair by the importer. The exported file must pass the same normal
+protected-path, type, owner, size, hash and policy checks above.
+
+The private binding embeds the validated policy and its source provenance.
+Later source-file edits or deletion do not change that snapshot. Existing
+frontends and gateways still fence binding mutation; updates require a NEW
+prefix. No old database, thread, task, receipt, grant, credential, ACL or outbox
+is imported. Preparation/configuration performs no account or model request.
+
+daemon-command reports the imported policy schema and concurrency field. That
+field is a legacy pipeline ceiling; resource-mode capabilities report null count
+limits instead. Never treat the imported number as resource admission, provider
+quota, measured capacity or a fixed LAF concurrency goal. This import does not
+select ordinary scheduler/resource policy, measured vectors or provider evidence.
+Use the separate resource-policy selection below. The copied scheduler source
+remains byte-pinned; do not edit it to force resource mode or weaken
+package/runtime verification. A new prefix still shares the OS account resource
+ledger and cannot discard ownership or UNKNOWN grants.
+
+Fresh provider model/effort discovery and normal owner/resource/uncertainty
+admission precede execution. Actual stdio Tunnel/client acceptance is separate
+from import success. Future OAuth/HTTPS receiver acceptance is an additional
+gate when that transport is deliberately selected.
+
+### Select private resource scheduler policy
+
+Modification notice (2026-11-15): before any database, daemon or receipt use,
+an operator can select a complete private scheduler document whose nested
+resource_admission has schema2 and admission_mode resources. It must omit
+maximum_sessions and pass the existing finite resource/controller/provider
+validators. No top-level schema field or inferred resource values are added.
+
+    RESOURCE_POLICY="/absolute/selected/private/scheduler-policy.json"
+    RESOURCE_SHA256="replace-with-reviewed-raw-file-sha256"
+    python3 -B "$BOOT" configure-resource-policy --prefix "$PREFIX" \
+      --policy-file "$RESOURCE_POLICY" --policy-sha256 "$RESOURCE_SHA256" --dry-run
+    python3 -B "$BOOT" configure-resource-policy --prefix "$PREFIX" \
+      --policy-file "$RESOURCE_POLICY" --policy-sha256 "$RESOURCE_SHA256"
+
+The same protected owner0600, single-link, no-symlink descriptor reader retains
+raw bytes, their expected SHA256 and provenance in the immutable backend
+binding. The source document has its own16384-byte bound; the whole binding
+must also fit16384 bytes. An oversized binding refuses without publication.
+The original packaged scheduler-config.json and executable source stay intact.
+Later source-policy edits/deletion do not change the selected snapshot.
+
+Selection alone enables none of the seven backend groups. Ordinary-only
+selection needs no native/account or pipeline profile. Codex remains a separate
+binding and requires a schema2 pipeline plus its finite pipeline/controller
+profile when activated. Daemon foreground, workers, limit checks, HostGateway
+and standalone all select through the same copied private_codex project;
+HOME/environment variables cannot select another resource policy. Raw policy
+and provenance are private inputs, not MCP configuration or diagnostic output.
+
+The scheduler generation includes the exact binding digest. Value, provenance
+and whitespace changes fence a live generation. Missing/malformed bootstrap
+markers also refuse in a fresh process. A valid older unselected record without
+a scheduler field retains legacy configuration for compatibility; a fresh read
+alone cannot attest that such a record was not manually restored. Manual
+binding edits/rollback are unsupported. Preserve the accepted binding digest
+and old mode-pinned ledger; never adopt another mode by restoring an old marker.
+Updates require a new unused prefix and normal reviewed generation adoption. Configuration does not
+open the shared resource ledger, probe an account/controller, calibrate a model,
+or establish provider entitlement. Unknown/expired quota, ownership and model
+evidence still refuse at normal admission. See [resource calibration](resource-calibration.md).
 
 ### Optional owner-daemon metadata
 

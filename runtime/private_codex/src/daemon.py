@@ -22,6 +22,7 @@ from control_socket import endpoint, peer_uid, validate_socket, MAX_REQUEST, MAX
 from resources import Control, ResourceExceeded, BudgetLog, storage_check
 from runner import Runner
 import scheduler
+from resource_admission import AdmissionWait
 import development_poc
 from transport import Process, redact
 
@@ -109,11 +110,16 @@ class Daemon:
                 "socket": str(self.socket_path), "paused": bool(self.store.db.execute("SELECT paused FROM scheduler_state WHERE id=1").fetchone()[0]),
                 "stopping": self.stopping, "active_tasks": list(self.children), "blocked": blocked,
                 "pending_recovery": self.pending_recovery, "maximum_sessions": self.settings["maximum_sessions"],
+                "admission_mode": "resources" if scheduler.resource_only(self.settings) else "legacy",
                 "session_pool_policy_current": current,
                 "task_counts": {r[0]: r[1] for r in self.store.db.execute("SELECT state,count(*) FROM tasks GROUP BY state")},
                 "resource_policy": self.settings["daemon"], "worker_resource_policy": self.settings["worker"],
                 "codex_pipeline_enabled": self.allow_codex_pipeline,
                 "codex_pipeline_held": bool(self.pipeline and self.pipeline.held)}
+
+    def resource_context(self):
+        scheduler.ensure_controller_resources(self)
+        return self.resource_owner, self.resource_controller_token
 
     def ordinary_busy(self):
         return bool(not self.pool_policy_current() or self.stopping or self.children or self.blocked or self.pending_recovery
@@ -144,11 +150,30 @@ class Daemon:
             return 'workspace_busy'
         queue_wait = getattr(self, 'queue_wait', 'queue_pending')
         if queue_wait != 'queue_pending': return queue_wait
-        if len(self.children) >= self.settings['maximum_sessions']: return 'session_pool_capacity'
+        if self.settings['maximum_sessions'] is not None and len(self.children) >= self.settings['maximum_sessions']:
+            return 'session_pool_capacity'
         return queue_wait
 
     def handle(self, method, params):
         if not isinstance(params, dict): raise ValueError("params must be an object")
+        if method == 'resource_owners':
+            if params: raise ValueError('Resource owner listing takes no arguments')
+            if 'resource_admission' not in self.settings: return []
+            from resource_admission import owner_views
+            return owner_views(self.root)
+        if method == 'reconcile_resource_owner':
+            if (set(params) != {'owner', 'apply'} or type(params['apply']) is not bool
+                    or not self.status()['paused'] or self.children or self.pending_recovery):
+                raise ValueError('Paused idle owner required')
+            from resource_admission import Ledger
+            from contextlib import closing
+            with closing(Ledger(self.settings['resource_admission'])) as ledger:
+                return ledger.reconcile_owner(params['owner'], apply=params['apply'])
+        if method == 'reconcile_resources':
+            if (set(params) != {'task_id', 'reconciliation_id', 'apply'} or type(params['apply']) is not bool
+                    or not self.status()['paused'] or self.children or self.pending_recovery):
+                raise ValueError('Paused idle owner and exact reconciliation required')
+            return scheduler.reconcile_task_resources(self.runner, params['task_id'], params['reconciliation_id'], apply=params['apply'])
         if method == 'codex_pipeline_replace_empty':
             if (not self.allow_codex_pipeline or self.pipeline is None
                     or set(params)!={'thread_id','request_key','evidence'}
@@ -249,10 +274,18 @@ class Daemon:
         if parent.name != 'agentorchestrator.slice':
             raise RuntimeError("Scheduler worker scopes require the verified private slice")
         control.descriptor["expected_cgroup"] = str(parent / control.unit)
+        reserved = scheduler.reserve_task_resources(self.root, task["id"], self.settings, token,
+                                                    worker=True, scopes=[control.descriptor], owner=getattr(self, "resource_owner", None))
         with self.store.db:
             self.store.db.execute("BEGIN IMMEDIATE")
             current = self.store.get(task["id"])
-            if current["state"] != "QUEUED": return
+            if current["state"] != "QUEUED":
+                if reserved:
+                    from resource_admission import Ledger
+                    from contextlib import closing
+                    with closing(Ledger(self.settings['resource_admission'])) as ledger:
+                        ledger.release(self.root, task['id'], token, local_released=True, provider_released=True)
+                return
             option = self.store.db.execute("SELECT timeout FROM scheduler_options WHERE task_id=?", (task["id"],)).fetchone()
             timeout = option[0] if option else self.settings["task_timeout"]
             self.store.db.execute("INSERT OR IGNORE INTO scheduler_options VALUES(?,?)", (task["id"], timeout))
@@ -296,6 +329,11 @@ class Daemon:
             elif task["state"] == "COMPLETED" and (resource_error or cleanup["exit_code"] != 0 or cleanup["resources"]["exceeded"]
                     or not cleanup["resources"]["released"] or not cleanup["resources"]["confirmed"]):
                 self.store.transition(task_id, "COMPLETED", "UNKNOWN", "Worker resource supervision failed after task checkpoint")
+            try:
+                scheduler.finish_task_resources(self.root, self.store, task_id, self.settings,
+                    worker_released=cleanup['resources']['released'] is True)
+            except (OSError, ValueError, RuntimeError, sqlite3.Error):
+                self.event('resource_reservation_retained', task_id=task_id)
             self.event("worker_exit", task_id=task_id, exit_code=cleanup["exit_code"])
             del self.children[task_id]
 
@@ -320,6 +358,9 @@ class Daemon:
             except (ValueError, RuntimeError): self.blocked.append("unreconciled_unknown")
         try: storage_check(self.root, self.runner.resource_limits)
         except ResourceExceeded: self.blocked.append("storage_budget")
+        try: scheduler.ensure_controller_resources(self)
+        except AdmissionWait as exc:
+            self.blocked.append(exc.code); return
         if self.pipeline is not None:
             try: self.pipeline.pump()
             except (OSError, ValueError, RuntimeError, sqlite3.Error): self.blocked.append('pipeline_operation_unknown')
@@ -345,14 +386,14 @@ class Daemon:
         # Page size bounds each SQLite result, independently of worker capacity.
         last = 0
         horizon = self.store.db.execute('SELECT coalesce(max(rowid),0) FROM tasks').fetchone()[0]
-        while len(self.children) < self.settings['maximum_sessions']:
+        while self.settings['maximum_sessions'] is None or len(self.children) < self.settings['maximum_sessions']:
             rows = self.store.db.execute("""SELECT t.rowid AS queue_rowid,t.* FROM tasks t
                 WHERE state='QUEUED' AND t.rowid>? AND t.rowid<=? AND NOT EXISTS
                 (SELECT 1 FROM scheduler_dispatches d WHERE d.task_id=t.id)
                 ORDER BY t.rowid LIMIT 64""", (last, horizon)).fetchall()
             if not rows: return
             for row in rows:
-                if len(self.children) >= self.settings['maximum_sessions']: return
+                if self.settings['maximum_sessions'] is not None and len(self.children) >= self.settings['maximum_sessions']: return
                 task = dict(row)
                 last = task.pop('queue_rowid')
                 if task['workspace_id'] in protected_workspaces:
@@ -370,6 +411,12 @@ class Daemon:
                 if task['workspace_id'] in self.busy_workspaces: continue
                 try:
                     self.start_worker(task)
+                except AdmissionWait as exc:
+                    self.task_waits[task['id']] = exc.code
+                    if exc.code in ('resource_provider_quota', 'resource_provider_quota_unknown',
+                                    'resource_reservation_retained'):
+                        continue
+                    self.blocked.append(exc.code); return
                 except scheduler.PoolPolicyError:
                     self.blocked.append('session_pool_policy_changed'); return
                 except ResourceExceeded:
@@ -449,6 +496,8 @@ class Daemon:
             if self.allow_codex_pipeline:
                 from codex_host import HostGateway
                 if self.pipeline_factory is not None:
+                    if scheduler.resource_only(self.settings):
+                        raise ValueError('Resource-only mode requires the verified built-in pipeline gateway')
                     self.pipeline = self.pipeline_factory(
                         self.root, self.runner.binary,
                         Path(__file__).resolve().parents[1], self.ordinary_busy)
@@ -469,7 +518,8 @@ class Daemon:
                         Path(__file__).resolve().parents[1], self.ordinary_busy,
                         notification_runtime=build_systemd_notification_runtime(
                             self.root, events_transport=True,
-                            authenticated_principals=principals))
+                            authenticated_principals=principals),
+                        resource_settings=self.settings, resource_controller=self.resource_context)
             self.pending_recovery = scheduler.recover_dispatches(self.runner)
             # Reconcile retained UNKNOWN evidence before accepting new dispatch.
             for row in self.store.db.execute("SELECT id FROM tasks WHERE state='UNKNOWN'").fetchall():
@@ -512,6 +562,24 @@ class Daemon:
         return self.exit_code
 
 
+def _daemon_child_environment(binary, *, allow_codex_pipeline=False):
+    """Forward existing notification references only for explicit Events opt-in."""
+    environment = {"PATH": str(Path(binary).parent) + ":" + os.environ.get("PATH", "/usr/bin:/bin"),
+                   "LANG": "C.UTF-8", "HOME": str(Path.home())}
+    if allow_codex_pipeline:
+        enabled = os.environ.get('ACEIS_MCP_EVENTS_ENABLED')
+        if enabled is not None:
+            environment['ACEIS_MCP_EVENTS_ENABLED'] = enabled
+        if enabled == '1':
+            for name in ('ACEIS_OAUTH_ISSUER', 'ACEIS_OAUTH_AUDIENCE',
+                         'ACEIS_OAUTH_JWKS_FILE', 'ACEIS_OAUTH_ALLOWED_SUBJECT',
+                         'ACEIS_OAUTH_ALLOWED_SUBJECTS_JSON', 'ACEIS_OAUTH_REQUIRED_SCOPES',
+                         'CREDENTIALS_DIRECTORY'):
+                if name in os.environ:
+                    environment[name] = os.environ[name]
+    return environment
+
+
 def foreground(root, binary=None, serve_argv=None, *, development=False, allow_codex_pipeline=False):
     settings = (scheduler.configuration(codex_pipeline=True) if allow_codex_pipeline
                 else scheduler.configuration())
@@ -521,8 +589,9 @@ def foreground(root, binary=None, serve_argv=None, *, development=False, allow_c
     argv = serve_argv or [sys.executable, "-B", str(Path(__file__)), "--serve", "--runtime", str(root), "--codex", binary,
                          *(["--development-poc"] if development else []), *(['--allow-codex-pipeline'] if allow_codex_pipeline else [])]
     control = Control(root, settings["daemon"], scheduler_storage=True)
-    child = Process(argv, cwd=root, env={"PATH": str(Path(binary).parent) + ":" + os.environ.get("PATH", "/usr/bin:/bin"),
-                    "LANG": "C.UTF-8", "HOME": str(Path.home())}, raw_output=True, resources=control)
+    child = Process(argv, cwd=root,
+                    env=_daemon_child_environment(binary, allow_codex_pipeline=allow_codex_pipeline),
+                    raw_output=True, resources=control)
     stop = False
     def signal_stop(*_):
         nonlocal stop
@@ -546,6 +615,8 @@ def foreground(root, binary=None, serve_argv=None, *, development=False, allow_c
     finally:
         result = child.close(grace=40)
         (root / "logs" / ("daemon-controller-" + control.unit + ".json")).write_text(json.dumps(result))
+        if result['resources']['released'] is True:
+            scheduler.reconcile_stopped_controllers(root, settings)
         for sig, handler in handlers.items(): signal.signal(sig, handler)
     return 0 if result["exit_code"] == 0 and result["resources"]["confirmed"] and not result["resources"]["exceeded"] and result["resources"]["released"] else 1
 

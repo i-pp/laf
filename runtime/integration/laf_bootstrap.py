@@ -44,6 +44,7 @@ POLICY_COMMIT='ddcaf63e50bed722d558d418deeef791f3029a6f'
 POLICY_SHA256='beccfd5c9aeb63d6a06f33ef39732e832e7f4e79b0a7915829ca993b55347236'
 TOP_CONFIG=('resource-limits.json','scheduler-config.json','verification-commands.json')
 NATIVE_LIMIT=512*1024**2
+OPERATOR_POLICY_LIMIT=16384
 PLUGIN_KEYS={'schema','profile','sdk_python','runtime','runtime_project_root','runtime_source_root','router_socket','receipt_directory','models','capabilities'}
 class BootstrapError(ValueError):pass
 
@@ -312,7 +313,7 @@ def doctor(prefix):
  return {'status':'prepared','prefix':str(prefix),'profile':'integrated-32','sdk':sdk,
          'policy':bundle.metadata(),'unconfigured_backends':[x for x in BACKENDS if x in unconfigured],
          'services_started':False,'services_probed':False,'network_used':False,'execution_ready':False,
-         'bindings':{name:('configured_not_probed' if operator_state is not None and operator_state.get(name) is not None else 'unconfigured') for name in ('router','codex','orchestrator')},
+         'bindings':{name:('configured_not_probed' if operator_state is not None and operator_state.get(name) is not None else 'unconfigured') for name in ('router','codex','orchestrator','scheduler')},
          'ordinary_dependencies':{name:shutil.which(name) is not None for name in ('unshare','mount','setpriv','bwrap','systemd-run')},
          'cgroup_and_namespace_admission':'not_probed',
          'limitations':['No SDK/account/native version or service readiness probe','Only explicitly bound backends can dispatch; configured is not service readiness','No daemon, model or Router lifecycle was started']}
@@ -422,22 +423,94 @@ def configure_router(prefix,*,socket_path,models,dry_run=False):
   return {'socket':str(path),'socket_identity':list(identity),'models':list(models),'receipts':str(Path(prefix)/'receipts')}
  return _binding_change(prefix,'router','router',binding,dry_run=dry_run)
 
-def configure_codex(prefix,*,binary,binary_sha256,workspace,models,dry_run=False):
+def read_operator_document(path,expected_sha256):
+ # Added 2026-11-15: non-secret policy snapshot, never runtime/auth import.
+ from backend_state import file_identity
+ if type(expected_sha256) is not str or not re.fullmatch('[a-f0-9]{64}',expected_sha256):
+  raise BootstrapError('Expected policy source SHA256 required')
+ path=Path(path)
+ if not path.is_absolute() or '..' in path.parts or not path.name or str(path.resolve())!=str(path):
+  raise BootstrapError('Canonical absolute policy source required')
+ def valid(info):
+  return (stat.S_ISREG(info.st_mode) and info.st_uid==os.getuid()
+          and stat.S_IMODE(info.st_mode)==0o600 and info.st_nlink==1
+          and 0<info.st_size<=OPERATOR_POLICY_LIMIT)
+ parent=protected_directory(path.parent)
+ try:
+  directory=os.fstat(parent)
+  before=os.stat(path.name,dir_fd=parent,follow_symlinks=False)
+  if not valid(before):raise BootstrapError('Private bounded operator policy required')
+  # Modified 2026-11-15: prove regular type before any read-open callback.
+  pinned=os.open(path.name,os.O_PATH|os.O_NOFOLLOW|os.O_CLOEXEC,dir_fd=parent)
+  try:
+   pinned_info=os.fstat(pinned)
+   if not valid(pinned_info) or file_identity(before)!=file_identity(pinned_info):
+    raise BootstrapError('Operator source type changed before read-open')
+   fd=os.open('/proc/self/fd/'+str(pinned),os.O_RDONLY|os.O_NONBLOCK|os.O_CLOEXEC)
+  finally:os.close(pinned)
+  try:
+   opened=os.fstat(fd)
+   if not valid(opened) or file_identity(before)!=file_identity(opened):
+    raise BootstrapError('Operator policy descriptor changed before reading')
+   with os.fdopen(fd,'rb',closefd=False) as stream:raw=stream.read(OPERATOR_POLICY_LIMIT+1)
+   after=os.fstat(fd)
+  finally:os.close(fd)
+  current=os.stat(path.name,dir_fd=parent,follow_symlinks=False)
+  same_directory(path.parent,parent)
+  if (not valid(after) or not valid(current) or file_identity(opened)!=file_identity(after)
+      or file_identity(after)!=file_identity(current) or len(raw)!=after.st_size
+      or hashlib.sha256(raw).hexdigest()!=expected_sha256):
+   raise BootstrapError('Operator policy source changed or hash mismatched')
+  same_directory(path.parent,parent)
+  return raw,{'path':str(path),'sha256':expected_sha256,'identity':file_identity(after),
+                 'directory_identity':[directory.st_dev,directory.st_ino]}
+ finally:os.close(parent)
+
+def read_operator_policy(path,expected_sha256):
+ from codex_pipeline import validate_policy
+ raw,source=read_operator_document(path,expected_sha256)
+ policy=validate_policy(decode(raw))
+ if policy['schema']!=2:raise BootstrapError('Explicit schema2 operator policy required')
+ return policy,source
+
+def configure_resource_policy(prefix,*,policy_file,policy_sha256,dry_run=False):
+ # Added 2026-11-15: resource policy selection only, never enable a backend.
+ _operator_imports()
+ from backend_state import scheduler_binding_policy
+ def binding():
+  raw,source=read_operator_document(policy_file,policy_sha256)
+  value={'raw':raw.decode('utf-8'),'sha256':policy_sha256,'source':source}
+  scheduler_binding_policy(value)
+  return value
+ return _binding_change(prefix,'resource_scheduler','scheduler',binding,dry_run=dry_run)
+
+def configure_codex(prefix,*,binary,binary_sha256,workspace=None,models=None,
+                    policy_file=None,policy_sha256=None,dry_run=False):
  _operator_imports()
  from backend_state import file_identity
  from codex_host import binary_snapshot
  from codex_pipeline import validate_policy
- prefix=Path(prefix);path=Path(binary);workspace=Path(workspace)
- if workspace!=prefix/'workspace':raise BootstrapError('Explicit dedicated prefix/workspace required')
+ prefix=Path(prefix);path=Path(binary)
+ imported=policy_file is not None or policy_sha256 is not None
+ if imported:
+  if policy_file is None or policy_sha256 is None or workspace is not None or models is not None:
+   raise BootstrapError('Choose one explicit Codex policy mode')
+ else:
+  if workspace is None or models is None:raise BootstrapError('Explicit canary workspace and models required')
+  workspace=Path(workspace)
+  if workspace!=prefix/'workspace':raise BootstrapError('Explicit dedicated prefix/workspace required')
  if type(binary_sha256) is not str or not re.fullmatch('[a-f0-9]{64}',binary_sha256):raise BootstrapError('Expected native SHA256 required')
- policy=validate_policy({'schema':1,'workspaces':{'default':str(workspace)},'models':models,
+ canary=None if imported else validate_policy({'schema':1,'workspaces':{'default':str(workspace)},'models':models,
                          'max_threads':4,'max_tasks':16,'concurrency':1,'timeout_seconds':120})
  def binding():
+  policy,source=read_operator_policy(policy_file,policy_sha256) if imported else (canary,None)
   info=path.lstat()
   if not 4<=info.st_size<=NATIVE_LIMIT:raise BootstrapError('Native binary exceeds the explicit bound')
   before=file_identity(info);binary_snapshot(str(path),binary_sha256)
   if file_identity(path.lstat())!=before:raise BootstrapError('Native binary changed during validation')
-  return {'binary':str(path),'binary_sha256':binary_sha256,'binary_identity':before,'policy':policy}
+  value={'binary':str(path),'binary_sha256':binary_sha256,'binary_identity':before,'policy':policy}
+  if source is not None:value['policy_source']=source
+  return value
  return _binding_change(prefix,'codex_pipeline','codex',binding,dry_run=dry_run)
 
 def _stream_digest(fd):
@@ -541,7 +614,10 @@ def daemon_command(prefix):
  command+=['daemon']
  return {'status':'command_only','services_started':False,'command':command,
          'requires':'Existing normal host, namespace/cgroup/user-bus/resource admission; no bypass or automatic start',
-         'ordinary_maximum_sessions_unchanged':True,'pipeline_concurrency':1 if state.get('codex') else None}
+         'ordinary_maximum_sessions_unchanged':state.get('scheduler') is None,
+         'scheduler_admission_mode':'resources' if state.get('scheduler') is not None else 'legacy',
+         'pipeline_concurrency':state['codex']['policy']['concurrency'] if state.get('codex') and state.get('scheduler') is None else None,
+         'pipeline_policy_schema':state['codex']['policy']['schema'] if state.get('codex') else None}
 
 
 def admission(prefix):
@@ -619,18 +695,20 @@ def activate_config(prefix,*,config=None,dry_run=False):
    os.umask(old_umask)
 
 def main(argv=None):
- parser=Parser(description=__doc__);parser.add_argument('action',choices=('prepare','doctor','admission','activate-config','configure-orchestrator','configure-router','configure-codex','snapshot-codex','daemon-command'))
+ parser=Parser(description=__doc__);parser.add_argument('action',choices=('prepare','doctor','admission','activate-config','configure-orchestrator','configure-router','configure-codex','configure-resource-policy','snapshot-codex','daemon-command'))
  parser.add_argument('--prefix',type=Path,required=True);parser.add_argument('--sdk-python',type=Path)
  parser.add_argument('--dry-run',action='store_true');parser.add_argument('--config',type=Path,help='NEW standard config destination for explicit activate-config only')
  parser.add_argument('--socket',type=Path);parser.add_argument('--model',action='append');parser.add_argument('--native',type=Path)
  parser.add_argument('--sha256');parser.add_argument('--workspace',type=Path);parser.add_argument('--source',type=Path)
+ parser.add_argument('--policy-file',type=Path,help='Protected private snapshot for explicit Codex or resource-policy selection')
+ parser.add_argument('--policy-sha256',help='Expected SHA256 of the policy source raw bytes')
  try:
   args=parser.parse_args(argv)
-  selected={name for name in ('sdk_python','config','socket','model','native','sha256','workspace','source') if getattr(args,name) is not None}
+  selected={name for name in ('sdk_python','config','socket','model','native','sha256','workspace','source','policy_file','policy_sha256') if getattr(args,name) is not None}
   allowed={'prepare':{'sdk_python'},'doctor':set(),'admission':set(),'activate-config':{'config'},'configure-orchestrator':set(),'configure-router':{'socket','model'},
-           'configure-codex':{'native','sha256','workspace','model'},'snapshot-codex':{'source','sha256'},'daemon-command':set()}
+           'configure-codex':{'native','sha256','workspace','model','policy_file','policy_sha256'},'configure-resource-policy':{'policy_file','policy_sha256'},'snapshot-codex':{'source','sha256'},'daemon-command':set()}
   if selected-allowed[args.action] or args.action in ('doctor','admission','daemon-command') and args.dry_run:raise BootstrapError('Options do not match the explicit action')
-  required={'configure-router':{'socket','model'},'configure-codex':{'native','sha256','workspace','model'},'snapshot-codex':{'source','sha256'}}
+  required={'configure-router':{'socket','model'},'configure-codex':{'native','sha256'},'configure-resource-policy':{'policy_file','policy_sha256'},'snapshot-codex':{'source','sha256'}}
   if required.get(args.action,set())-selected:raise BootstrapError('Explicit operator inputs are missing')
   if args.action=='prepare':result=prepare_prefix(args.prefix,sdk_python=args.sdk_python,dry_run=args.dry_run)
   elif args.action=='doctor':result=doctor(args.prefix)
@@ -638,7 +716,8 @@ def main(argv=None):
   elif args.action=='activate-config':result=activate_config(args.prefix,config=args.config,dry_run=args.dry_run)
   elif args.action=='configure-orchestrator':result=configure_orchestrator(args.prefix,dry_run=args.dry_run)
   elif args.action=='configure-router':result=configure_router(args.prefix,socket_path=args.socket,models=args.model,dry_run=args.dry_run)
-  elif args.action=='configure-codex':result=configure_codex(args.prefix,binary=args.native,binary_sha256=args.sha256,workspace=args.workspace,models=args.model,dry_run=args.dry_run)
+  elif args.action=='configure-codex':result=configure_codex(args.prefix,binary=args.native,binary_sha256=args.sha256,workspace=args.workspace,models=args.model,policy_file=args.policy_file,policy_sha256=args.policy_sha256,dry_run=args.dry_run)
+  elif args.action=='configure-resource-policy':result=configure_resource_policy(args.prefix,policy_file=args.policy_file,policy_sha256=args.policy_sha256,dry_run=args.dry_run)
   elif args.action=='snapshot-codex':result=snapshot_codex(args.prefix,source=args.source,expected_sha256=args.sha256,dry_run=args.dry_run)
   else:result=daemon_command(args.prefix)
   print(json.dumps(result,indent=2));return 0

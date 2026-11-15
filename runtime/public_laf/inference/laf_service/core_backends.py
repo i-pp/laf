@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+
 """Explicit Core backend: container-owned Flash, host-owned Ollama lifecycle.
 
 No Docker module, CLI, socket path, host PID or host mount authority is imported.
@@ -35,6 +37,7 @@ import signal
 import subprocess
 import threading
 import time
+import uuid
 from .core import GIB, MODELS, ServiceError
 
 NAMES = {'coder-next': 'laf-coder-next', 'gpt-oss-120b': 'laf-gpt-oss-120b'}
@@ -131,6 +134,17 @@ class CoreBackends:
             self.requires_flash, self.default_model = False, None
         else:
             self.profiles, self.requires_flash, self.default_model = None, True, 'gpt-oss-120b'
+        self.resource_mode = 'resource_admission_generation' in config
+        self.resource_instances = {}
+        if self.resource_mode:
+            pins = config.get('resource_model_sha256')
+            if (not self.normal_catalog or not isinstance(pins, dict)
+                    or set(pins) != (set(self.profiles) | ({'flash'} if self.requires_flash else set()))
+                    or any(pins[key] != self.profiles[key]['digest'][7:] for key in self.profiles)):
+                raise ServiceError('Resource mode requires explicit manifest-pinned models')
+            if self.requires_flash:
+                from .flash_resources import manifest
+                manifest(config)
         self.names = dict(NAMES) if self.profiles is None else {key: item['reference'] for key, item in self.profiles.items()}
         self.models = frozenset(set(self.names) | ({'flash'} if self.requires_flash else set()))
         self.idle_base, self.models_verified = None, False
@@ -204,10 +218,21 @@ class CoreBackends:
                 raise ServiceError('stale Flash requires explicit provider stop')
             self.wait_idle(guard)
             guard()
+            loading = None
+            artifact = None
+            if self.resource_mode:
+                from .flash_resources import manifest
+                artifact = manifest(self.config,verify=True)
+                instance = self._resource_model('flash')
+                loading_id = str(uuid.uuid4())
+                token = self.client.resource_call('loading_reserve',model='flash',instance=instance,
+                    request_id=loading_id)['token']
+                loading = (instance,loading_id,token)
+                guard()
             self.flash_lines = queue.Queue(maxsize=64)
             env = {**os.environ, 'HF_HUB_OFFLINE': '1', 'TRANSFORMERS_OFFLINE': '1', 'OMP_NUM_THREADS': '8'}
             self.flash = self.process_factory([self.config['tokenizer_python'], '-B',
-                str(Path(__file__).with_name('core_flash_worker.py')), self.config_path],
+                str(Path(__file__).with_name('core_flash_worker.py')), self.config_path, *([artifact] if artifact else [])],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1,
                 start_new_session=True, env=env)
             process, records = self.flash, self.flash_lines
@@ -230,9 +255,11 @@ class CoreBackends:
             self.flash_drain.start()
             deadline = time.monotonic() + 90
             launch = self.read_flash(deadline, guard)
-            if (type(launch) is not dict or set(launch) != {'starting', 'engine_pid'}
+            if (type(launch) is not dict or set(launch) != ({'starting', 'engine_pid'} | ({'artifact_sha256'} if self.resource_mode else set()))
                     or launch['starting'] is not True or type(launch['engine_pid']) is not int or launch['engine_pid'] <= 0):
                 raise ServiceError('Flash launch identity protocol mismatch')
+            if self.resource_mode and launch['artifact_sha256'] != artifact:
+                raise ServiceError('Flash launch artifact mismatch')
             self.engine_pid = launch['engine_pid']
             engine = self._process(self.engine_pid)
             if (engine is None or engine['pgid'] != process.pid or engine['sid'] != process.pid
@@ -243,7 +270,12 @@ class CoreBackends:
             if (type(ready) is not dict or ready.get('ready') is not True
                     or ready.get('engine_pid') != self.engine_pid or not self.flash_alive()):
                 raise ServiceError('Flash readiness or owned engine identity unavailable')
+            if self.resource_mode and ready.get('artifact_sha256') != artifact:
+                raise ServiceError('Flash ready artifact mismatch')
             self.flash_base = self.read_resources()
+            if loading is not None:
+                guard()
+                self.client.resource_call('loading_finish',instance=loading[0],request_id=loading[1],token=loading[2])
 
     def _process(self, pid):
         self._namespace()
@@ -343,6 +375,9 @@ class CoreBackends:
             # Only after Flash's process barrier can the host's physical absolute
             # GPU-idle barrier acknowledge an Ollama stop.
             self.client.stop()
+            if self.resource_mode:
+                self.client.resource_call('core_models_stopped')
+                self.resource_instances.clear()
             with self.lock:
                 self.active_model = self.flash_base = self.idle_base = self.address = None
                 self.models_verified = False
@@ -503,10 +538,20 @@ class CoreBackends:
                         and (self.requires_flash or s['vram_used'] < 3 * GIB))
             stable = stable + 1 if empty and released else 0
             if stable >= 2:
+                if self.resource_mode and self.active_model in self.resource_instances:
+                    self.client.resource_call('model_release',instance=self.resource_instances[self.active_model])
+                    self.resource_instances.pop(self.active_model)
                 self.active_model = None
                 return
             time.sleep(.5)
         raise ServiceError('old model physical release unconfirmed; next model not loaded')
+
+    def _resource_model(self, model):
+        if model not in self.resource_instances:
+            reply=self.client.resource_call('model_reserve',model=model,
+                artifact=self.config['resource_model_sha256'][model],request_id=str(uuid.uuid4()))
+            self.resource_instances[model]=reply['instance']
+        return self.resource_instances[model]
 
     def generate(self, job, check):
         if job.model not in self.models:
@@ -522,9 +567,28 @@ class CoreBackends:
         if self.requires_flash:
             self.start_flash(guard)
         if job.model == 'flash':
-            self.flash.stdin.write(json.dumps({'messages': job.messages, 'max_tokens': job.max_tokens}) + '\n')
+            body={'messages':job.messages,'max_tokens':job.max_tokens}
+            token=None
+            if self.resource_mode:
+                instance=self._resource_model('flash');request_id=str(uuid.UUID(job.id))
+                token=self.client.resource_call('execution_reserve',model='flash',instance=instance,
+                    request_id=request_id)['token']
+                body['resource_request_id']=request_id
+                guard()
+            self.flash.stdin.write(json.dumps(body) + '\n')
             self.flash.stdin.flush()
-            return self.read_flash(job.deadline, guard)
+            result=self.read_flash(job.deadline, guard)
+            if self.resource_mode:
+                if (not isinstance(result,dict) or set(result)!={'content','finish_reason','prompt_tokens','completion_tokens','resource_request_id'}
+                        or result['resource_request_id']!=request_id or not isinstance(result['content'],str)
+                        or result['finish_reason'] not in ('stop','length')
+                        or type(result['prompt_tokens']) is not int or not 0<=result['prompt_tokens']<=8192
+                        or type(result['completion_tokens']) is not int or not 0<=result['completion_tokens']<=job.max_tokens):
+                    raise ServiceError('Flash terminal identity unconfirmed')
+                guard()
+                self.client.resource_call('execution_finish',instance=instance,request_id=request_id,token=token)
+                result={key:value for key,value in result.items() if key!='resource_request_id'}
+            return result
         if not self.normal_catalog:
             self.start_ollama(guard)
         if not self.requires_flash and self.idle_base is None:
@@ -541,6 +605,12 @@ class CoreBackends:
                    if self.profiles is None else dict(self.profiles[key]['options']))
         options['num_predict'] = job.max_tokens
         guard()  # Inventory/unload can finish after cancellation or a provider-generation change.
+        resource_token = None
+        if self.resource_mode:
+            instance=self._resource_model(job.model)
+            resource_token=self.client.resource_call('execution_reserve',model=job.model,
+                instance=instance,request_id=str(uuid.UUID(job.id)))['token']
+            guard()
         result = self.api('/api/chat', {'model': self.names[key], 'messages': job.messages, 'stream': False,
                             'think': 'low' if key == 'gpt-oss-120b' else False, 'keep_alive': -1,
                             'options': options},
@@ -560,6 +630,8 @@ class CoreBackends:
             except ServiceError:
                 self.models_verified = False
                 raise
+        if resource_token is not None:
+            self.client.resource_call('execution_finish',instance=instance,request_id=str(uuid.UUID(job.id)),token=resource_token)
         return {'content': result['message'].get('content', ''),
                 'thinking': result['message'].get('thinking', ''), 'finish_reason': result['done_reason'],
                 'prompt_tokens': result.get('prompt_eval_count'), 'completion_tokens': result.get('eval_count'),

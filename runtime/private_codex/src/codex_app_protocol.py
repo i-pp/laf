@@ -63,7 +63,7 @@ METHOD_SCHEMAS = {
     "turn/interrupt": ("v2/TurnInterruptParams.json", "v2/TurnInterruptResponse.json", ("threadId", "turnId")),
 }
 ALLOWED_METHODS = frozenset(METHOD_SCHEMAS)
-_THREAD_FIELDS = {"model", "cwd", "baseInstructions", "developerInstructions",
+_THREAD_FIELDS = {"model", "modelProvider", "cwd", "baseInstructions", "developerInstructions",
                   "approvalPolicy", "approvalsReviewer", "sandbox", "config"}
 _FIELDS = {
     "initialize": {"clientInfo"},
@@ -364,6 +364,9 @@ class ProtocolClient:
         self.max_response_bytes = max_response_bytes
         self.initialized = False
         self._init_attempted = False
+        self._resource_account_sha256 = None
+        self._resource_account_observed_at = None
+        self._resource_account_generation = 0
         self._sequence = 0
         self._busy = False
         self._diag = {'last_method': None, 'stage': 'constructed', 'failure_code': None,
@@ -381,6 +384,7 @@ class ProtocolClient:
         for key in ('rpc_error_code', 'last_response_shape', 'last_server_message_shape'):
             self._diag.pop(key, None)
         start = time.monotonic()
+        account_generation = self._resource_account_generation
         try:
             response = self.exchange(message, self.timeout_s)
         except Exception as exc:
@@ -410,6 +414,11 @@ class ProtocolClient:
                 raise RpcError(error["code"], error["message"])
             self._diag['stage'] = 'result_validation'
             result = _result(message["method"], response["result"])
+            if message['method'] == 'account/read':
+                from resource_admission import account_fingerprint
+                unchanged = account_generation == self._resource_account_generation
+                self._resource_account_sha256 = account_fingerprint(response['result']) if unchanged else None
+                self._resource_account_observed_at = start if unchanged else None
             self._diag['stage'] = 'result_verified'
             return result
         except RpcError as exc:
@@ -469,6 +478,10 @@ class ProtocolClient:
         No response-writing or approval-resolution capability is exposed here.
         """
         message = _json_copy(message, self.max_response_bytes)
+        if isinstance(message.get('method'), str) and message['method'].startswith('account/') and message['method'] != 'account/rateLimits/updated':
+            self._resource_account_generation += 1
+            self._resource_account_sha256 = None
+            self._resource_account_observed_at = None
         self._diag['last_server_message_shape'] = frame_shape(message)
         message = _server_message(message)
         request = "id" in message

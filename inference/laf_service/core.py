@@ -20,6 +20,8 @@
 
 # Changed 2026-11-13: bounded swap policy and explicit quiet resource recovery.
 
+# Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+
 """Bounded single-lane scheduling and fail-closed resource admission."""
 from __future__ import annotations
 import dataclasses
@@ -34,6 +36,21 @@ MODELS = {"flash", "coder-next", "gpt-oss-120b"}
 
 class ServiceError(Exception):
     pass
+
+
+RESOURCE_WAIT_CODES = frozenset({'resource_observation_unknown', 'resource_observation_stale',
+    'resource_usage_unknown', 'resource_gpu_topology_unknown'} | {
+    'resource_' + dimension + '_' + reason
+    for dimension in ('cpu_millicores','ram_bytes','gpu_milliunits','vram_bytes')
+    for reason in ('unknown','headroom','budget')})
+
+
+class ResourceWait(ServiceError):
+    """A correlated pre-dispatch refusal, never an uncertain execution result."""
+    def __init__(self, code):
+        if not isinstance(code,str) or code not in RESOURCE_WAIT_CODES:raise ValueError('Unknown resource wait code')
+        self.code=code
+        super().__init__(code)
 
 
 def snapshot(*, swap_capacity=False):
@@ -114,10 +131,12 @@ class Job:
     cancel: threading.Event = dataclasses.field(default_factory=threading.Event)
     done: threading.Event = dataclasses.field(default_factory=threading.Event)
     abort_requested: bool = False
+    wait_reason: str | None = None
 
     def public(self):
         return {'id': self.id, 'model': self.model, 'status': self.status,
-                'result': self.result, 'error': self.error}
+                'result': self.result, 'error': self.error,
+                **({'resource_wait_reason': self.wait_reason} if self.status == 'queued' and self.wait_reason in RESOURCE_WAIT_CODES else {})}
 
 
 class Controller:
@@ -221,9 +240,11 @@ class Controller:
         self.safety()
 
     def run(self):
+        pending = None
         while not self.stop.is_set():
             try:
-                job = self.queue.get(timeout=.2)
+                job = pending if pending is not None else self.queue.get(timeout=.2)
+                pending = None
             except queue.Empty:
                 if self.requires_flash and not self.fault and not self.stop.is_set() and not self.backend.health()['flash_resident']:
                     now = time.monotonic()
@@ -241,10 +262,17 @@ class Controller:
                 with self.lock:
                     self.active = job
                     job.status = 'running'
+                    job.wait_reason = None
                 self.cancelled(job)
                 job.result = self.backend.generate(job, lambda: self.cancelled(job))
                 self.cancelled(job)
                 job.status = 'completed'
+            except ResourceWait as exc:
+                # Only an authenticated, correlated no-dispatch reply can wait.
+                # Keep this oldest job in front of new arrivals until admission,
+                # cancellation or its existing deadline; never replay a turn.
+                job.status, job.wait_reason = 'queued', exc.code
+                pending = job
             except Exception as exc:
                 job.status = 'cancelled' if job.cancel.is_set() or self.stop.is_set() else 'failed'
                 job.error = str(exc)[:240]
@@ -253,11 +281,16 @@ class Controller:
                 except Exception:
                     self.fault = 'provider stop unconfirmed'
             finally:
-                job.messages = []
-                job.done.set()
                 with self.lock:
                     self.active = None
-                self.queue.task_done()
+                if pending is None:
+                    job.messages = []
+                    job.done.set()
+                    self.queue.task_done()
+            if pending is not None: self.stop.wait(.2)
+        if pending is not None:
+            pending.status='cancelled';pending.messages=[];pending.done.set()
+            self.queue.task_done()
 
     def cancelled_idle(self):
         if self.stop.is_set() or self.fault:

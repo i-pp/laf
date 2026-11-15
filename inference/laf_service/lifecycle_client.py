@@ -18,13 +18,15 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+
 """Core-side lifecycle client: no Docker, host configuration or PID authority."""
 from __future__ import annotations
 import re
 import math
 import time
 import threading
-from .core import ServiceError
+from .core import ServiceError, ResourceWait
 from .lifecycle import validate_sample
 
 
@@ -58,10 +60,13 @@ class LifecycleClient:
     def resource_policy(self):
         """Read fixed host policy without granting Core mutation authority."""
         result = self.control_exchange({'operation': 'resource_policy'}, self.read_timeout)
-        if (type(result) is not dict or set(result) not in ({'epoch', 'swap_limit_mib'}, {'epoch', 'swap_limit_mib', 'policy_version', 'rolling_swap_policy'})
+        if (type(result) is not dict or set(result) - {'resource_admission_generation'} not in ({'epoch', 'swap_limit_mib'}, {'epoch', 'swap_limit_mib', 'policy_version', 'rolling_swap_policy'})
                 or type(result['epoch']) is not str or not re.fullmatch(r'[0-9a-f]{32}', result['epoch'])
                 or type(result['swap_limit_mib']) is not int or not 512 <= result['swap_limit_mib'] <= 2048):
             raise ServiceError('invalid host resource policy')
+        if 'resource_admission_generation' in result and (not isinstance(result['resource_admission_generation'], str)
+                or not re.fullmatch(r'[0-9a-f]{64}', result['resource_admission_generation'])):
+            raise ServiceError('invalid host admission generation')
         if 'rolling_swap_policy' in result:
             from .swap_window import WindowPolicy
             if type(result['policy_version']) is not int or result['policy_version'] != 2 or type(result['rolling_swap_policy']) is not dict:
@@ -80,6 +85,43 @@ class LifecycleClient:
             self.policy_epoch = result['epoch']
             self.policy_contract = contract
         return result
+
+    def resource_call(self, operation, **parameters):
+        fields = {'model_reserve': ({'model','artifact','request_id'}, {'instance'}),
+                  'execution_reserve': ({'model','instance','request_id'}, {'token'}),
+                  'execution_finish': ({'instance','request_id','token'}, {'released'}),
+                  'model_release': ({'instance'}, {'released'}),
+                  'loading_reserve': ({'model','instance','request_id'}, {'token'}),
+                  'loading_finish': ({'instance','request_id','token'}, {'released'}),
+                  'core_models_stopped': (set(), {'released'})}
+        if operation not in fields or set(parameters) != fields[operation][0]:
+            raise ValueError('Fixed resource operation required')
+        with self.lock:
+            if self.uncertain or self.stopping or self.pending_ensure is not None or self.epoch is None:
+                raise ServiceError('Resource mutation requires reconciled provider identity')
+            epoch,generation,ticket=self.epoch,self.generation,self.ticket
+        try:
+            reply=self.exchange({'operation':operation,'epoch':epoch,'generation':generation,**parameters},self.read_timeout)
+            if set(reply)!=fields[operation][1]|{'epoch','generation'} or self._identity(reply)!=(epoch,generation):
+                raise ServiceError('Resource acknowledgement identity mismatch')
+            if 'released' in reply and reply['released'] is not True:raise ServiceError('Resource release unconfirmed')
+            for key in ('token','instance'):
+                if key in reply:
+                    import uuid
+                    if not isinstance(reply[key],str) or str(uuid.UUID(reply[key]))!=reply[key]:
+                        raise ServiceError('Resource acknowledgement malformed')
+            with self.lock:
+                if ticket!=self.ticket or self.stopping:raise ServiceError('Resource operation invalidated')
+            return reply
+        except ResourceWait:
+            # The fixed host reply proves that this acquisition did not commit.
+            # Retain the existing provider identity, and queue the same job.
+            raise
+        except Exception:
+            # Lost resource receipts never imply replay rights. The existing
+            # invalidating physical stop is the recovery path.
+            with self.lock:self.uncertain=True;self.need_reconcile=True
+            raise
 
     def status(self, timeout=None):
         result = self.control_exchange({'operation': 'status'}, self.read_timeout if timeout is None else timeout)

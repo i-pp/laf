@@ -60,10 +60,11 @@ def _record(stream):
             return value
         value = json.loads(raw, object_pairs_hook=unique)
         if (len(raw) > 4096 or not isinstance(value, dict)
-                or set(value) != {"schema_version", "generation", "maximum_sessions"}
-                or type(value["schema_version"]) is not int or value["schema_version"] != 1
-                or type(value["maximum_sessions"]) is not int
-                or not 1 <= value["maximum_sessions"] <= MAXIMUM_SESSIONS
+                or type(value.get("schema_version")) is not int
+                or not ((value['schema_version'] == 1 and set(value) == {'schema_version', 'generation', 'maximum_sessions'}
+                         and type(value['maximum_sessions']) is int and 1 <= value['maximum_sessions'] <= MAXIMUM_SESSIONS)
+                        or (value['schema_version'] == 2 and set(value) == {'schema_version', 'generation', 'admission_mode'}
+                            and value['admission_mode'] == 'resources'))
                 or not isinstance(value["generation"], str) or len(value["generation"]) != 64
                 or any(c not in '0123456789abcdef' for c in value["generation"])):
             raise ValueError("Invalid pool policy record")
@@ -105,8 +106,10 @@ def pool_generation(root, settings, *, daemon_owned=False, worker=False):
 
 
 def _pin_generation(root, settings, *, can_rebind):
-    expected = {"schema_version": 1, "generation": settings["pool_generation"],
-                "maximum_sessions": settings["maximum_sessions"]}
+    import scheduler
+    expected = ({'schema_version': 2, 'generation': settings['pool_generation'], 'admission_mode': 'resources'}
+                if scheduler.resource_only(settings) else
+                {'schema_version': 1, 'generation': settings['pool_generation'], 'maximum_sessions': settings['maximum_sessions']})
     try:
         held = lease(root / "leases" / "pool-generation.lock")
     except RuntimeError:
@@ -189,7 +192,7 @@ def guard(root, task, *, slot=True, settings=None):
         if pipeline_held(root): raise RuntimeError('Pipeline execution or cleanup remains unresolved')
         stack.enter_context(lease(root / "leases" / (identifier(task["id"]) + ".lock")))
         stack.enter_context(lease(root / "leases" / ("workspace-" + identifier(task["workspace_id"]) + ".lock")))
-        if slot:
+        if slot and not scheduler.resource_only(settings):
             stack.enter_context(_session_slot(root, settings['maximum_sessions']))
         yield
 

@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-15: explicit resource-owned Flash identity and source boundary.
+
 """Offline-only source-image build wrapper. No deployment, pull or host change."""
 import argparse
 import hashlib
@@ -40,7 +42,7 @@ def validate_base(value):
 CORE_FILES = (
     '__init__.py', 'core.py', 'server.py', 'npu_bridge.py', 'lifecycle.py',
     'lifecycle_client.py', 'lifecycle_uds.py', 'core_backends.py',
-    'core_flash_worker.py', 'core_server.py', 'swap_window.py',
+    'core_flash_worker.py', 'core_server.py', 'swap_window.py', 'flash_resources.py',
 )
 
 

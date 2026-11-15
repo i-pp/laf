@@ -166,7 +166,7 @@ def validate_arguments(name, args):
 
 class Pipeline:
     def __init__(self, runtime, policy, client, *, instructions, policy_sha256, clock=time.time, admission=None,
-                 notification_outbox=None):
+                 notification_outbox=None, resource_gate=None):
         self.root = Path(runtime).absolute()
         if any(p.is_symlink() for p in [self.root, *self.root.parents]): raise PipelineError('UNSAFE_RUNTIME')
         info = self.root.stat()
@@ -176,9 +176,13 @@ class Pipeline:
         if not isinstance(instructions, str) or not instructions.strip() or not re.fullmatch('[a-f0-9]{64}', policy_sha256):
             raise PipelineError('POLICY_NOT_LOADED')
         self.instructions, self.common_hash = instructions, policy_sha256
-        self.policy_hash = digest({'policy': self.policy, 'common': policy_sha256})
+        policy_binding = {'policy': self.policy, 'common': policy_sha256}
+        if resource_gate is not None:
+            policy_binding['admission_mode'] = 'resources'
+        self.policy_hash = digest(policy_binding)
         self.client, self.clock = client, clock
         self.admission = admission
+        self.resource_gate = resource_gate
         self.notification_outbox = notification_outbox
         self.notification_sync_error = None
         self.loaded = set()
@@ -454,6 +458,9 @@ class Pipeline:
                 'resident_scheduler': False, 'billing_verified': False, 'model_execution_verified': False,
                 'catalog': {'status': 'unknown' if failure else 'observed', 'source': 'model/list',
                             **({'code': failure} if failure else {})}}
+        if getattr(self, 'resource_gate', None) is not None:
+            for bound in ('max_threads', 'max_tasks', 'concurrency'): result['bounds'][bound] = None
+            result['admission_mode'] = 'resources'
         if self.policy['schema'] == 2: result['capacity'] = self._mutate(self.capacity)
         # The MCP envelope exports data twice (text and structuredContent).
         # Keep headroom for escaping, and do not duplicate all option metadata
@@ -476,8 +483,9 @@ class Pipeline:
         threads = {t['thread_id'] for t in held}
         return {'mode': 'cumulative_trial' if self.policy['schema'] == 1 else 'concurrent_execution',
             'active_threads': len(threads), 'held_tasks': len(held),
-            'available_execution_slots': max(0,min(self.policy['concurrency'],self.policy['max_threads'],self.policy['max_tasks'])-len(held)),
-            'execution_slots': min(self.policy['concurrency'], self.policy['max_threads'], self.policy['max_tasks']) if self.policy['schema'] == 2 else self.policy['concurrency'],
+            'available_execution_slots': None if getattr(self, 'resource_gate', None) is not None else max(0,min(self.policy['concurrency'],self.policy['max_threads'],self.policy['max_tasks'])-len(held)),
+            'execution_slots': None if getattr(self, 'resource_gate', None) is not None else min(self.policy['concurrency'], self.policy['max_threads'], self.policy['max_tasks']) if self.policy['schema'] == 2 else self.policy['concurrency'],
+            'admission_mode': 'resources' if getattr(self, 'resource_gate', None) is not None else 'legacy',
             'stored_threads': len(s['threads']), 'archived_threads': sum(bool(t.get('archived')) for t in s['threads'].values()),
             'stored_tasks': len(s['tasks']), 'pending_inputs': sum(t['state'] in ('STORED','QUEUED','BLOCKED') for t in s['tasks'].values()),
             'terminal_tasks': sum(t['state'] in TERMINAL for t in s['tasks'].values()),
@@ -485,6 +493,7 @@ class Pipeline:
             'completion_reserve_bytes': COMPLETION_RESERVE if self.policy['schema'] == 2 else 0}
 
     def room(self, s, thread_id):
+        if getattr(self, 'resource_gate', None) is not None: return True
         held = [t for t in s['tasks'].values() if t['state'] in HELD]
         if len(held) >= self.policy['concurrency']: return False
         if self.policy['schema'] == 2:
@@ -691,7 +700,7 @@ class Pipeline:
 
     @staticmethod
     def _view(t):
-        return {k: v for k, v in t.items() if k not in ('prompt', 'remote_turn', 'stop_sent', 'pending_turn', 'pending_approval_turn')}
+        return {k: v for k, v in t.items() if k not in ('prompt', 'remote_turn', 'stop_sent', 'pending_turn', 'pending_approval_turn', 'resource_token', 'resource_binding')}
 
     def queue(self, task_id, request_key):
         def prepare(s):
@@ -717,7 +726,7 @@ class Pipeline:
 
     def _dispatch(self, *, catalog=None):
         def candidate(s):
-            if sum(t['state'] in HELD for t in s['tasks'].values()) >= self.policy['concurrency']: return None
+            if getattr(self, 'resource_gate', None) is None and sum(t['state'] in HELD for t in s['tasks'].values()) >= self.policy['concurrency']: return None
             pending = sorted((t for t in s['tasks'].values() if t['state'] == 'QUEUED'), key=lambda t: t['queue_seq'])
             return next((t['id'] for t in pending if not s['threads'][t['thread_id']]['active_task']
                          and not s['threads'][t['thread_id']].get('closing')
@@ -730,6 +739,22 @@ class Pipeline:
         if self.admission is not None and not self.admission(): return {'status': 'SHARED_BUDGET_HELD'}
         try:self._mutate(lambda s:self._thread(s,task['thread_id'],idle=True))
         except PipelineError as error:return {'status':'BLOCKED','code':error.code,'task_id':ident}
+        resource_gate = getattr(self, 'resource_gate', None)
+        if resource_gate is not None:
+            from resource_admission import AdmissionWait
+            try:
+                token = resource_gate.reserve(task)
+                binding = resource_gate.binding(task)
+                def bind_grant(s):
+                    current = self._task(s, ident)
+                    if current['state'] != 'QUEUED': raise PipelineError('NOT_QUEUED')
+                    current.update(resource_token=token, resource_binding=binding)
+                    current.pop('resource_wait_reason', None)
+                    return dict(current)
+                task = self._mutate(bind_grant)
+            except AdmissionWait as error:
+                self._mutate(lambda s: self._task(s, ident).update(resource_wait_reason=error.code))
+                return {'status': 'QUEUED', 'task_id': ident, 'waiting_reason': error.code}
         try:
             row = self._model(task['model'], catalog)
             if task['reasoning_effort'] not in row['supported_reasoning_efforts']:
@@ -742,7 +767,8 @@ class Pipeline:
             thread = self._mutate(lambda s: dict(self._thread(s, task['thread_id'], idle=True)))
             try:
                 result = self.client.request('thread/resume', {'threadId': thread['remote_id'], 'excludeTurns': True,
-                    'model': task['model'], 'cwd': self.policy['workspaces'][thread['workspace']],
+                    'model': task['model'], **({'modelProvider': 'openai'} if resource_gate is not None else {}),
+                    'cwd': self.policy['workspaces'][thread['workspace']],
                     'developerInstructions': self.instructions, 'approvalPolicy': 'on-request',
                     'approvalsReviewer': 'user', 'sandbox': 'read-only',
                     'config': {'model_reasoning_effort': task['reasoning_effort']}})
@@ -770,6 +796,11 @@ class Pipeline:
                 return self._blocked_before_turn(ident, 'RESUME_REASONING_EFFORT_MISMATCH')
             self._mutate(lambda s:s['threads'][thread['id']].update(context_reasoning_effort_evidence=evidence))
             self.loaded.add(thread['id'])
+        if resource_gate is not None:
+            try: resource_gate.authorize(task)
+            except AdmissionWait as error:
+                self._mutate(lambda s: self._task(s, ident).update(resource_wait_reason=error.code))
+                return {'status': 'QUEUED', 'task_id': ident, 'waiting_reason': error.code}
         selection_sha256 = task['selection_sha256']
         def prepare(s):
             task = self._task(s, ident)

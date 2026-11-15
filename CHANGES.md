@@ -24,6 +24,90 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: protected policy discovery and reader fixes (2026-11-15)
+
+Treat only a missing selector as absence; denied or indeterminate metadata
+must refuse configuration instead of selecting legacy defaults. Pin the
+operator policy with O_PATH and verify its regular-file type and identity
+before any read-open callback, then read the pinned inode and retain the
+existing coherent-source checks. Close the private SQLite regression snapshot
+explicitly. Add five offline denial, FIFO/type and replacement regressions to
+the minimum source workflow. These generic fixes add no NPU implementation,
+device operation, policy calibration or live-service change.
+
+## Unreleased: publication candidate scope record (2026-11-15)
+
+Clarify README.md and SOURCE_ORIGIN.md for the combined resource/setup source
+and private policy selector. Preserve predecessor-specific installed evidence
+and distinguish legacy canaries, synthetic selector setup, resource admission
+and production stdio Tunnel acceptance. Retain external-asset licensing and
+future OAuth/provider boundaries. This documentation change adds no runtime
+behavior, configuration, dependency, backend authority or service operation.
+
+## Unreleased: private resource scheduler policy selection (2026-11-15)
+
+Add an explicit new-prefix configure-resource-policy action that retains a
+protected raw-hash-pinned resource-only scheduler document in immutable backend
+state. Preserve packaged scheduler source and acceptance byte verification.
+Select through the copied project across scheduler entrypoints; preserve raw
+input while normalizing ordinary/pipeline settings. Pin the entire binding in
+the scheduler generation and refuse missing/malformed bootstrap state. Import
+enables no backend, account, model, daemon, resource ledger or new authority.
+Calibration, actual provider limits and normal generation adoption remain
+independent prerequisites. Add offline import, mutation, composition and copied
+CLI regressions. No existing service or configuration is changed by this source.
+
+## Unreleased: combined setup and resource proof fences (2026-11-15)
+
+Combine the complete resource candidate with the protected-policy/Events/HTTP
+setup changes. Construct the resource-aware Pipeline and validate its mode
+before activating the same deferred Events runtime. Preserve controller,
+ownership, uncertainty and binding guards. Pin resource mode into new Pipeline
+ledger identity while retaining the existing legacy hash; switching modes must
+use a new ledger instead of silently adopting history. Absence of a held grant
+does not verify a terminal turn: require matching provider history. Add joint
+offline regressions, including rejection and retained-state checks.
+
+This source merge does not select calibrated resource inputs, adopt a shared
+ledger generation, switch services or establish resource-only/NPU acceptance.
+The existing stdio Tunnel path and future OAuth/receiver scope stay separate.
+
+## Unreleased: guarded remote composition setup (2026-11-15)
+
+Forward only existing Events/OAuth/credential references through the supported
+daemon resource path when the Codex pipeline and Events are explicitly enabled.
+Keep default environments minimal; do not forward account overrides, tokens or
+unrelated variables. Add HTTP bootstrap-binding mode with exact state/hash and
+socket identity forwarding. Reject raw Router arguments for explicit bootstrap
+states, retain deny-all schemas without opening endpoints/receipts, and fence
+tool/Events calls after configuration mutation. Existing principal and legacy
+contracts remain unchanged. Add strict offline handoff/HTTP refusal regressions
+and document protected policy export and remaining real authentication inputs.
+No live service, credential provisioning or public endpoint is configured here.
+
+## Unreleased: first-ledger notification initialization (2026-11-15)
+
+Retain the same fully validated notification runtime when its private source
+ledger is genuinely absent. Consume its one-time deferral after HostGateway
+creates the real Pipeline, then enable the existing worker factory. Pin the
+runtime directory identity and recheck storage; other disabled states, unsafe
+existing files, interruption and failed storage cannot gain delivery authority
+through a retry. Keep provider/credential loading, principal scope and worker
+start under their existing gates. Add guarded temporary-SQLite regressions and
+remote acceptance prerequisites. No live service or callback is changed.
+
+## Unreleased: explicit operator schema2 policy import (2026-11-15)
+
+Add a separate configure-codex mode for a protected, raw-hash-pinned operator
+schema2 policy. Preserve validated workspace/model/bound values and record
+immutable source provenance; do not reconstruct defaults or copy old runtime,
+authentication, grants or history. Keep the schema1 canary scope unchanged.
+Report the selected daemon policy schema/ceiling and retain atomic unused-prefix,
+source-drift, owner, byte-bound and frontend/executor snapshot fences. Add strict
+offline source/CLI/Gateway regression cases and configuration documentation.
+This setup path does not establish provider quota, resource-led admission,
+remote authentication/Events delivery or production cutover acceptance.
+
 ## Unreleased: current task state after rejected reads (2026-11-15)
 
 Return the authoritative current task state if a native read fails after an
@@ -64,6 +148,23 @@ legacy API/no-autoload mismatch rather than translating calls into Router jobs.
 Classify the new source in the license policy and select the offline regressions
 in minimum CI. These changes do not establish actual installation/account/model
 acceptance, provision dependencies or change a running service.
+
+## Unreleased: versioned resource-only admission
+
+Added optional resource-only cloud and pipeline dispatch using one durable
+OS-account ledger, verified owners/controllers, incremental atomic CPU/RAM/GPU/VRAM
+reservations, fresh observations, pinned provider identity and finite quota
+evidence. This mode replaces fixed LAF worker/session envelopes while retaining
+workspace, generation, isolation, process, storage and uncertain-execution guards.
+Direct uncharged standalone parents are refused. Saved-result verification uses
+bounded reserved capacity, and native account reads are revalidated before turns.
+
+Connected the split Router's manifest-pinned Ollama and explicit owned Flash
+paths to shared controllers, model residency and incremental loading/job grants.
+Added bounded read-only AMD device/DRM telemetry, conservative UMA coupling,
+fixed queue wait reasons and correlated no-replay resource replies. NPU resource
+admission and GPU partitions remain refused. Legacy checked-in configuration is
+unchanged; no live policy, model, service or resource-branch publication is changed.
 
 ## Unreleased: eligible ordinary queue dispatch
 
@@ -624,3 +725,91 @@ anchor consistency, guarded composition, native/hash/path/swap/fault bounds and
 fake-only gateway metadata. No new real native, SDK, socket, service, account or
 model execution is asserted by those tests. Prior phase1/loader/model evidence
 remains historical rather than acceptance for this new source.
+
+## Local resource owner completion (2026-11-15)
+
+Resource-only CLI execution now enters a verified private scope and charges its
+standalone coordinator before Runner/native creation. Existing direct unbounded
+APIs continue to refuse. The coordinator remains charged until known exit and
+empty-scope evidence; provider and UNKNOWN execution evidence is retained.
+
+An explicit host-only dead-Router reconciliation command uses the existing
+ownership locks, unchanged exact candidate, stopped fixed providers, empty
+scopes and fresh paired physical GPU/resource evidence. It never starts/stops a
+provider, never clears a cloud grant and never authorizes replay. Its read-only
+command planner and staged hardware calibration procedure execute no device or
+service changes. The new paths have offline boundary regressions; real device,
+systemd, calibration, Flash/NPU integration and live adoption remain separate.
+
+## Local resource-owned Flash connection (2026-11-15)
+
+The split Core/host resource path now supports an explicitly pinned Flash model
+with separate loading/residency/execution demands. Complete bounded asset and
+command verification runs in both Core and its worker before native load; a
+parent artifact pin and per-generation terminal request identity prevent stale
+or substituted native replies from releasing a grant. Existing process-group,
+fixed-provider, GPU release and emergency-stop barriers remain. Live controllers
+stay charged; lost/unknown outcomes never authorize replay. The new helper is
+explicitly allowed into the Core source image and imports no host authority.
+
+Offline tests use only synthetic assets, pipes and native/lifecycle objects.
+Actual Flash peaks, model assets, GPU behavior and hardware acceptance remain
+unverified. Default configuration is unchanged and NPU resource mode remains
+refused pending independent device ownership/accounting integration.
+
+## Non-admitting NPU calibration collector (2026-11-15)
+
+Added a bounded, read-only pinned sysfs/DRM-fdinfo collector for an already owned
+NPU scope. It requires a private hard-limited reader, validates fresh
+PCI/driver/firmware/PID/start/UID/scope evidence and rejects unknown or stale
+observations. Empty or quiet owned counters never prove global device ownership:
+every result remains ineligible for admission. No device, ioctl, vendor SDK,
+native model, service action or ledger mutation is invoked. NPU shared-ledger
+admission, Router binding and positive uncertain-device recovery remain
+unimplemented; the existing resource-only NPU refusal is preserved. Tests use
+synthetic kernel files and do not establish hardware acceptance.
+
+## Local public/resource integration (2026-11-15)
+
+Combine the published installed-acceptance/backend binding and rejected-read
+reliability paths with the reviewed resource admission implementation. A failed
+native read returns current interleaved task state while resource grants remain
+held until exact account/history or existing positive cleanup proof. Resource
+tokens, provider limits, generation and UNKNOWN/no-replay fences remain.
+This is an isolated source integration, not production configuration or a live
+service transition; NPU shared admission and real calibrated adoption are still
+separate requirements.
+
+## Correct counterless accelerator observations (2026-11-15)
+
+Resolve the pinned NPU's actual accelerator device numbers through sysfs and
+check each observed descriptor before and after its fdinfo read. A matching
+open accelerator with missing counters is unknown, rather than an empty client
+set. Reject descriptor substitution and device rebindings. The collector still
+never opens a device and never grants admission or proves global idle.
+
+## Preserve GPU grants with counterless device handles (2026-11-15)
+
+Use pinned sysfs DRM device numbers and before/after descriptor identity when
+reading owned GPU counters. Missing counters, descriptor/device substitution
+and over-age final reads retain uncertainty instead of proving zero residency.
+A KFD handle has no implemented per-device allocation/release proof and also
+retains reservations. This conservative refusal can block Flash/ROCm resource
+mode; it does not change the running legacy service or enable another route.
+
+Pin the stricter descriptor semantics in the shared resource protocol generation.
+Earlier unpublished resource owners cannot join while grants remain held; no
+automatic migration, grant discard or running-service adoption is performed.
+
+Distinguish absent KFD support from denied kernel metadata. A denied KFD stat
+never becomes proof of absence. The final unpublished generation also fences
+earlier descriptor collectors with weaker metadata visibility.
+
+## Retain reservations on unreadable scope metadata (2026-11-15)
+
+Replace error-suppressing existence checks in positive GPU, Router, shared-owner
+and ordinary-worker release proofs. Only a verified missing scope or stable
+valid zero-population event proves cleanup. Denied metadata, partial files and
+changed scope identity remain unknown; exact model/job/controller grants stay
+held. Prospective worker cleanup also refuses unreadable scope state. Old
+unpublished resource participants are fenced by the stricter generation.

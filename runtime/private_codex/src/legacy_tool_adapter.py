@@ -411,6 +411,7 @@ class Adapter:
                 maximum = raw.get('maximum_sessions')
                 data = {'paused': raw.get('paused') is True, 'stopping': raw.get('stopping') is True,
                         'maximum_sessions': maximum if type(maximum) is int and 1 <= maximum <= 8 else None,
+                        'admission_mode': raw.get('admission_mode') if raw.get('admission_mode') in ('legacy', 'resources') else None,
                         'blocked_count': len(raw.get('blocked', [])),
                         'pending_recovery_count': len(raw.get('pending_recovery', [])),
                         'active_task_ids': [v for v in raw.get('active_tasks', []) if uuid_value(v)],

@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+
 """Transport-independent, fixed-capability lifecycle protocol prototype.
 
 This module is suitable for a future socket-only Core image: no subprocess,
@@ -32,7 +34,7 @@ import threading
 import time
 from contextlib import contextmanager
 import uuid
-from .core import ServiceError, check_resources
+from .core import ServiceError, check_resources, ResourceWait, RESOURCE_WAIT_CODES
 
 
 class StaleLease(ServiceError):
@@ -69,8 +71,9 @@ class HostLifecycle:
     Transport authentication, watchdog and crash reconciliation are deliberately
     not implemented here. Do not deploy this prototype as a security boundary.
     """
-    def __init__(self, provider, read_resources, *, read_endpoint=lambda: None, panic_callback=None, swap_limit_mib=512, resource_authority=None):
+    def __init__(self, provider, read_resources, *, read_endpoint=lambda: None, panic_callback=None, swap_limit_mib=512, resource_authority=None, execution_resources=None):
         self.resource_authority = resource_authority
+        self.execution_resources = execution_resources
         self.swap_limit_mib = swap_limit_mib
         self.provider = provider
         self.read_endpoint = read_endpoint
@@ -142,6 +145,8 @@ class HostLifecycle:
             if op == 'resource_policy':
                 with self.state_lock:
                     result = {'epoch': self.epoch, 'swap_limit_mib': self.swap_limit_mib}
+                    if self.execution_resources is not None:
+                        result['resource_admission_generation'] = self.execution_resources.generation
                     if self.resource_authority is not None:
                         result.update(policy_version=2, rolling_swap_policy=dict(self.resource_authority.parameters))
                     return result
@@ -151,6 +156,7 @@ class HostLifecycle:
                         raise LifecycleFault(self.safety_fault)
                     identity = self.epoch, self.generation
                 # No cached samples: Core's watchdog must use host observations.
+                if self.execution_resources is not None: self.execution_resources.ready_core()
                 resources = (self.resource_authority.admission() if self.resource_authority is not None
                              else validate_sample(self.read_resources()))
                 with self.state_lock:
@@ -169,6 +175,31 @@ class HostLifecycle:
                             'host_pid_namespace': self.host_pid_namespace,
                             'host_uid': self.host_uid, 'host_boot_id': self.host_boot_id,
                             'emergency_stop_supported': self.panic_callback is not None}
+        resource_fields = {
+            'model_reserve': {'model', 'artifact', 'request_id'},
+            'execution_reserve': {'model', 'instance', 'request_id'},
+            'execution_finish': {'instance', 'request_id', 'token'},
+            'model_release': {'instance'},
+            'loading_reserve': {'model', 'instance', 'request_id'},
+            'loading_finish': {'instance', 'request_id', 'token'},
+            'core_models_stopped': set(),
+        }
+        if op in resource_fields:
+            fields = resource_fields[op]
+            if (self.execution_resources is None or set(request) != fields | {'operation', 'epoch', 'generation'}
+                    or type(request['epoch']) is not str or type(request['generation']) is not int):
+                raise ValueError('Fixed configured resource operation required')
+            with self._operation(deadline):
+                self._check(request['epoch'], request['generation'], deadline)
+                try:
+                    result = getattr(self.execution_resources, op)(**{key:request[key] for key in fields})
+                except RuntimeError as error:
+                    code = getattr(error, 'code', None)
+                    if op in ('model_reserve', 'execution_reserve', 'loading_reserve') and code in RESOURCE_WAIT_CODES:
+                        raise ResourceWait(code) from None
+                    raise LifecycleFault('Resource operation outcome requires reconciliation') from None
+                self._check(request['epoch'], request['generation'], deadline)
+                return {**self._identity(), **result}
         if op not in {'ensure', 'stop', 'panic'} or set(request) != {'operation', 'epoch', 'generation'}:
             raise ValueError('unknown lifecycle operation or fields')
         epoch, generation = request['epoch'], request['generation']
@@ -193,6 +224,7 @@ class HostLifecycle:
     def _ensure(self, epoch, generation, deadline):
         with self._operation(deadline):
             self._check(epoch, generation, deadline)
+            if self.execution_resources is not None: self.execution_resources.before_ensure()
             with self.state_lock:
                 self.stopped_generation = None
             try:
@@ -200,6 +232,7 @@ class HostLifecycle:
                 self._check(epoch, generation, deadline)
                 if self.provider.running() is not True:
                     raise LifecycleFault('provider readiness unconfirmed')
+                if self.execution_resources is not None: self.execution_resources.after_ensure()
                 with self.state_lock:
                     # Atomic final identity check and success observation.
                     self._check(epoch, generation, deadline)
@@ -238,6 +271,7 @@ class HostLifecycle:
         self.provider.stop()
         if self.provider.running() is not False:
             raise LifecycleFault('provider stop unconfirmed')
+        if self.execution_resources is not None: self.execution_resources.stopped('ollama')
         with self.state_lock:
             # A completed physical barrier is retained even if its ACK is lost.
             self.fault = None

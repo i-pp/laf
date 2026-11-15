@@ -144,3 +144,50 @@ including the review reproduction and negative uncertainty/forgery/lock/size
 controls. Documentation and the strict selection guard describe this addition.
 This correction requires independent re-review and exact-commit CI before use;
 no prior source-review result approves it automatically.
+
+## 2026-11-15: combined resource and backend setup changes
+
+The compatibility base is retained with explicitly identified project-authored
+modifications. The combined source includes the complete reviewed local resource
+implementation and the protected-policy/Events/HTTP setup changes, followed by
+the private scheduler-policy selector. It does not import an operator checkout,
+runtime history or the implementation task's private Git history.
+
+Affected source is under `runtime/private_codex/src/` and
+`runtime/integration/laf_bootstrap.py`, plus matching Core/Router resource modules
+under `inference/` and `runtime/public_laf/inference/`. Changes cover atomic
+CPU/RAM/GPU/provider reservations, ownership and UNKNOWN retention, bounded
+controller/recovery paths, explicit Flash manifests, read-only NPU observations,
+same-object Events activation, HTTP binding fences, terminal-history/mode
+identity and protected raw-hash-pinned scheduler-policy selection. The three
+resource_admission_core.py copies share identical bytes. CHANGES.md identifies
+the dated behavior changes; the explicit license-policy inventory covers every
+distributed file, including the new offline regressions and guides.
+
+These additions are project-authored Python/build/documentation glue within the
+existing KOL first-party scope. Kernel sysfs/procfs field observations and
+separately configured external programs are interfaces, not redistributed
+driver, SDK, provider or model implementations. Existing KOL and MIT notices,
+the public orchestration snapshot provenance and external-asset boundaries are
+preserved. No new vendor headers/libraries, model/tokenizer payloads, native
+Codex/SDK binaries, container images or third-party source corpus are bundled.
+External dependency/image redistribution still requires its own assessment.
+License declarations and source-boundary checks do not establish all ownership,
+compatibility, patent or legal questions.
+
+Local installed-model evidence belongs to predecessor `c2ab056`; selector setup
+and metadata-only discovery belong to `438b2aa`. A publication candidate built
+from their source is separately identified and checked. Resource calibration,
+current provider evidence, normal shared-generation adoption and the live stdio
+Tunnel/client cutover remain separate. OAuth/HTTPS delivery and other providers
+are future work, not prerequisites added to the Codex plus local-LLM 0.1.0 path.
+No private policy, credential, model, account identifier, operational receipt,
+host trace or raw test log is part of the proposed source distribution.
+
+The final candidate also adapts the project-authored generic policy-discovery
+and metadata-first reader corrections from the separate staged integration,
+with five offline regressions and a SQLite fixture-close correction. Only
+these generic seams are incorporated; that integration's NPU ownership,
+protocol, native-header and Router changes are excluded. The existing
+non-admitting NPU observer remains optional, unaccepted source rather than an
+additional 0.1.0 operational requirement.

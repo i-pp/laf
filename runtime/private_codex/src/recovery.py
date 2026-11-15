@@ -91,6 +91,10 @@ def inspect_session(runner, task, execution, log, probe_execution_id=None, deadl
         account = proc.call("account/read", {"refreshToken": False}, budget())
         if (account.get("account") or {}).get("type") != "chatgpt":
             raise RuntimeError("ChatGPT authentication is required")
+        import scheduler
+        settings = getattr(runner, 'scheduler_settings', {})
+        scheduler.verify_resource_account(settings, account)
+        if scheduler.resource_only(settings): facts['resource_provider_account_verified'] = True
         thread = proc.call("thread/read", {"threadId": thread_id, "includeTurns": False}, budget())["thread"]
         facts["exists"] = thread.get("id") == thread_id
         facts["runtime_status"] = thread.get("status")

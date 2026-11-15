@@ -20,6 +20,8 @@
 
 # Scope: this newly authored file only; imported private source is not relicensed.
 # Modified 2026-11-15: explicit new-prefix owner-daemon metadata binding.
+# Modified 2026-11-15: explicit schema2 operator-policy snapshot provenance.
+# Modified 2026-11-15: raw-pinned private resource scheduler policy snapshot.
 """Explicit NEW-prefix bindings. Missing marker and schema1 keep legacy behavior."""
 import hashlib
 import os
@@ -47,6 +49,30 @@ def bootstrap_paths(runtime):
  if runtime_path(root,project_root=project)!=root:raise ValueError('Bootstrap runtime mismatch')
  return project.parent.parent,project
 
+def scheduler_binding_policy(binding):
+ """Validate retained raw bytes/provenance before selecting resource policy."""
+ if (type(binding) is not dict or set(binding)!={'raw','sha256','source'}
+     or type(binding['raw']) is not str or type(binding['sha256']) is not str
+     or not re.fullmatch('[a-f0-9]{64}',binding['sha256'])):
+  raise ValueError('Invalid scheduler policy binding')
+ raw=binding['raw'].encode('utf-8')
+ source=binding['source']
+ if (not 0<len(raw)<=16384 or hashlib.sha256(raw).hexdigest()!=binding['sha256']
+     or type(source) is not dict or set(source)!={'path','sha256','identity','directory_identity'}
+     or not _absolute(source['path']) or source['sha256']!=binding['sha256']
+     or type(source['directory_identity']) is not list or len(source['directory_identity'])!=2
+     or any(type(x) is not int or x<0 for x in source['directory_identity'])
+     or type(source['identity']) is not list or len(source['identity'])!=7
+     or any(type(x) is not int or x<0 for x in source['identity'])
+     or source['identity'][2]!=os.getuid() or not stat.S_ISREG(source['identity'][3])
+     or stat.S_IMODE(source['identity'][3])!=0o600 or source['identity'][4]!=len(raw)):
+  raise ValueError('Invalid scheduler policy snapshot provenance')
+ value=_json(raw)
+ from scheduler import validate_configuration,resource_only
+ checked=validate_configuration(value,codex_pipeline=False)
+ if not resource_only(checked):raise ValueError('Explicit resource-only scheduler policy required')
+ return _json(raw)
+
 def validate_state(value,runtime,raw_size):
  if (type(value) is not dict or type(value.get('schema')) is not int or type(value.get('unconfigured')) is not list
      or any(type(x) is not str or x not in BACKENDS for x in value['unconfigured'])
@@ -56,10 +82,11 @@ def validate_state(value,runtime,raw_size):
   if set(value)!={'schema','unconfigured'} or raw_size>4096:raise ValueError('Invalid legacy backend configuration')
   return value
  keys={'schema','unconfigured','router','codex'}
- if value['schema']!=2 or set(value) not in (keys,keys|{'orchestrator'}):
+ if value['schema']!=2 or not keys<=set(value) or set(value)-keys-{'orchestrator','scheduler'}:
   raise ValueError('Invalid operator binding record')
  prefix,project=bootstrap_paths(runtime)
  router,codex=value['router'],value['codex']
+ if value.get('scheduler') is not None:scheduler_binding_policy(value['scheduler'])
  enabled=set()
  orchestrator=value.get('orchestrator')
  if orchestrator is not None:
@@ -78,18 +105,34 @@ def validate_state(value,runtime,raw_size):
   enabled.add('router')
  if codex is not None:
   from codex_pipeline import validate_policy
-  if (type(codex) is not dict or set(codex)!={'binary','binary_sha256','binary_identity','policy'}
+  fields={'binary','binary_sha256','binary_identity','policy'}
+  if (type(codex) is not dict or set(codex) not in (fields,fields|{'policy_source'})
       or not _absolute(codex['binary']) or type(codex['binary_sha256']) is not str
       or not re.fullmatch('[a-f0-9]{64}',codex['binary_sha256'])
       or type(codex['binary_identity']) is not list or len(codex['binary_identity'])!=7
       or any(type(x) is not int or x<0 for x in codex['binary_identity'])):
    raise ValueError('Invalid Codex binding')
   policy=validate_policy(codex['policy'])
-  if (policy['schema']!=1 or policy['concurrency']!=1 or policy['workspaces']!={'default':str(prefix/'workspace')}
-      or codex['binary_identity'][2] not in (0,os.getuid()) or codex['binary_identity'][3]&0o022
+  if (codex['binary_identity'][2] not in (0,os.getuid()) or codex['binary_identity'][3]&0o022
       or not 4<=codex['binary_identity'][4]<=512*1024**2
       or not stat.S_ISREG(codex['binary_identity'][3])):
    raise ValueError('Invalid bounded Codex scope')
+  if policy['schema']==1:
+   if (set(codex)!=fields or policy['concurrency']!=1
+       or policy['workspaces']!={'default':str(prefix/'workspace')}):
+    raise ValueError('Invalid bounded canary scope')
+  else:
+   source=codex.get('policy_source')
+   if (type(source) is not dict or set(source)!={'path','sha256','identity','directory_identity'}
+       or not _absolute(source['path']) or type(source['sha256']) is not str
+       or not re.fullmatch('[a-f0-9]{64}',source['sha256'])
+       or type(source['directory_identity']) is not list or len(source['directory_identity'])!=2
+       or any(type(x) is not int or x<0 for x in source['directory_identity'])
+       or type(source['identity']) is not list or len(source['identity'])!=7
+       or any(type(x) is not int or x<0 for x in source['identity'])
+       or source['identity'][2]!=os.getuid() or not stat.S_ISREG(source['identity'][3])
+       or stat.S_IMODE(source['identity'][3])!=0o600 or not 0<source['identity'][4]<=16384):
+    raise ValueError('Invalid operator policy provenance')
   enabled.add('codex_pipeline')
  if value['unconfigured']!=[x for x in BACKENDS if x not in enabled]:raise ValueError('Backend state and binding disagree')
  return value

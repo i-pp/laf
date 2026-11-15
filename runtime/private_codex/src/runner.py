@@ -3,6 +3,7 @@
 Modified 2026-11-13: pass the daemon's pinned effective policy to ordinary leases.
 """
 
+from contextlib import ExitStack
 import argparse
 import fcntl
 import json
@@ -58,7 +59,17 @@ class Runner:
     def resource_control(self, task, execution_id=None):
         if self.resource_limits is None:
             return None  # Only explicit protocol fixtures bypass production controls.
+        import scheduler
+        settings = getattr(self, 'scheduler_settings', None) or scheduler.configuration()
+        if 'resource_admission' in settings and (not getattr(self, 'resource_token', None)
+                or not getattr(self, 'resource_task_id', None)):
+            raise resources.ResourceExceeded('Resource reservation required before online control/probe')
         control = resources.Control(self.root, self.resource_limits, execution_id)
+        if 'resource_admission' in settings:
+            if execution_id and self.store.execution(execution_id)['task_id'] != self.resource_task_id:
+                raise resources.ResourceExceeded('Execution does not own the resource reservation')
+            scheduler.bind_task_resource_scope(self.root, getattr(self, 'resource_grant_task_id', None) or self.resource_task_id,
+                                               settings, self.resource_token, control.descriptor)
         if execution_id:
             execution = self.store.execution(execution_id)
             owner = json.loads(execution["owner"])
@@ -114,26 +125,43 @@ class Runner:
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("Timeout must be finite and positive")
         import scheduler
-        with scheduler.execution_admission(self.root, self.store, task_id, dispatch_token), self.task_lock(self.store.get(task_id)):
-            self.store.recover(task_id)
-            task = self.store.get(task_id)
-            workroot = self.workroot(task)
-            if self.development: development_poc.validate_task(task)
-            owner = {"boot_id": Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
-                     "process": proc_identity(os.getpid())}
-            if self.development: owner["execution_mode"] = development_poc.MODE
-            self.store.claim(task_id, owner, workspace_snapshot(workroot / "workspace"))
-            return self._execute(task_id, timeout)
+        try:
+            with scheduler.execution_admission(self.root, self.store, task_id, dispatch_token) as admission, self.task_lock(self.store.get(task_id)):
+                self.resource_token = getattr(admission, "resource_token", None)
+                self.resource_task_id = task_id
+                if hasattr(admission, "resource_settings"): self.scheduler_settings = admission.resource_settings
+                self.store.recover(task_id)
+                task = self.store.get(task_id)
+                workroot = self.workroot(task)
+                if self.development: development_poc.validate_task(task)
+                owner = {"boot_id": Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                         "process": proc_identity(os.getpid())}
+                if self.development: owner["execution_mode"] = development_poc.MODE
+                snapshot = workspace_snapshot(workroot / "workspace")
+                settings = getattr(self, 'scheduler_settings', {})
+                if dispatch_token is None and 'resource_admission' in settings:
+                    scheduler.reserve_task_resources(self.root, task_id, settings, self.resource_token, worker=False, owner=getattr(admission, "resource_owner", None))
+                self.store.claim(task_id, owner, snapshot)
+                return self._execute(task_id, timeout)
+        finally:
+            self.resource_token = None
+            self.resource_task_id = None
 
     def reconcile(self, task_id, offline=False):
+        from contextlib import nullcontext
+        import scheduler
         with self.task_lock(self.store.get(task_id)):
             self.store.recover(task_id)
-            return recovery.reconcile(self, task_id, offline=offline)
+            with (nullcontext() if offline else scheduler.resource_probe(self, task_id)):
+                return recovery.reconcile(self, task_id, offline=offline)
 
     def resolve(self, task_id, reconciliation_id, kind, actor, reason, accept_side_effects=False):
+        from contextlib import nullcontext
+        import scheduler
         with self.task_lock(self.store.get(task_id)):
             self.store.recover(task_id)
-            return recovery.decision(self, task_id, reconciliation_id, kind, actor, reason, accept_side_effects)
+            with (scheduler.resource_probe(self, task_id) if kind == 'verify' else nullcontext()):
+                return recovery.decision(self, task_id, reconciliation_id, kind, actor, reason, accept_side_effects)
 
     def review(self, task_id, approve, actor, reason):
         with self.task_lock(self.store.get(task_id)):
@@ -284,11 +312,15 @@ class Runner:
                 account = proc.call("account/read", {"refreshToken": False}, remaining())
                 if account.get("account", {}).get("type") != "chatgpt":
                     raise RuntimeError("ChatGPT subscription authentication required; no API fallback")
+                import scheduler
+                scheduler.authorize_task_provider(self.root, task_id, self.scheduler_settings,
+                                                  self.resource_token, account)
                 params = {"cwd": str(workroot / "workspace"), "sandbox": task["access"], "approvalPolicy": "never",
                           "developerInstructions": RESULT_INSTRUCTIONS + (
                               " You are an independent Reviewer. Inspect the supplied frozen snapshot read-only. "
                               "Report findings with file/test evidence; do not trust an implementer's success claim. "
                               "Your result does not approve the source task." if task["role"] == "reviewer" else "") }
+                if scheduler.resource_only(self.scheduler_settings): params['modelProvider'] = 'openai'
                 if task["resume_of"]:
                     params["threadId"] = self.store.get(task["resume_of"])["session_id"]
                     result = proc.call("thread/resume", params, remaining())
@@ -297,6 +329,8 @@ class Runner:
                 else:
                     params["ephemeral"] = False
                     result = proc.call("thread/start", params, remaining())
+                if scheduler.resource_only(self.scheduler_settings) and result.get('modelProvider') != 'openai':
+                    raise resources.ResourceExceeded('resource_provider_workload_unknown')
                 thread_id = result["thread"]["id"]
                 self.store.update(task_id, session_id=thread_id)
                 self.store.execution_update(execution_id, thread_id=thread_id)
@@ -307,6 +341,18 @@ class Runner:
                 if cancelled():
                     stop_reason = "CANCELLED"
                 else:
+                    if scheduler.resource_only(self.scheduler_settings):
+                        # Context creation/resume may be slow or observe an
+                        # account change. Re-read immediately before this turn.
+                        notices_before = len(getattr(proc, 'notifications', ()))
+                        observed_at = time.monotonic()
+                        account = proc.call('account/read', {'refreshToken': False}, remaining())
+                        notices = list(getattr(proc, 'notifications', ()))[notices_before:]
+                        if any(isinstance(n.get('method'), str) and n['method'].startswith('account/')
+                               and n['method'] != 'account/rateLimits/updated' for n in notices):
+                            raise resources.ResourceExceeded('resource_provider_account_unknown')
+                        scheduler.authorize_task_provider(self.root, task_id, self.scheduler_settings,
+                                                          self.resource_token, account, observed_at=observed_at)
                     # Mark uncertainty before writing: a lost RPC response may still have started work.
                     dispatched = True
                     self.store.execution_update(execution_id, dispatched=1, codex_status="DISPATCHING")
@@ -436,7 +482,7 @@ class Runner:
 
 def main():
     os.umask(0o077)
-    parser = argparse.ArgumentParser(description="Codex task runner (Linux, at most two isolated sessions)")
+    parser = argparse.ArgumentParser(description="Codex task runner with guarded resource admission")
     parser.add_argument("--development-poc", action="store_true", help="Explicit disposable bwrap PoC mode")
     parser.add_argument("--runtime", type=Path, default=PROJECT / ".runtime")
     parser.add_argument("--codex", help="Absolute Codex binary path; default resolves PATH")
@@ -491,6 +537,14 @@ def main():
     review.add_argument("--decision", choices=["approve", "reject"], required=True)
     review.add_argument("--actor", required=True)
     review.add_argument("--reason", required=True)
+    sub.add_parser('resources-owners')
+    resource_reconcile = sub.add_parser('resources-reconcile')
+    resource_reconcile.add_argument('task_id')
+    resource_reconcile.add_argument('reconciliation_id')
+    resource_reconcile.add_argument('--apply', action='store_true')
+    resource_owner = sub.add_parser('resources-owner-reconcile')
+    resource_owner.add_argument('owner')
+    resource_owner.add_argument('--apply', action='store_true')
     rollback = sub.add_parser("db-rollback")
     rollback.add_argument("backup_name")
     args = parser.parse_args()
@@ -506,12 +560,13 @@ def main():
     if root != allowed and not root.is_relative_to(allowed):
         parser.error("--runtime must be .runtime or a child directory inside this project")
     runner = None
+    bounded = ExitStack()
     try:
         if args.command == "daemon":
             from daemon import foreground
             return foreground(root, args.codex, development=args.development_poc,
                               allow_codex_pipeline=args.allow_codex_pipeline)
-        if args.via_daemon or args.command in ["status", "list", "pause", "resume_scheduler", "shutdown"]:
+        if args.via_daemon or args.command in ["status", "list", "pause", "resume_scheduler", "shutdown", "resources-reconcile", "resources-owner-reconcile", "resources-owners"]:
             from control_socket import request
             method, params = args.command, {}
             if args.command == "submit":
@@ -528,6 +583,12 @@ def main():
                 params = {"task_id": args.task_id}
             elif args.command == "list":
                 params = {"limit": args.limit, "offset": args.offset}
+            elif args.command == 'resources-owners':
+                method, params = 'resource_owners', {}
+            elif args.command == 'resources-reconcile':
+                method, params = 'reconcile_resources', {'task_id': args.task_id, 'reconciliation_id': args.reconciliation_id, 'apply': args.apply}
+            elif args.command == 'resources-owner-reconcile':
+                method, params = 'reconcile_resource_owner', {'owner': args.owner, 'apply': args.apply}
             elif args.command not in ["status", "list", "pause", "resume_scheduler", "shutdown"]:
                 raise ValueError("This operation is not available through the daemon")
             try: result = request(root, method, params)
@@ -541,6 +602,8 @@ def main():
         if args.command == "db-rollback":
             print(json.dumps(rollback_database(root / "tasks.sqlite", args.backup_name), ensure_ascii=False, indent=2))
             return 0
+        from standalone import controller
+        bounded.enter_context(controller(root, args))
         runner = Runner(root, args.codex, development=args.development_poc)
         if args.command == "usage":
             from retention import report
@@ -602,8 +665,10 @@ def main():
         print(json.dumps({"error": redact(str(exc)), "type": type(exc).__name__}, ensure_ascii=False))
         return 1
     finally:
-        if runner:
-            runner.store.close()
+        try:
+            if runner: runner.store.close()
+        finally:
+            bounded.close()
 
 
 if __name__ == "__main__":

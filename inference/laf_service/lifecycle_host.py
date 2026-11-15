@@ -45,6 +45,24 @@ class OwnedOllama:
                 self.backend.cid = cid
                 self.backend.inspect_owned()
 
+    def inspect_current(self):
+        """Read the fixed name afresh; a cached CID is not current ownership."""
+        backend=self.backend
+        name=backend.config['container_name']
+        cid=backend.docker('ps','-aq','--filter','name=^/'+name+'$')
+        if not cid:return None
+        if not re.fullmatch(r'[0-9a-f]{12,64}',cid):raise ServiceError('owned container identity ambiguous')
+        previous=backend.cid
+        try:
+            backend.cid=cid
+            info=backend.inspect_owned()
+            if (not isinstance(info.get('Id'),str) or not re.fullmatch(r'[0-9a-f]{64}',info['Id'])
+                    or not info['Id'].startswith(cid) or info.get('Name')!='/'+name):
+                raise ServiceError('fixed owned container identity changed')
+            return info
+        finally:
+            backend.cid=previous
+
     def ensure(self, check):
         self.backend.start_ollama(check)
 

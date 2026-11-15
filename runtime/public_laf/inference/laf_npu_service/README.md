@@ -155,3 +155,48 @@ this source tree. Its bounded restart policy allows at most two starts in five
 minutes; investigate a failure rather than repeatedly resetting the limit.
 A manual stop does not request automatic restart. User-manager availability after
 boot and physical reboot recovery require separate validation on your host.
+
+## Read-only resource calibration evidence
+
+Added 2026-11-15. `resource_evidence.py` observes an already owned flat NPU
+service scope without opening an accelerator, importing a vendor SDK, starting
+a process/model, issuing a device ioctl, changing a driver or mutating a ledger.
+The CLI requires its own verified, finite private agentorchestrator UUID scope
+and an owner-only policy file. That policy pins PCI BDF, vendor/device, amdxdna
+driver, exact firmware, evidence reference/expiry, finite observation age and
+the approved reader's CPU/RAM/PID ceilings. The reader requires zero cgroup swap
+allowance. This separate evidence policy is not an inference admission policy.
+
+Run only after identifying the existing NPU owner's actual scope and arranging
+the bounded reader budget; replace the private path/scope placeholders first:
+
+```sh
+python3 -B -m inference.laf_npu_service.resource_evidence --policy /ABSOLUTE/PRIVATE/EVIDENCE_POLICY --scope /sys/fs/cgroup/EXACT/OWNED/NPU_SCOPE
+```
+
+The finite paired collector validates device/firmware and each observed
+PID/start/UID/cgroup, bounds fdinfo work, deduplicates DRM clients and reports
+owned allocated-byte upper bounds and cumulative engine-counter deltas. It
+rejects missing identity, malformed counters, permissions, process/client
+churn, counter rollback, unknown descendants and stale final readings. Output
+omits raw PID/client IDs and target scope paths. Allocated bytes are not proven
+resident RAM, and an owned engine delta is not global utilization or headroom.
+
+Every successful result deliberately says `admission_eligible:false` and
+`global_idle_verified:false`, including empty or quiet observations. The fixed
+reason is `resource_npu_global_ownership_unknown`. This module cannot grant or
+release inference resources. The [kernel driver overview](https://www.kernel.org/doc/html/latest/accel/amdxdna/amdnpu.html)
+documents per-client counters; the [AMD UAPI](https://github.com/amd/xdna-driver/blob/main/include/uapi/drm/amdxdna_accel.h)
+also describes hardware-context queries with access restrictions. A per-user
+context view cannot by itself exclude another owner's work. The exact installed
+driver/global-query ABI and positive hardware cleanup proof still need separate
+acceptance; this source change does not request broader privileges or a driver
+update to obtain them.
+
+NPU shared residency/execution ownership, common-ledger admission, Router
+generation binding and uncertain native/device reconciliation remain
+unimplemented. Core still refuses an NPU socket in resource-only mode. The
+existing independent NPU service and its actual serialized native-worker limit,
+no retry/CPU fallback and stop behavior are unchanged. Passing this observation
+tool is not NPU admission, device release, model execution or fixed-slot-removal
+acceptance. No real device was observed by the source tests for this module.

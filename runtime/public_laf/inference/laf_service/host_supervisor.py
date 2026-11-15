@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+
 """Opt-in host-only supervisor. Never import this module into the Core image.
 
 No service installation, container creation for Core, or wire-configured policy.
@@ -206,13 +208,14 @@ class HostSupervisor:
         self.closed = threading.Event()
         self.clock, self.port = clock, None
         self.resource_authority = None
+        self.execution_resources = None
         if 'rolling_swap_policy' in config:
             from .swap_window import HostPressureAuthority
             self.resource_authority = HostPressureAuthority(
                 config['rolling_swap_policy'], pressure_reader or (lambda: snapshot(swap_capacity=True)), clock)
         self.panic_lock = threading.RLock()
         self.panic_serial = 0
-        self.awaiting_core = self.resource_authority is not None
+        self.awaiting_core = self.resource_authority is not None or 'resource_admission' in config
         self.started = False
         self.released = False
         self.cleanup_confirmed = False
@@ -234,10 +237,13 @@ class HostSupervisor:
             provider = ollama_factory(config['ollama'], config_path)
             if provider.running():
                 raise ServiceError('active Ollama must be stopped explicitly before supervisor startup')
+            if 'resource_admission' in config:
+                from .local_resource_admission import LocalAdmission
+                self.execution_resources = LocalAdmission(config['resource_admission'], state, self.core, provider)
             self.port = HostLifecycle(provider, read_resources,
                                       read_endpoint=lambda: provider.backend.address, panic_callback=self.panic,
                                       swap_limit_mib=config.get('swap_limit_mib', 512),
-                                      resource_authority=self.resource_authority)
+                                      resource_authority=self.resource_authority, execution_resources=self.execution_resources)
             for control in (False, True):
                 self.servers.append(server_factory(self.port, runtime, control=control))
             self.started_at = clock()
@@ -284,6 +290,7 @@ class HostSupervisor:
                         return
                     self.awaiting_core = False
                     self.started_at = self.clock()
+                if self.execution_resources is not None: self.execution_resources.ready_core()
                 with self.port.state_lock:
                     last = self.port.last_sample
                 if self.clock() - (self.started_at if last is None else last) > self.lease_seconds:
@@ -357,6 +364,7 @@ class HostSupervisor:
                 # Cooperative in-flight ensure must observe the generation fence.
                 with port._operation(None):
                     port._confirm_stop(None)
+                if self.execution_resources is not None: self.execution_resources.stopped('core')
                 with port.state_lock:
                     self.cleanup_confirmed = True
                 return True
@@ -422,6 +430,7 @@ class HostSupervisor:
                     raise ServiceError('host recovery invalidated')
                 if self.resource_authority is not None:
                     self.resource_authority.reset_after_owner_recovery()
+                if self.execution_resources is not None: self.execution_resources.prepare_core()
                 self.port.baseline = current
                 self.port.epoch = uuid.uuid4().hex
                 self.port.generation = 0
