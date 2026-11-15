@@ -55,6 +55,7 @@ class BootstrapTests(unittest.TestCase):
  def setUp(self):
   self.temp=tempfile.TemporaryDirectory(dir=Path.home());self.addCleanup(self.temp.cleanup)
   self.parent=Path(self.temp.name);self.parent.chmod(0o700);self.prefix=self.parent/'new'
+  self.sdk=self.parent/'sdk-python';self.sdk.write_text('# synthetic protected SDK reference; never executed\n');self.sdk.chmod(0o500)
   self.stack=ExitStack();self.addCleanup(self.stack.close)
   for name in ('subprocess.Popen','socket.socket.bind','socket.socket.connect','threading.Thread.start'):
    self.stack.enter_context(patch(name,side_effect=AssertionError('Bootstrap tests forbid execution/network')))
@@ -147,7 +148,7 @@ class BootstrapTests(unittest.TestCase):
   finally:self.assertTrue(adapter.close(timeout=0))
   self.assertFalse(any(p.suffix in ('.sqlite','.sqlite3') for p in runtime.iterdir()))
  def test_new_default_config_lookup_is_exclusive_and_points_outside_cache(self):
-  self.prepare(sdk_python=Path(sys.executable))
+  self.prepare(sdk_python=self.sdk)
   home=self.parent/'home';home.mkdir(mode=0o700)
   with patch.object(Path,'home',return_value=home):
    result=bootstrap.activate_config(self.prefix)
@@ -166,7 +167,7 @@ class BootstrapTests(unittest.TestCase):
   with patch.object(Path,'home',return_value=home),self.assertRaises(bootstrap.BootstrapError):bootstrap.activate_config(self.prefix)
   self.assertEqual(target.read_bytes(),before)
  def test_activation_dry_run_and_failure_do_not_change_existing_files(self):
-  self.prepare(sdk_python=Path(sys.executable));target=self.parent/'config/new.json'
+  self.prepare(sdk_python=self.sdk);target=self.parent/'config/new.json'
   result=bootstrap.activate_config(self.prefix,config=target,dry_run=True)
   self.assertEqual(result['status'],'planned');self.assertFalse(target.parent.exists())
   target.parent.mkdir(mode=0o700);target.write_bytes(b'existing');target.chmod(0o600)
@@ -177,7 +178,7 @@ class BootstrapTests(unittest.TestCase):
   with self.assertRaises(bootstrap.BootstrapError):bootstrap.activate_config(self.prefix,config=target)
   self.assertFalse(target.parent.exists())
  def test_activation_write_fault_removes_only_new_config_and_dirs(self):
-  self.prepare(sdk_python=Path(sys.executable));target=self.parent/'new-config/child/plugin.json'
+  self.prepare(sdk_python=self.sdk);target=self.parent/'new-config/child/plugin.json'
   sentinel=self.parent/'keep';sentinel.write_bytes(b'old')
   with patch.object(bootstrap.os,'fsync',side_effect=OSError('injected')):
    with self.assertRaises(OSError):bootstrap.activate_config(self.prefix,config=target)
@@ -302,7 +303,7 @@ class BootstrapTests(unittest.TestCase):
    with self.assertRaises((OSError,bootstrap.BootstrapError)):self.prepare()
   self.assertEqual(tree_snapshot(victim),before);self.assertEqual(list(retained.iterdir()),[])
  def test_activation_ancestor_swap_cannot_authorize_foreign_destination(self):
-  self.prepare(sdk_python=Path(sys.executable))
+  self.prepare(sdk_python=self.sdk)
   ancestor=self.parent/'activation-current';ancestor.mkdir(mode=0o700);(ancestor/'inner').mkdir(mode=0o700)
   victim=self.parent/'existing-config';victim.mkdir(mode=0o700);(victim/'inner').mkdir(mode=0o700);(victim/'inner/keep').write_bytes(b'preserve')
   before=tree_snapshot(victim)
@@ -315,7 +316,7 @@ class BootstrapTests(unittest.TestCase):
    with self.assertRaises((OSError,bootstrap.BootstrapError)):bootstrap.activate_config(self.prefix,config=base/'plugin.json')
   self.assertTrue(changed[0]);self.assertEqual(tree_snapshot(victim),before)
  def test_activation_replacement_real_directory_is_not_adopted(self):
-  self.prepare(sdk_python=Path(sys.executable))
+  self.prepare(sdk_python=self.sdk)
   base=self.parent/'activation-current';base.mkdir(mode=0o700)
   victim=self.parent/'existing-config';victim.mkdir(mode=0o700);(victim/'keep').write_bytes(b'preserve')
   before=tree_snapshot(victim);retained=self.parent/'moved-config';real_open=bootstrap.os.open;changed=[False]
@@ -327,7 +328,7 @@ class BootstrapTests(unittest.TestCase):
    with self.assertRaises((OSError,bootstrap.BootstrapError)):bootstrap.activate_config(self.prefix,config=base/'plugin.json')
   self.assertTrue(changed[0]);self.assertEqual(tree_snapshot(base),before);self.assertEqual(list(retained.iterdir()),[])
  def test_activation_parent_swap_after_real_write_cleans_owned_file_only(self):
-  self.prepare(sdk_python=Path(sys.executable))
+  self.prepare(sdk_python=self.sdk)
   base=self.parent/'activation-current';base.mkdir(mode=0o700)
   victim=self.parent/'existing-config';victim.mkdir(mode=0o700);(victim/'keep').write_bytes(b'preserve')
   before=tree_snapshot(victim);retained=self.parent/'moved-config';real_fsync=bootstrap.os.fsync

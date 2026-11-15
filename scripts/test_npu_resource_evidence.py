@@ -36,6 +36,8 @@ from unittest.mock import Mock,patch
 import uuid
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from scripts.source_test_isolation import require_isolated
+require_isolated()  # Refuse raw resource tests before any fixture or project import.
 from inference.laf_npu_service import resource_evidence as evidence
 
 

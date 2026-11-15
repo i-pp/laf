@@ -175,105 +175,25 @@ jobs:
       - name: Verify portable integrated package source without services
         run: python3 -B packaging/run_packaging_checks.py
       - name: Check installed-acceptance interruption and refusal logic offline
-        run: |
-          python3 -B - <<'PYCODE'
-          import sys
-          import unittest
-          sys.path.insert(0, 'scripts')
-          from run_integrated_source_checks import run_checked
-          suite = unittest.defaultTestLoader.loadTestsFromName('test_installed_acceptance')
-          print(run_checked(suite, 47, unittest.TextTestRunner(verbosity=2)))
-          PYCODE
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_installed_acceptance --expected-tests 47
       - name: Check explicit owner-daemon metadata binding offline
-        run: |
-          python3 -B - <<'PYCODE'
-          import sys
-          import unittest
-          sys.path.insert(0, 'scripts')
-          from run_integrated_source_checks import run_checked
-          suite = unittest.defaultTestLoader.loadTestsFromName('test_bootstrap_orchestrator')
-          print(run_checked(suite, 20, unittest.TextTestRunner(verbosity=2)))
-          PYCODE
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_bootstrap_orchestrator --expected-tests 20
       - name: Check correlated Codex reads and notification races offline
-        run: |
-          python3 -B - <<'PYCODE'
-          import sys
-          import unittest
-          sys.path.insert(0, 'scripts')
-          from run_integrated_source_checks import run_checked
-          suite = unittest.defaultTestLoader.loadTestsFromName('test_codex_read_reliability')
-          print(run_checked(suite, 14, unittest.TextTestRunner(verbosity=2)))
-          PYCODE
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_codex_read_reliability --expected-tests 14
       - name: Check explicit production policy import offline
-        run: |
-          python3 -B - <<'PYCODE'
-          import sys
-          import unittest
-          sys.path.insert(0, 'scripts')
-          from run_integrated_source_checks import run_checked
-          suite = unittest.defaultTestLoader.loadTestsFromName('test_bootstrap_production_policy')
-          print(run_checked(suite, 36, unittest.TextTestRunner(verbosity=2)))
-          PYCODE
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_bootstrap_production_policy --expected-tests 36
       - name: Check fresh-prefix notification activation offline
-        run: |
-          python3 -B - <<'PYCODE'
-          import sys
-          import unittest
-          sys.path.insert(0, 'scripts')
-          from run_integrated_source_checks import run_checked
-          suite = unittest.defaultTestLoader.loadTestsFromName('test_notification_fresh_prefix')
-          print(run_checked(suite, 30, unittest.TextTestRunner(verbosity=2)))
-          PYCODE
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_notification_fresh_prefix --expected-tests 30
       - name: Check narrow daemon notification-reference handoff offline
-        run: |
-          python3 -B - <<'PYCODE'
-          import sys
-          import unittest
-          sys.path.insert(0, 'scripts')
-          from run_integrated_source_checks import run_checked
-          suite = unittest.defaultTestLoader.loadTestsFromName('test_daemon_notification_environment')
-          print(run_checked(suite, 11, unittest.TextTestRunner(verbosity=2)))
-          PYCODE
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_daemon_notification_environment --expected-tests 11
       - name: Check HTTP bootstrap binding and denial parity offline
-        run: |
-          python3 -B - <<'PYCODE'
-          import sys
-          import unittest
-          sys.path.insert(0, 'scripts')
-          from run_integrated_source_checks import run_checked
-          suite = unittest.defaultTestLoader.loadTestsFromName('test_http_bootstrap_bindings')
-          print(run_checked(suite, 25, unittest.TextTestRunner(verbosity=2)))
-          PYCODE
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_http_bootstrap_bindings --expected-tests 25
       - name: Check combined resource setup and history proof fences offline
-        run: |
-          python3 -B - <<'PYCODE'
-          import sys
-          import unittest
-          sys.path.insert(0, 'scripts')
-          from run_integrated_source_checks import run_checked
-          suite = unittest.defaultTestLoader.loadTestsFromName('test_combined_setup_resources')
-          print(run_checked(suite, 12, unittest.TextTestRunner(verbosity=2)))
-          PYCODE
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_combined_setup_resources --expected-tests 12
       - name: Check private resource scheduler-policy selection offline
-        run: |
-          python3 -B - <<'PYCODE'
-          import sys
-          import unittest
-          sys.path.insert(0, 'scripts')
-          from run_integrated_source_checks import run_checked
-          suite = unittest.defaultTestLoader.loadTestsFromName('test_bootstrap_resource_policy')
-          print(run_checked(suite, 28, unittest.TextTestRunner(verbosity=2)))
-          PYCODE
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_bootstrap_resource_policy --expected-tests 28
       - name: Check protected policy metadata and read-open boundaries offline
-        run: |
-          python3 -B - <<'PYCODE'
-          import sys
-          import unittest
-          sys.path.insert(0, 'scripts')
-          from run_integrated_source_checks import run_checked
-          suite = unittest.defaultTestLoader.loadTestsFromName('test_resource_policy_file_pins')
-          print(run_checked(suite, 5, unittest.TextTestRunner(verbosity=2)))
-          PYCODE
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_resource_policy_file_pins --expected-tests 5
 
   license:
     name: License policy checks

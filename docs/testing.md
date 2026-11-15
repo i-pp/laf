@@ -126,3 +126,50 @@ verify owner access to definitively persisted pre-turn blockers, foreign denial,
 immutable origin conflicts, uncertainty/forgery refusal and bounded read-only
 ledger proof. A binding test that prearranges task ownership is not a substitute
 for this composed submission path. No socket or model is used.
+
+
+## Isolated source tests
+
+Modified 2026-11-15. Supported source suite commands automatically enter the
+existing Bubblewrap runner before loading fixtures. Linux private user, mount,
+PID, network and IPC namespaces are mandatory. The real OS-account home and
+host temporary/runtime directories are hidden by separately bounded private
+tmpfs mounts. Source is read-only; the canonical default resource-ledger path is
+an empty read-only scratch bind inside the private home. The launcher never
+creates that destination in the real home, inspects a production ledger or
+falls back to an unisolated process. No packages or host settings are changed.
+
+The namespace has a fresh bounded root and exposes only needed system trees
+read-only. The child checks actual mount/namespace/UID evidence, closes inherited nonstdio
+descriptors, receives only null stdin and captured output pipes, and installs a process-wide SQLite/default-path audit guard before
+test imports. This catches an omitted fixture directory even through alternate
+Ledger classes. An unexpected guarded access makes the suite fail independently
+of caught test exceptions. Physical mounts also protect descendants that do not
+inherit the Python hook. Raw resource-fixture imports refuse outside this proven
+boundary; an environment hint alone is insufficient.
+
+Run a focused fixture through the same boundary:
+
+```sh
+python3 -B scripts/source_test_isolation.py --suite focused --module test_provider_feedback
+```
+
+Use `--suite integrated`, `--suite root -- --suite full`, `--suite bundle --
+--suite full` or `--suite packaging` for complete source groups. A protected
+independent review harness can be supplied with `--suite harness --harness-file
+<FILE> --harness-sha256 <EXACT_SHA256>`; its source root inside the namespace is
+`/source`. Harness files must be protected Python files in private `/tmp` or
+the source scripts directory. `--timeout-seconds` accepts only a finite bound
+within the runner's maximum. There is no arbitrary shell command option. Missing Bubblewrap or
+denied namespaces refuse before tests; provide an authorized suitable test
+environment instead of weakening isolation. This protects wrapped tests and
+their descendants, not arbitrary same-UID host commands or live acceptance.
+Production/default ledger incident evidence must be preserved; do not remove or
+rewrite the existing ledger as a test setup or cleanup step.
+
+Fresh exec children using supported entrypoints install their own process guards
+and final verdict even with an inherited isolation receipt. Descriptor-relative
+Python filesystem operations are checked against their actual directory FD;
+removing a fixture symlink preserves the native no-follow semantics. A late
+unraisable resource warning exits the isolated process unsuccessfully, including
+during interpreter teardown after ordinary result reporting.

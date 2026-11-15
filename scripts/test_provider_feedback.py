@@ -30,6 +30,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock,patch
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'scripts'),str(ROOT/'runtime/private_codex/src'),str(ROOT/'runtime/integration')]
+from scripts.source_test_isolation import require_isolated
+require_isolated()  # Refuse raw resource tests before any fixture or project import.
 import resource_admission as admission
 import provider_control
 import test_resource_only as fixtures

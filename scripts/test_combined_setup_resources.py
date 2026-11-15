@@ -35,6 +35,8 @@ sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'runtime/private_codex/src'),
                str(ROOT / 'runtime/integration')]
 from codex_host import HostGateway
 from codex_pipeline import Pipeline, PipelineError, digest
+from scripts.source_test_isolation import require_isolated
+require_isolated()  # Refuse raw resource tests before any fixture or project import.
 import pipeline_resource_admission
 import resource_admission
 import test_notification_fresh_prefix as event_fixtures

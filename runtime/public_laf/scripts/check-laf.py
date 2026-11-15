@@ -139,4 +139,5 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    from source_test_isolation import entrypoint
+    raise SystemExit(entrypoint('root', main))

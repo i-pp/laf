@@ -44,4 +44,7 @@ def main():
  passed=result.wasSuccessful() and result.testsRun==planned and not any(counts[k] for k in ('failures','errors','skipped','expected_failures','unexpected_successes'))
  print(json.dumps({'status':'passed' if passed else 'failed',**counts,'scope':'pure config/source/synthetic ZIP only; service/socket/SDK child/model/publication operations zero'}))
  return 0 if passed else 1
-if __name__=='__main__':raise SystemExit(main())
+if __name__ == '__main__':
+ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
+ from source_test_isolation import entrypoint
+ raise SystemExit(entrypoint('packaging',main))

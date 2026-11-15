@@ -205,7 +205,10 @@
         "skills/laf-router/SKILL.md",
         "runtime/private_codex/src/provider_control.py",
         "scripts/test_provider_feedback.py",
-        "docs/provider-feedback-admission.md"
+        "docs/provider-feedback-admission.md",
+        "scripts/source_test_isolation.py",
+        "scripts/test_source_test_isolation.py",
+        "runtime/public_laf/scripts/source_test_isolation.py"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",

@@ -34,6 +34,8 @@ from unittest.mock import patch
 import uuid
 
 sys.path[:0] = [str(Path(__file__).resolve().parents[1] / 'runtime/private_codex/src')]
+from scripts.source_test_isolation import require_isolated
+require_isolated()  # Refuse raw resource tests before any fixture or project import.
 import resource_admission as admission
 import pipeline_resource_admission as pipeline_admission
 import scheduler

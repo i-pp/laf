@@ -37,6 +37,8 @@ import uuid
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'runtime/private_codex/src')]
 import standalone
+from scripts.source_test_isolation import require_isolated
+require_isolated()  # Refuse raw resource tests before any fixture or project import.
 import scheduler
 import daemon
 import runner
@@ -106,7 +108,7 @@ class Standalone(unittest.TestCase):
         captured={}
         def execve(path,argv,env):
             captured.update(path=path,argv=argv,env=env);raise ExecOnly()
-        with patch.dict(os.environ,{},clear=True),patch.object(os,'execve',side_effect=execve):
+        with patch.dict(os.environ,{},clear=True),patch.object(os,'execve',side_effect=execve),patch('resources.storage_check',return_value=None):
             with self.assertRaises(ExecOnly):
                 with standalone.controller(self.root,args(),argv=['--runtime',str(self.root),'run',str(uuid.uuid4())]):
                     self.fail('Unbounded continuation')

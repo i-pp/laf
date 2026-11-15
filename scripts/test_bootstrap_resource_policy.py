@@ -33,6 +33,8 @@ from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'scripts'),str(ROOT/'runtime/integration'),str(ROOT/'runtime/private_codex/src')]
+from scripts.source_test_isolation import require_isolated
+require_isolated()  # Refuse raw resource tests before any fixture or project import.
 import laf_bootstrap as boot
 import scheduler
 from backend_state import load_state,scheduler_binding_policy,state_sha256

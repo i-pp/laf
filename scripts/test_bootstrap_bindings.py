@@ -36,10 +36,11 @@ class BindingTests(unittest.TestCase):
  def setUp(self):
   self.temp=tempfile.TemporaryDirectory(dir=Path.home());self.addCleanup(self.temp.cleanup)
   self.parent=Path(self.temp.name);self.parent.chmod(0o700);self.prefix=self.parent/'new'
+  self.sdk=self.parent/'sdk-python';self.sdk.write_text('# synthetic protected SDK reference; never executed\n');self.sdk.chmod(0o500)
   self.stack=ExitStack();self.addCleanup(self.stack.close)
   for name in ('subprocess.Popen','socket.socket.bind','socket.socket.connect','threading.Thread.start'):
    self.stack.enter_context(patch(name,side_effect=AssertionError('No executable, service, network or thread in binding fixtures')))
-  boot.prepare_prefix(self.prefix,sdk_python=Path(sys.executable))
+  boot.prepare_prefix(self.prefix,sdk_python=self.sdk)
   self.runtime=self.prefix/'runtime/private_codex/.runtime/main';self.marker=self.runtime/'unconfigured-backends.json'
   self.native=self.parent/'native';self.native.write_bytes(b'\x7fELFsynthetic-not-executable-test-data');self.native.chmod(0o500)
   self.digest=hashlib.sha256(self.native.read_bytes()).hexdigest()
@@ -233,7 +234,7 @@ class BindingTests(unittest.TestCase):
  def test_command_emission_is_explicit_and_does_not_start_the_guarded_daemon(self):
   self.codex();result=boot.daemon_command(self.prefix)
   self.assertEqual(result['status'],'command_only');self.assertFalse(result['services_started'])
-  self.assertEqual(result['command'],[str(Path(sys.executable)),'-B',str(self.prefix/'runtime/private_codex/src/runner.py'),
+  self.assertEqual(result['command'],[str(self.sdk),'-B',str(self.prefix/'runtime/private_codex/src/runner.py'),
        '--runtime',str(self.runtime),'--codex',str(self.native),'--allow-codex-pipeline','daemon'])
   self.assertEqual(result['pipeline_concurrency'],1);self.assertTrue(result['ordinary_maximum_sessions_unchanged'])
 

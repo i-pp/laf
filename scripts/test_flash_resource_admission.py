@@ -38,6 +38,8 @@ import uuid
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'runtime/private_codex/src')]
+from scripts.source_test_isolation import require_isolated
+require_isolated()  # Refuse raw resource tests before any fixture or project import.
 import test_local_resource_admission as local
 from inference.laf_service import flash_resources as assets
 from inference.laf_service import core_backends,core_server,core_flash_worker

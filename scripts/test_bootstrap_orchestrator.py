@@ -46,10 +46,11 @@ class OrchestratorBinding(unittest.TestCase):
  def setUp(self):
   self.temp=tempfile.TemporaryDirectory(dir=Path.home());self.addCleanup(self.temp.cleanup)
   self.parent=Path(self.temp.name);self.parent.chmod(0o700);self.prefix=self.parent/'new'
+  self.sdk=self.parent/'sdk-python';self.sdk.write_text('# synthetic protected SDK reference; never executed\n');self.sdk.chmod(0o500)
   self.stack=ExitStack();self.addCleanup(self.stack.close)
   for name in ('subprocess.Popen','socket.socket.bind','socket.socket.connect','threading.Thread.start'):
    self.stack.enter_context(patch(name,side_effect=AssertionError('No service/native/account/model in binding tests')))
-  boot.prepare_prefix(self.prefix,sdk_python=Path(sys.executable))
+  boot.prepare_prefix(self.prefix,sdk_python=self.sdk)
   self.project=self.prefix/'runtime/private_codex';self.runtime=self.project/'.runtime/main'
   self.marker=self.runtime/'unconfigured-backends.json'
  def configure(self,**kw):return boot.configure_orchestrator(self.prefix,**kw)

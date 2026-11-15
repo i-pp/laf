@@ -24,6 +24,14 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: isolated source-test resource ledgers (2026-11-15)
+
+Run supported source suites in verified disposable namespaces, hiding the real
+OS home and host temporary/runtime state. Mount source and an empty default
+ledger placeholder read-only; reject missing isolation and unexpected SQLite
+paths before fixture effects. Preserve production state and earlier incident
+evidence; no runtime policy, service, quota or resource guard is changed.
+
 ## Unreleased: provider-owned acceptance without inferred slots (2026-11-15)
 
 Added an explicit schema3 pipeline-only external provider-feedback contract alongside retained
