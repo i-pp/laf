@@ -19,6 +19,8 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Scope: this newly authored file only; imported private source is not relicensed.
+# Modified 2026-11-15: report guarded host admission without starting a daemon.
+# Modified 2026-11-15: configure the existing owner-daemon metadata interface explicitly.
 """Prepare a NEW owner-only runtime prefix from source. Never start or install."""
 import argparse
 import ast
@@ -310,7 +312,7 @@ def doctor(prefix):
  return {'status':'prepared','prefix':str(prefix),'profile':'integrated-32','sdk':sdk,
          'policy':bundle.metadata(),'unconfigured_backends':[x for x in BACKENDS if x in unconfigured],
          'services_started':False,'services_probed':False,'network_used':False,'execution_ready':False,
-         'bindings':{name:('configured_not_probed' if operator_state is not None and operator_state.get(name) is not None else 'unconfigured') for name in ('router','codex')},
+         'bindings':{name:('configured_not_probed' if operator_state is not None and operator_state.get(name) is not None else 'unconfigured') for name in ('router','codex','orchestrator')},
          'ordinary_dependencies':{name:shutil.which(name) is not None for name in ('unshare','mount','setpriv','bwrap','systemd-run')},
          'cgroup_and_namespace_admission':'not_probed',
          'limitations':['No SDK/account/native version or service readiness probe','Only explicitly bound backends can dispatch; configured is not service readiness','No daemon, model or Router lifecycle was started']}
@@ -367,7 +369,7 @@ def _binding_change(prefix,backend,field,builder,*,dry_run):
   if state['schema']==1:
    if set(state['unconfigured'])!=set(BACKENDS):raise BootstrapError('Only fresh deny-all bootstrap state can be configured')
    state={'schema':2,'unconfigured':list(BACKENDS),'router':None,'codex':None}
-  if state[field] is not None:raise BootstrapError('Existing backend binding is immutable; use a NEW prefix, never rebind')
+  if state.get(field) is not None:raise BootstrapError('Existing backend binding is immutable; use a NEW prefix, never rebind')
   binding=builder();state[field]=binding;state['unconfigured']=[x for x in BACKENDS if x!=backend and x in state['unconfigured']]
   raw=(json.dumps(state,indent=2)+'\n').encode();validate_state(state,runtime,len(raw))
   if len(raw)>LIMIT:raise BootstrapError('Binding record exceeds its bound')
@@ -400,6 +402,13 @@ def _binding_change(prefix,backend,field,builder,*,dry_run):
      except FileNotFoundError:info=None
      if info is not None and (info.st_dev,info.st_ino)==identity:os.unlink(temporary,dir_fd=runtime_fd)
    finally:os.umask(old_umask)
+
+def configure_orchestrator(prefix,*,dry_run=False):
+ # This enables the three metadata tools in the portable profile. It creates
+ # no task-write policy, workspace grant, task, service or account operation.
+ _operator_imports()
+ return _binding_change(prefix,'orchestrator','orchestrator',
+    lambda:{'transport':'owner-control-socket'},dry_run=dry_run)
 
 def configure_router(prefix,*,socket_path,models,dry_run=False):
  _operator_imports()
@@ -525,12 +534,39 @@ def daemon_command(prefix):
  _operator_imports();prefix=safe_path(prefix);checked=doctor(prefix)
  from backend_state import load_state
  state,_=load_state(prefix/'runtime/private_codex/.runtime/main')
- if state is None or state.get('codex') is None or checked['sdk']['status']!='interpreter_present':raise BootstrapError('Configure Codex and SDK before emitting its guarded daemon command')
+ if state is None or not (state.get('codex') or state.get('orchestrator')) or checked['sdk']['status']!='interpreter_present':raise BootstrapError('Configure an owner-daemon backend and SDK before emitting its guarded command')
  value=decode(read_source(prefix/'plugin.json'))
- return {'status':'command_only','services_started':False,'command':[value['sdk_python'],'-B',str(prefix/'runtime/private_codex/src/runner.py'),
-          '--runtime',value['runtime'],'--codex',state['codex']['binary'],'--allow-codex-pipeline','daemon'],
+ command=[value['sdk_python'],'-B',str(prefix/'runtime/private_codex/src/runner.py'),'--runtime',value['runtime']]
+ if state.get('codex') is not None:command+=['--codex',state['codex']['binary'],'--allow-codex-pipeline']
+ command+=['daemon']
+ return {'status':'command_only','services_started':False,'command':command,
          'requires':'Existing normal host, namespace/cgroup/user-bus/resource admission; no bypass or automatic start',
-         'ordinary_maximum_sessions_unchanged':True,'pipeline_concurrency':1}
+         'ordinary_maximum_sessions_unchanged':True,'pipeline_concurrency':1 if state.get('codex') else None}
+
+
+def admission(prefix):
+ """Read the existing guard, not a namespace/cgroup/account execution probe."""
+ _operator_imports()
+ from backend_state import load_state
+ from isolation_guard import environment
+ from codex_host import HostGateway
+ from codex_pipeline import PipelineError
+ context=environment()
+ codex={'configured':False,'dispatch_attempted':False}
+ try:HostGateway.require_host()
+ except PipelineError as exc:codex.update(status='blocked',code=exc.code)
+ else:codex.update(status='host_guard_passed',remaining_admission='namespace/cgroup/user-bus/resource/daemon/account not probed')
+ setup={'status':'not_verified'};router='not_verified'
+ try:
+  prefix=safe_path(prefix);checked=doctor(prefix)
+  state,_=load_state(prefix/'runtime/private_codex/.runtime/main')
+  setup={'status':'prepared'};router=checked['bindings']['router']
+  codex['configured']=state is not None and state.get('codex') is not None
+ except (OSError,ValueError,RuntimeError):setup={'status':'blocked','code':'PREFIX_NOT_VERIFIED'}
+ return {'status':'observed','host_context':context,'codex':codex,
+         'prefix':setup,'router':router,'services_started':False,
+         'services_probed':False,'network_used':False,'execution_ready':False,
+         'automatic_repair':False}
 
 
 def activate_config(prefix,*,config=None,dry_run=False):
@@ -583,7 +619,7 @@ def activate_config(prefix,*,config=None,dry_run=False):
    os.umask(old_umask)
 
 def main(argv=None):
- parser=Parser(description=__doc__);parser.add_argument('action',choices=('prepare','doctor','activate-config','configure-router','configure-codex','snapshot-codex','daemon-command'))
+ parser=Parser(description=__doc__);parser.add_argument('action',choices=('prepare','doctor','admission','activate-config','configure-orchestrator','configure-router','configure-codex','snapshot-codex','daemon-command'))
  parser.add_argument('--prefix',type=Path,required=True);parser.add_argument('--sdk-python',type=Path)
  parser.add_argument('--dry-run',action='store_true');parser.add_argument('--config',type=Path,help='NEW standard config destination for explicit activate-config only')
  parser.add_argument('--socket',type=Path);parser.add_argument('--model',action='append');parser.add_argument('--native',type=Path)
@@ -591,14 +627,16 @@ def main(argv=None):
  try:
   args=parser.parse_args(argv)
   selected={name for name in ('sdk_python','config','socket','model','native','sha256','workspace','source') if getattr(args,name) is not None}
-  allowed={'prepare':{'sdk_python'},'doctor':set(),'activate-config':{'config'},'configure-router':{'socket','model'},
+  allowed={'prepare':{'sdk_python'},'doctor':set(),'admission':set(),'activate-config':{'config'},'configure-orchestrator':set(),'configure-router':{'socket','model'},
            'configure-codex':{'native','sha256','workspace','model'},'snapshot-codex':{'source','sha256'},'daemon-command':set()}
-  if selected-allowed[args.action] or args.action in ('doctor','daemon-command') and args.dry_run:raise BootstrapError('Options do not match the explicit action')
+  if selected-allowed[args.action] or args.action in ('doctor','admission','daemon-command') and args.dry_run:raise BootstrapError('Options do not match the explicit action')
   required={'configure-router':{'socket','model'},'configure-codex':{'native','sha256','workspace','model'},'snapshot-codex':{'source','sha256'}}
   if required.get(args.action,set())-selected:raise BootstrapError('Explicit operator inputs are missing')
   if args.action=='prepare':result=prepare_prefix(args.prefix,sdk_python=args.sdk_python,dry_run=args.dry_run)
   elif args.action=='doctor':result=doctor(args.prefix)
+  elif args.action=='admission':result=admission(args.prefix)
   elif args.action=='activate-config':result=activate_config(args.prefix,config=args.config,dry_run=args.dry_run)
+  elif args.action=='configure-orchestrator':result=configure_orchestrator(args.prefix,dry_run=args.dry_run)
   elif args.action=='configure-router':result=configure_router(args.prefix,socket_path=args.socket,models=args.model,dry_run=args.dry_run)
   elif args.action=='configure-codex':result=configure_codex(args.prefix,binary=args.native,binary_sha256=args.sha256,workspace=args.workspace,models=args.model,dry_run=args.dry_run)
   elif args.action=='snapshot-codex':result=snapshot_codex(args.prefix,source=args.source,expected_sha256=args.sha256,dry_run=args.dry_run)

@@ -165,7 +165,31 @@ Its finite schema1 HostGateway policy has concurrency1, four thread records,
 sixteen task records and a120s turn budget. This does not change ordinary
 `maximum_sessions=8`, claim eight Codex turns, or establish provider quota.
 
+### Optional owner-daemon metadata
+
+Modification notice (2026-11-15): add explicit configuration of the three
+orchestrator metadata tools in the portable profile. Configure this before any
+daemon/database/receipt use, just like the other bindings:
+
+    python3 -B "$BOOT" configure-orchestrator --prefix "$PREFIX" --dry-run
+    python3 -B "$BOOT" configure-orchestrator --prefix "$PREFIX"
+
+This binds the existing owner-control-socket protocol to this prefix's own
+runtime. It does not connect a socket, adopt another runtime, start a service,
+create a task-write policy or submit work. Doctor reports configured but
+unprobed until the separately launched daemon is checked.
+
+With this binding and an existing SDK, daemon-command can emit ordinary metadata
+mode without a Codex native binding or account probe. When Codex is explicitly
+bound, it retains the pinned native and pipeline opt-in. Existing scheduler and
+resource configuration is unchanged. Ordinary tasks and Codex pipeline tasks
+have separate ledgers: an empty ordinary list is valid while Codex history
+exists. See [backend selection](backend-configuration.md) for the other groups.
+
 ### Atomic configuration and explicit daemon launch
+
+Modification notice (2026-11-15): added a read-only admission observation and
+linked the repeatable installed-package acceptance path.
 
 The private runtime's `unconfigured-backends.json` becomes one schema2 record
 containing both bindings and their pinned snapshots. Publication uses one
@@ -178,6 +202,7 @@ replay is attempted after publication uncertainty.
 
 ```sh
 python3 -B "$BOOT" doctor --prefix "$PREFIX"
+python3 -B "$BOOT" admission --prefix "$PREFIX"
 python3 -B "$BOOT" daemon-command --prefix "$PREFIX"
 ```
 
@@ -197,6 +222,15 @@ can create its own new runtime state and inherit legitimate normal user
 instructions; the Codex gateway uses the normal existing account/cache and
 legitimate refresh path. Configuration does not promise synthetic-only context
 or change account settings. Other optional backends stay denied.
+
+The admission command starts nothing and reads no credentials. It reports the
+existing normal-host guard and whether the prepared prefix can be verified.
+It can also run before preparation, when prefix verification remains blocked.
+A passed host guard is only one prerequisite: namespace, cgroup, user-bus,
+resources, daemon, SDK and account execution still need verification. A
+sandboxed context, untrusted ancestry or refusal is not repaired by changing
+permissions, disabling guards or choosing another transport. Use the supported
+normal operator-host path.
 
 ## Connect the standard plugin lookup
 
@@ -256,6 +290,12 @@ not silently generalized to this new bootstrap.
 
 The self-contained policy is an exact licensed public snapshot, not a fabricated
 legacy policy or local Git checkout. See [policy provenance](bootstrap-policy-provenance.md).
+
+After installation, use the [bounded installed-package acceptance runner](installed-acceptance.md).
+It checks the exact archive/cache and copied runtime, separates catalog
+inspection from an explicit local job and optional Codex task, and preserves
+private receipts and request keys across interruption. This is an existing-host
+acceptance path, not clean-host provisioning.
 
 
 ## Observed frontend installation

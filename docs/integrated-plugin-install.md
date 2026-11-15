@@ -180,3 +180,18 @@ accepted by the modern Router checks. Do not silently translate helper calls to
 Router load/unload operations, fabricate helper configuration, or weaken guards.
 This known limitation does not prevent source Alpha review, but this is neither
 an all-33-functional claim nor a complete clean-host setup.
+
+Modification notice (2026-11-15): compatibility investigation established an API
+and semantic mismatch in addition to the stopped helper transport. The old
+contract requires fixed profiles, a 32768 context, authoritative loaded/idle
+state and atomic no-autoload generation. The modern Router advertises an 8192
+context and its jobs may start/switch providers. It has no advertised equivalent
+of explicit legacy prepare or provider-enforced no-autoload generation. A
+status-then-submit bridge races with other Router jobs; the old helper file lock
+cannot exclude them. Keep the legacy backend unconfigured when no compatible
+backend exists. Do not substitute Flash, fabricate a profile mapping, or use a
+dummy generation to implement prepare. Modern Router readiness is separate
+from legacy compatibility.
+
+See the [installed-package acceptance procedure](installed-acceptance.md) for
+bounded existing-host checks and retained identifiers.

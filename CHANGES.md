@@ -24,6 +24,37 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: explicit owner-daemon metadata binding (2026-11-15)
+
+Add a new-prefix orchestrator binding using the existing owner control socket.
+The portable profile retains its three read-only metadata tools and creates no
+task-write policy, mailbox authority or model selection. Old schema2 bindings
+remain valid. Configuration keeps the same atomic publication, immutable
+snapshot and unused-prefix checks.
+
+The printed daemon command can now select ordinary metadata mode without a
+Codex binding or native/account probe. Codex mode retains its explicit native
+pin and opt-in. Add configuration/refusal/source-fixture checks and document
+which optional backends need separate operator inputs. This updates
+the bootstrap, backend-state validator, license path declarations and minimum
+CI; it does not change scheduler implementation or configure a running service.
+
+## Unreleased: bounded installed-package acceptance (2026-11-15)
+
+Add a private append-only receipt/request-key acceptance runner, regression
+oracles and an existing-host procedure. It verifies the source archive, installed
+cache and copied runtime, exact catalog and parameter forwarding before claiming
+bounded execution success. Unknown replies retain the same identifiers; observed
+cancellation never claims physical stop. Codex task completion also requires
+executor-release confirmation. The runner retains all operational state.
+
+Add a read-only bootstrap admission observation without starting a process,
+probing an account or weakening the normal-host guard. Document the verified
+legacy API/no-autoload mismatch rather than translating calls into Router jobs.
+Classify the new source in the license policy and select the offline regressions
+in minimum CI. These changes do not establish actual installation/account/model
+acceptance, provision dependencies or change a running service.
+
 ## Unreleased: eligible ordinary queue dispatch
 
 Updated the vendored daemon to scan a finite FIFO horizon across independent

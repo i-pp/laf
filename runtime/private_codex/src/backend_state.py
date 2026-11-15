@@ -19,6 +19,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Scope: this newly authored file only; imported private source is not relicensed.
+# Modified 2026-11-15: explicit new-prefix owner-daemon metadata binding.
 """Explicit NEW-prefix bindings. Missing marker and schema1 keep legacy behavior."""
 import hashlib
 import os
@@ -54,11 +55,17 @@ def validate_state(value,runtime,raw_size):
  if value['schema']==1:
   if set(value)!={'schema','unconfigured'} or raw_size>4096:raise ValueError('Invalid legacy backend configuration')
   return value
- if value['schema']!=2 or set(value)!={'schema','unconfigured','router','codex'}:
+ keys={'schema','unconfigured','router','codex'}
+ if value['schema']!=2 or set(value) not in (keys,keys|{'orchestrator'}):
   raise ValueError('Invalid operator binding record')
  prefix,project=bootstrap_paths(runtime)
  router,codex=value['router'],value['codex']
  enabled=set()
+ orchestrator=value.get('orchestrator')
+ if orchestrator is not None:
+  if type(orchestrator) is not dict or orchestrator!={'transport':'owner-control-socket'}:
+   raise ValueError('Invalid owner daemon binding')
+  enabled.add('orchestrator')
  if router is not None:
   if (type(router) is not dict or set(router)!={'socket','socket_identity','models','receipts'}
       or not _absolute(router['socket']) or router['receipts']!=str(prefix/'receipts')
