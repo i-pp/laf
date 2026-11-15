@@ -19,6 +19,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Scope: this newly authored file only; imported private source is not relicensed.
+# Modified 2026-11-15: report guarded host admission without starting a daemon.
 """Prepare a NEW owner-only runtime prefix from source. Never start or install."""
 import argparse
 import ast
@@ -533,6 +534,31 @@ def daemon_command(prefix):
          'ordinary_maximum_sessions_unchanged':True,'pipeline_concurrency':1}
 
 
+def admission(prefix):
+ """Read the existing guard, not a namespace/cgroup/account execution probe."""
+ _operator_imports()
+ from backend_state import load_state
+ from isolation_guard import environment
+ from codex_host import HostGateway
+ from codex_pipeline import PipelineError
+ context=environment()
+ codex={'configured':False,'dispatch_attempted':False}
+ try:HostGateway.require_host()
+ except PipelineError as exc:codex.update(status='blocked',code=exc.code)
+ else:codex.update(status='host_guard_passed',remaining_admission='namespace/cgroup/user-bus/resource/daemon/account not probed')
+ setup={'status':'not_verified'};router='not_verified'
+ try:
+  prefix=safe_path(prefix);checked=doctor(prefix)
+  state,_=load_state(prefix/'runtime/private_codex/.runtime/main')
+  setup={'status':'prepared'};router=checked['bindings']['router']
+  codex['configured']=state is not None and state.get('codex') is not None
+ except (OSError,ValueError,RuntimeError):setup={'status':'blocked','code':'PREFIX_NOT_VERIFIED'}
+ return {'status':'observed','host_context':context,'codex':codex,
+         'prefix':setup,'router':router,'services_started':False,
+         'services_probed':False,'network_used':False,'execution_ready':False,
+         'automatic_repair':False}
+
+
 def activate_config(prefix,*,config=None,dry_run=False):
  """Explicit user-run NEW standard config. Never overwrite or register/start."""
  prefix=safe_path(prefix);target=Path(config) if config is not None else Path.home()/'.config/laf/plugin.json'
@@ -583,7 +609,7 @@ def activate_config(prefix,*,config=None,dry_run=False):
    os.umask(old_umask)
 
 def main(argv=None):
- parser=Parser(description=__doc__);parser.add_argument('action',choices=('prepare','doctor','activate-config','configure-router','configure-codex','snapshot-codex','daemon-command'))
+ parser=Parser(description=__doc__);parser.add_argument('action',choices=('prepare','doctor','admission','activate-config','configure-router','configure-codex','snapshot-codex','daemon-command'))
  parser.add_argument('--prefix',type=Path,required=True);parser.add_argument('--sdk-python',type=Path)
  parser.add_argument('--dry-run',action='store_true');parser.add_argument('--config',type=Path,help='NEW standard config destination for explicit activate-config only')
  parser.add_argument('--socket',type=Path);parser.add_argument('--model',action='append');parser.add_argument('--native',type=Path)
@@ -591,13 +617,14 @@ def main(argv=None):
  try:
   args=parser.parse_args(argv)
   selected={name for name in ('sdk_python','config','socket','model','native','sha256','workspace','source') if getattr(args,name) is not None}
-  allowed={'prepare':{'sdk_python'},'doctor':set(),'activate-config':{'config'},'configure-router':{'socket','model'},
+  allowed={'prepare':{'sdk_python'},'doctor':set(),'admission':set(),'activate-config':{'config'},'configure-router':{'socket','model'},
            'configure-codex':{'native','sha256','workspace','model'},'snapshot-codex':{'source','sha256'},'daemon-command':set()}
-  if selected-allowed[args.action] or args.action in ('doctor','daemon-command') and args.dry_run:raise BootstrapError('Options do not match the explicit action')
+  if selected-allowed[args.action] or args.action in ('doctor','admission','daemon-command') and args.dry_run:raise BootstrapError('Options do not match the explicit action')
   required={'configure-router':{'socket','model'},'configure-codex':{'native','sha256','workspace','model'},'snapshot-codex':{'source','sha256'}}
   if required.get(args.action,set())-selected:raise BootstrapError('Explicit operator inputs are missing')
   if args.action=='prepare':result=prepare_prefix(args.prefix,sdk_python=args.sdk_python,dry_run=args.dry_run)
   elif args.action=='doctor':result=doctor(args.prefix)
+  elif args.action=='admission':result=admission(args.prefix)
   elif args.action=='activate-config':result=activate_config(args.prefix,config=args.config,dry_run=args.dry_run)
   elif args.action=='configure-router':result=configure_router(args.prefix,socket_path=args.socket,models=args.model,dry_run=args.dry_run)
   elif args.action=='configure-codex':result=configure_codex(args.prefix,binary=args.native,binary_sha256=args.sha256,workspace=args.workspace,models=args.model,dry_run=args.dry_run)

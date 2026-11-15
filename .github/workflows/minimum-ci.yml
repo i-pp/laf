@@ -20,6 +20,7 @@
 
 
 # Added 2026-11-12: always-run, offline minimum CI; not hardware or release acceptance.
+# Modified 2026-11-15: include installed-acceptance offline refusal regressions.
 
 name: Minimum source CI
 
@@ -173,6 +174,16 @@ jobs:
         run: python3 -B scripts/run_integrated_source_checks.py
       - name: Verify portable integrated package source without services
         run: python3 -B packaging/run_packaging_checks.py
+      - name: Check installed-acceptance interruption and refusal logic offline
+        run: |
+          python3 -B - <<'PYCODE'
+          import sys
+          import unittest
+          sys.path.insert(0, 'scripts')
+          from run_integrated_source_checks import run_checked
+          suite = unittest.defaultTestLoader.loadTestsFromName('test_installed_acceptance')
+          print(run_checked(suite, 47, unittest.TextTestRunner(verbosity=2)))
+          PYCODE
 
   license:
     name: License policy checks

@@ -24,6 +24,22 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: bounded installed-package acceptance (2026-11-15)
+
+Add a private append-only receipt/request-key acceptance runner, regression
+oracles and an existing-host procedure. It verifies the source archive, installed
+cache and copied runtime, exact catalog and parameter forwarding before claiming
+bounded execution success. Unknown replies retain the same identifiers; observed
+cancellation never claims physical stop. Codex task completion also requires
+executor-release confirmation. The runner retains all operational state.
+
+Add a read-only bootstrap admission observation without starting a process,
+probing an account or weakening the normal-host guard. Document the verified
+legacy API/no-autoload mismatch rather than translating calls into Router jobs.
+Classify the new source in the license policy and select the offline regressions
+in minimum CI. These changes do not establish actual installation/account/model
+acceptance, provision dependencies or change a running service.
+
 ## Unreleased: optional shared rolling-pressure policy
 
 Add versioned opt-in Host/Core rolling swap policy, fresh admission and provider

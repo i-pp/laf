@@ -167,6 +167,9 @@ sixteen task records and a120s turn budget. This does not change ordinary
 
 ### Atomic configuration and explicit daemon launch
 
+Modification notice (2026-11-15): added a read-only admission observation and
+linked the repeatable installed-package acceptance path.
+
 The private runtime's `unconfigured-backends.json` becomes one schema2 record
 containing both bindings and their pinned snapshots. Publication uses one
 atomic replacement. The copied plugin configuration stays an immutable anchor,
@@ -178,6 +181,7 @@ replay is attempted after publication uncertainty.
 
 ```sh
 python3 -B "$BOOT" doctor --prefix "$PREFIX"
+python3 -B "$BOOT" admission --prefix "$PREFIX"
 python3 -B "$BOOT" daemon-command --prefix "$PREFIX"
 ```
 
@@ -197,6 +201,15 @@ can create its own new runtime state and inherit legitimate normal user
 instructions; the Codex gateway uses the normal existing account/cache and
 legitimate refresh path. Configuration does not promise synthetic-only context
 or change account settings. Other optional backends stay denied.
+
+The admission command starts nothing and reads no credentials. It reports the
+existing normal-host guard and whether the prepared prefix can be verified.
+It can also run before preparation, when prefix verification remains blocked.
+A passed host guard is only one prerequisite: namespace, cgroup, user-bus,
+resources, daemon, SDK and account execution still need verification. A
+sandboxed context, untrusted ancestry or refusal is not repaired by changing
+permissions, disabling guards or choosing another transport. Use the supported
+normal operator-host path.
 
 ## Connect the standard plugin lookup
 
@@ -256,6 +269,12 @@ not silently generalized to this new bootstrap.
 
 The self-contained policy is an exact licensed public snapshot, not a fabricated
 legacy policy or local Git checkout. See [policy provenance](bootstrap-policy-provenance.md).
+
+After installation, use the [bounded installed-package acceptance runner](installed-acceptance.md).
+It checks the exact archive/cache and copied runtime, separates catalog
+inspection from an explicit local job and optional Codex task, and preserves
+private receipts and request keys across interruption. This is an existing-host
+acceptance path, not clean-host provisioning.
 
 
 ## Observed frontend installation
