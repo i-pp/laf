@@ -835,7 +835,7 @@ class Pipeline:
                 if error_overflow:task['provider_error_uncertain']=True
             if pending and pending.get('id') == turn['id']:
                 if pending.get('preack_error') is True:self.resource_gate.stage_preack_error(s,task,pending)
-                self._adopt_turn(s,task,pending)
+                self._adopt_turn(s,task,pending,terminal_event='status' in pending)
             self._adopt_turn(s, task, turn)
             if task.pop('pending_approval_turn', None) == turn['id'] and task['state'] not in TERMINAL:
                 task['state'] = 'WAITING_APPROVAL'
@@ -853,10 +853,19 @@ class Pipeline:
                 result={**result,**self._mutate(lambda s:self._view(self._task(s,ident)))}
         return result
 
-    def _adopt_turn(self, s, task, turn, *, history=False):
+    def _adopt_turn(self, s, task, turn, *, history=False, terminal_event=False):
         mapping = {'completed': 'COMPLETED', 'failed': 'FAILED', 'interrupted': 'CANCELLED'}
         state = mapping.get(turn.get('status'))
-        if not state or not task.get('remote_turn') or turn.get('id')!=task['remote_turn']: return
+        if not task.get('remote_turn') or turn.get('id')!=task['remote_turn']:return
+        if not state:
+            if terminal_event and getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:
+                from resource_admission import provider_restriction
+                task.update(state='UNKNOWN',provider_feedback_uncertain=True,reason_code='PROVIDER_FEEDBACK_PERSISTENCE_UNKNOWN')
+                try:
+                    if turn.get('provider_restriction') is True or provider_restriction(data=turn.get('error')):
+                        self.resource_gate.stage_preack_error(s,task,turn)
+                except Exception:pass  # The uncertainty barrier remains until exact history.
+            return
         if getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:
             try:
                 self.resource_gate.stage_terminal(s,task,turn,history=history)
@@ -982,7 +991,7 @@ class Pipeline:
                             else:task['pending_provider_error_overflow']=True
             if method == 'turn/completed':
                 turn = params.get('turn', {})
-                if task['remote_turn'] and turn.get('id') == task['remote_turn']: self._adopt_turn(s, task, turn)
+                if task['remote_turn'] and turn.get('id') == task['remote_turn']: self._adopt_turn(s,task,turn,terminal_event=True)
                 elif task['state'] == 'DISPATCHING' and task['remote_turn'] is None and opaque(turn.get('id')):
                     # Retain only bounded answer text, never command/tool payloads.
                     answer = '\n'.join(i['text'] for i in turn.get('items', []) if isinstance(i, dict)

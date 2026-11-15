@@ -240,7 +240,7 @@ class TerminalFeedback(unittest.TestCase):
   from resource_admission import generation
   with closing(Ledger(self.f.p)) as ledger:
    policy=ledger.policy
-   previous=hashlib.sha256(json.dumps({'protocol':10,'policy':policy},sort_keys=True,separators=(',',':')).encode()).hexdigest()
+   previous=hashlib.sha256(json.dumps({'protocol':12,'policy':policy},sort_keys=True,separators=(',',':')).encode()).hexdigest()
    self.assertNotEqual(previous,generation(policy))
    with ledger.db:ledger.db.execute("UPDATE admission_meta SET generation=? WHERE id=1",(previous,))
   with self.assertRaises(AdmissionWait) as caught:

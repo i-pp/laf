@@ -83,6 +83,9 @@ def uuid_value(value):
     return value if isinstance(value, str) and re.fullmatch(UUID_PATTERN, value) else None
 
 
+from provider_control import WAIT_REASONS as PROVIDER_WAIT_REASONS
+
+
 def task_view(task):
     if not isinstance(task, dict) or not uuid_value(task.get('id')) or task.get('state') not in STATES:
         raise ValueError('Invalid daemon task')
@@ -93,7 +96,7 @@ def task_view(task):
     result['turn_id'] = uuid_value(task.get('turn_id'))
     # No prompt/result/error, config, command, owner, environment or log path is exported.
     enums = {
-        'codex_status': {'NOT_STARTED', 'DISPATCHING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'UNKNOWN', 'CANCELLED', 'TIMED_OUT', 'LEGACY_UNVERIFIED'},
+        'codex_status': {'WAITING_PROVIDER', 'NOT_STARTED', 'DISPATCHING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'UNKNOWN', 'CANCELLED', 'TIMED_OUT', 'LEGACY_UNVERIFIED'},
         'verification_status': {'NOT_VERIFIED', 'RUNNING', 'PASSED', 'FAILED', 'UNKNOWN', 'CANCELLED', 'TIMED_OUT', 'LEGACY_UNVERIFIED'},
         'human_status': {'NOT_REQUIRED', 'PENDING', 'APPROVED', 'REJECTED', 'WAITING'},
         'scheduler_phase': {'RESERVED', 'STARTED', 'AUTHORIZED', 'FINISHED', 'ORPHANED'},
@@ -101,8 +104,8 @@ def task_view(task):
     for key, values in enums.items():
         result[key] = task.get(key) if task.get(key) in values else None
     reason = task.get('scheduler_wait_reason')
-    result['scheduler_wait_reason'] = (reason if task['state'] == 'QUEUED' and isinstance(reason, str)
-                                       and reason in TASK_WAIT_REASONS else None)
+    result['scheduler_wait_reason'] = (reason if isinstance(reason,str) and reason in TASK_WAIT_REASONS
+                                       and (task['state']=='QUEUED' or task['state']=='RUNNING' and result['codex_status']=='WAITING_PROVIDER' and reason in PROVIDER_WAIT_REASONS) else None)
     for key in ['completion_verified', 'worker_pending']:
         result[key] = task.get(key) is True
     return result

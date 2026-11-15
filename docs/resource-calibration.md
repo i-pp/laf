@@ -33,6 +33,13 @@ implementation task. Bounded passive kernel metadata observations on EVO-X3 are
 recorded separately from source fixtures and do not establish model calibration.
 No example capacity or quota below is permission to enable resource mode.
 
+Configuration and calibration are installation-specific operator choices. The
+0.1.0 API/agent foundation does not promise validated settings for every host,
+model or provider. Model API availability is distinct from resource-admission
+readiness: an unknown or incomplete local contract must remain refused in that
+environment, rather than becoming a global release guarantee or invented vector.
+The stdio/CLI interfaces do not require a dedicated web UI.
+
 ## Coordinate the ownership window
 
 The installed-plugin acceptance and old-service cutover owners retain their
@@ -69,11 +76,15 @@ security configuration and hard CPU/RAM/PID/swap limits. A controller profile
 must cover the actual verified ceiling. Source-only configured names, file size,
 marketing memory or a successful health response do not establish peak cost.
 
-For cloud turns, obtain the actual provider's current concurrency entitlement
-and an expiry/reference for that evidence. Bind it to the exact account read by
-the native protocol. Do not infer entitlement from model effort, local RAM,
-subscription name or an old observed successful turn. Keep the private account
-fingerprint and receipts outside public artifacts; publish only redacted results.
+For cloud turns using a known finite quota, obtain the actual provider's current
+concurrency entitlement and its expiry/reference, bound to the exact native
+account. If the provider does not expose that entitlement, do not invent a
+number: explicitly select the schema3 feedback contract with external capacity
+UNKNOWN. Its account pins, durable negative feedback and causal recovery rules
+still apply. Neither mode infers entitlement from model effort, local RAM,
+subscription name or an old successful turn. Keep account fingerprints and
+receipts private; publish only redacted results. Unknown local resources and
+unbounded inference owners remain refusals in either mode.
 
 ## Measured profiles in the authorized idle window
 

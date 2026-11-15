@@ -24,6 +24,20 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: ordinary provider-feedback execution (2026-11-15)
+
+Support bounded ordinary Runner metadata recovery and provider waiting without
+new attempts, released-grant reuse or fixed LAF slots. Persist exact negative
+facts through ACK/events/history and charge a separate current recovery probe
+without changing original receipt identity. Validate response correlation and
+actual send-time cancellation, deadlines, account age and notification epoch.
+Retain UNKNOWN on lost ACK, failed delivery or unresolved evidence. Persist
++host capture uncertainty without inventing native IDs, and exclude pre-intent
++turn notifications from the new execution. Schema3
+protocol13 fences older participants; finite quotas retain their enforcement.
+No live policy, ledger, service, model, authentication or publication is changed.
+
+
 ## Unreleased: preserve terminal-history provider restrictions (2026-11-15)
 
 Persist exact terminal and matching pre-ACK error negatives through refresh,
@@ -842,3 +856,5 @@ valid zero-population event proves cleanup. Denied metadata, partial files and
 changed scope identity remain unknown; exact model/job/controller grants stay
 held. Prospective worker cleanup also refuses unreadable scope state. Old
 unpublished resource participants are fenced by the stricter generation.
+
+Modified 2026-11-15: serialize ordinary capture-marker materialization with local acknowledgements, clean exact acknowledged markers idempotently, and retain permanent overflow uncertainty through checkpoint-only recovery.

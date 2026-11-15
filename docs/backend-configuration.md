@@ -64,10 +64,11 @@ preserves old history. Missing reservations do not verify past provider turns.
 
 The optional nested resource-admission schema3 adds the explicit
 [provider-feedback contract](provider-feedback-admission.md) for the Codex
-pipeline. It does not change the separate schema2 pipeline-policy format or
-enable ordinary/standalone online dispatch. Metadata/status paths remain
-separate from executing a queued ordinary task. Schema1/2 finite-quota behavior
-is retained; no protected policy selection attests external capacity.
+pipeline and bounded ordinary Runner. It does not change the separate schema2
+pipeline-policy format. Ordinary execution still requires a verified charged
+controller and native client scopes; metadata/status configuration alone enables
+no task execution. Schema1/2 finite-quota behavior is retained; no protected
+policy selection attests external capacity.
 
 For daemon metadata, use the [bootstrap commands](bootstrap.md) and review the
 printed daemon-command. The ordinary metadata mode requires neither an enabled

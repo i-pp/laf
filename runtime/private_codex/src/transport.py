@@ -17,7 +17,10 @@ class ProtocolError(RuntimeError):
 
 
 class RpcError(RuntimeError):
-    pass
+    def __init__(self,message,*,code=None,data=None,method=None,correlated=False):
+        super().__init__(message);self.code=code;self.method=method;self.correlated=correlated is True
+        from resource_admission import provider_restriction
+        self.provider_restriction=provider_restriction(code,data)
 
 
 def redact(value):
@@ -49,6 +52,10 @@ class Process:
 
     def __init__(self, argv, *, cwd, env, log=None, raw_output=False, on_observed=None, context=None, resources=None):
         self.log = log
+        self.on_provider_message = None
+        self.before_turn_send = None
+        self.provider_epoch = 0
+        self.provider_feedback_failed = False
         self.resources = resources
         self.closing = False
         if resources:
@@ -112,6 +119,7 @@ class Process:
         if self.resources and not self.closing:
             self.resources.check()
         self.record("send", message)
+        if message.get('method')=='turn/start' and getattr(self,'before_turn_send',None) is not None:self.before_turn_send()
         self.proc.stdin.write((json.dumps(message, ensure_ascii=False) + "\n").encode())
         self.proc.stdin.flush()
 
@@ -130,6 +138,18 @@ class Process:
                 if not isinstance(value, dict):
                     raise ProtocolError("JSONL frame must be an object")
                 self.record("receive", value)
+                if 'method' in value:
+                    from codex_app_protocol import _server_message,ProtocolError as NativeProtocolError
+                    try:value=_server_message(value)
+                    except NativeProtocolError as error:raise ProtocolError('Malformed native server message') from error
+                    if 'id' not in value:
+                        if value['method'].startswith('account/'):self.provider_epoch=getattr(self,'provider_epoch',0)+1
+                        if getattr(self,'on_provider_message',None) is not None:
+                            try:
+                                if self.on_provider_message(value) is False:continue
+                            except Exception as error:
+                                self.provider_feedback_failed=True
+                                raise ProtocolError('Provider feedback persistence is unknown') from error
                 return value
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -175,9 +195,16 @@ class Process:
             message = self.next_frame(min(0.2, max(0, deadline - time.monotonic())))
             if message is None:
                 continue
-            if message.get("id") == request_id and ("result" in message or "error" in message):
+            if 'method' not in message:
+                if (set(message)-{'id','result','error','jsonrpc'} or type(message.get('id')) is not type(request_id)
+                        or message['id']!=request_id or message.get('jsonrpc','2.0')!='2.0'
+                        or ('result' in message)==('error' in message)):
+                    raise ProtocolError('Uncorrelated or malformed RPC response')
                 if "error" in message:
-                    raise RpcError(json.dumps(redact(message["error"]), ensure_ascii=False))
+                    error=message['error']
+                    if not isinstance(error,dict) or set(error)-{'code','message','data'} or type(error.get('code')) is not int or not isinstance(error.get('message'),str):
+                        raise ProtocolError('Malformed correlated RPC error')
+                    raise RpcError(json.dumps(redact(error),ensure_ascii=False),code=error['code'],data=error.get('data'),method=method,correlated=True)
                 return message["result"]
             self.notifications.append(message)
         raise TimeoutError(f"RPC timeout: {method}")

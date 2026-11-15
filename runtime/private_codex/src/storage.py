@@ -234,7 +234,29 @@ class Store:
         result["completion_verified"] = (result["state"] == "COMPLETED" and result["codex_status"] == "SUCCEEDED"
                                          and result["verification_status"] == "PASSED"
                                          and result["human_status"] in ["NOT_REQUIRED", "APPROVED"])
+        if result['state']=='RUNNING' and result['codex_status']=='WAITING_PROVIDER' and result['active_execution_id']:
+            from provider_control import WAIT_REASONS
+            execution=self.execution(result['active_execution_id'])
+            if execution['phase']=='WAITING_PROVIDER' and not execution['dispatched'] and execution['codex_status'] in WAIT_REASONS:
+                result['scheduler_wait_reason']=execution['codex_status']
         return result
+
+    def provider_wait(self, task_id, execution_id, reason):
+        """Preserve one claimed pre-turn execution and its charged resources."""
+        from provider_control import WAIT_REASONS
+        if reason is not None and reason not in WAIT_REASONS:raise ValueError('Invalid provider wait code')
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            task=self.get(task_id);execution=self.execution(execution_id)
+            if (task['state']!='RUNNING' or task['active_execution_id']!=execution_id
+                    or execution['task_id']!=task_id or execution['dispatched'] or execution['turn_id']
+                    or execution['launch_pending'] or execution['phase'] not in ('RUNNING','WAITING_PROVIDER')):
+                raise ValueError('Provider waiting requires the exact live pre-turn execution')
+            now=time.time()
+            self.db.execute('UPDATE executions SET phase=?,codex_status=?,updated=? WHERE id=?',
+                ('WAITING_PROVIDER' if reason is not None else 'RUNNING',reason or 'NOT_STARTED',now,execution_id))
+            self.db.execute('UPDATE tasks SET codex_status=?,updated=? WHERE id=?',
+                ('WAITING_PROVIDER' if reason is not None else 'NOT_STARTED',now,task_id))
 
     def execution(self, execution_id):
         row = self.db.execute("SELECT * FROM executions WHERE id=?", (execution_id,)).fetchone()
@@ -374,10 +396,10 @@ class Store:
             for row in rows:
                 old = self.get(row["id"])["state"]
                 self.db.execute("UPDATE tasks SET state='UNKNOWN',updated=? WHERE id=?", (time.time(), row["id"]))
-                self.db.execute("UPDATE tasks SET codex_status='UNKNOWN' WHERE id=? AND codex_status IN ('DISPATCHING','RUNNING')", (row["id"],))
+                self.db.execute("UPDATE tasks SET codex_status='UNKNOWN' WHERE id=? AND codex_status IN ('DISPATCHING','RUNNING','WAITING_PROVIDER')", (row["id"],))
                 self._transition_log(row["id"], old, "UNKNOWN", "owner exited without durable task completion", row["active_execution_id"])
                 if row["active_execution_id"]:
-                    self.db.execute("UPDATE executions SET phase='UNKNOWN',codex_status=CASE WHEN codex_status IN ('DISPATCHING','RUNNING') THEN 'UNKNOWN' ELSE codex_status END,updated=? WHERE id=?",
+                    self.db.execute("UPDATE executions SET phase='UNKNOWN',codex_status=CASE WHEN phase='WAITING_PROVIDER' OR codex_status IN ('DISPATCHING','RUNNING','WAITING_PROVIDER') THEN 'UNKNOWN' ELSE codex_status END,updated=? WHERE id=?",
                                     (time.time(), row["active_execution_id"]))
         return [row["id"] for row in rows]
 

@@ -22,6 +22,7 @@ from resources import policy, scope_released, ResourceExceeded
 from resource_admission_core import scope_stat, AdmissionWait
 from storage import _backup, runtime_lock
 from transport import proc_identity
+from provider_control import WAIT_REASONS as PROVIDER_WAIT_REASONS
 
 CONFIG = Path(__file__).resolve().parents[1] / "scheduler-config.json"
 MEMINFO = Path('/proc/meminfo')
@@ -259,17 +260,44 @@ def verify_resource_account(settings, account):
     provider_identity(quota,account_fingerprint(account))
 
 
-def authorize_task_provider(root, task_id, settings, token, account, *, observed_at=None):
+def authorize_task_provider(root, task_id, settings, token, account, *, observed_at=None, feedback_rpc=None,feedback_client=None,feedback_store=None):
     if not resource_only(settings): return
     require_ordinary_provider(settings)
     from resource_admission import Ledger, account_fingerprint, linux_observation
+    import provider_control
+    if provider_control.enabled(settings):
+        from ordinary_provider_feedback import flush
+        if feedback_rpc is None or feedback_client is None or feedback_store is None or not flush(root,feedback_store,settings):raise AdmissionWait('resource_provider_feedback_unknown')
+        provider_control.refresh(settings,root,task_id,token,feedback_rpc)
+        observed_at=time.monotonic();epoch=feedback_client.provider_epoch
+        try:
+            account=feedback_rpc('account/read',{'refreshToken':False})
+            if feedback_client.provider_epoch!=epoch:raise AdmissionWait('resource_provider_account_unknown')
+        except Exception as error:
+            provider_control.record(settings,root,task_id,token,None,provider_control.observation('unknown'),kind='unknown')
+            raise AdmissionWait('resource_provider_account_unknown') from error
     verify_resource_account(settings, account)
     with closing(Ledger(settings['resource_admission'])) as ledger:
         ledger.recheck(root, task_id, token, linux_observation)
         ledger.authorize_provider(root, task_id, token, 'chatgpt', account_fingerprint(account))
     if observed_at is not None and not 0 <= time.monotonic() - observed_at <= settings['resource_admission']['max_age_seconds']:
-        from resource_admission import AdmissionWait
         raise AdmissionWait('resource_provider_account_unknown')
+    if provider_control.enabled(settings):return {'at':observed_at,'epoch':epoch,'account':account_fingerprint(account)}
+
+
+def before_provider_wire(root,store,settings,token,task_id,client,receipt):
+    from ordinary_provider_feedback import flush
+    from resource_admission import Ledger,linux_observation
+    def current():
+        if (not isinstance(receipt,dict) or client.provider_epoch!=receipt.get('epoch')
+                or not 0<=time.monotonic()-receipt.get('at',float('-inf'))<=settings['resource_admission']['max_age_seconds']):
+            raise AdmissionWait('resource_provider_account_unknown')
+    current()
+    if not flush(root,store,settings):raise AdmissionWait('resource_provider_feedback_unknown')
+    with closing(Ledger(settings['resource_admission'])) as ledger:
+        ledger.recheck(root,task_id,token,linux_observation)
+        ledger.authorize_provider(root,task_id,token,'chatgpt',receipt['account'])
+    current()
 
 
 def require_charged_controller(root, settings):
@@ -362,6 +390,8 @@ def finish_task_resources(root, store, task_id, settings, *, token=None,
     if 'resource_admission' not in settings: return False
     from resource_admission import Ledger
     from recovery import resource_facts
+    from ordinary_provider_feedback import flush
+    if not flush(root,store,settings):return False
     with closing(Ledger(settings['resource_admission'])) as ledger:
         rows = [r for r in ledger.held() if r['runtime'] == str(Path(root).absolute()) and r['task'] == task_id]
         if not rows: return False
@@ -379,6 +409,10 @@ def finish_task_resources(root, store, task_id, settings, *, token=None,
             provider_clear = (not execution['dispatched'] or
                               isinstance(terminal, dict) and terminal.get('status') in ('completed', 'failed', 'interrupted'))
             if not preclaim: local_clear = local_clear and worker_released is True
+            import provider_control
+            if provider_control.enabled(settings):
+                from ordinary_provider_feedback import provider_closed
+                provider_clear=provider_clear and provider_closed(store,execution,row['token'])
         return ledger.release(root, task_id, row['token'], local_released=local_clear,
                               provider_released=provider_clear)
 
@@ -387,6 +421,8 @@ def reconcile_task_resources(runner, task_id, reconciliation_id, *, apply=False)
     """Paused same-UID operator path: release a grant, never replay or change task state."""
     settings = runner.scheduler_settings
     if 'resource_admission' not in settings: raise ValueError('Resource admission is not enabled')
+    from ordinary_provider_feedback import flush
+    if not flush(runner.root,runner.store,settings):raise AdmissionWait('resource_provider_feedback_unknown')
     task = runner.store.get(task_id)
     if task['state'] in ('QUEUED', 'RUNNING', 'VERIFYING'): raise ValueError('Task remains active')
     row = runner.store.db.execute('SELECT * FROM reconciliations WHERE id=? AND task_id=?',
@@ -394,6 +430,8 @@ def reconcile_task_resources(runner, task_id, reconciliation_id, *, apply=False)
     if not row or row['execution_id'] != task['active_execution_id'] or not 0 <= time.time() - row['created'] <= 60:
         raise ValueError('Fresh reconciliation for the exact execution required')
     facts = json.loads(row['facts']); session = facts.get('session', {})
+    import provider_control
+    if provider_control.enabled(settings) and (session.get('provider_account_boot')!=Path('/proc/sys/kernel/random/boot_id').read_text().strip() or not 0<=time.monotonic()-session.get('provider_account_observed_at',float('-inf'))<=settings['resource_admission']['max_age_seconds']):raise ValueError('Fresh current provider identity receipt required')
     execution = runner.store.execution(task['active_execution_id']) if task['active_execution_id'] else None
     from recovery import resource_facts
     if (execution is None or resource_facts(execution, task)['released'] is not True

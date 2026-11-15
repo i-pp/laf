@@ -27,6 +27,10 @@ from resource_admission import (Ledger,AdmissionWait,account_fingerprint,provide
     provider_identity,provider_snapshot,provider_restriction)
 
 
+WAIT_REASONS=frozenset(('resource_provider_backoff','resource_provider_feedback_unknown',
+    'resource_provider_account_unknown','resource_provider_quota','resource_provider_quota_unknown'))
+
+
 def enabled(settings):
     return provider_feedback(settings.get('resource_admission',{}).get('providers',{}).get('chatgpt'))
 
@@ -54,10 +58,10 @@ def terminal_error_complete(value):
     return code is None or type(code) is int and 0<=code<=65535
 
 
-def record(settings,root,task,token,account,value,*,kind,revision=None,fresh=False,observed_at=None,delivery_receipt=None):
+def record(settings,root,task,token,account,value,*,kind,revision=None,fresh=False,observed_at=None,delivery_receipt=None,authority=None):
     if not enabled(settings):return
     with closing(Ledger(settings['resource_admission'])) as ledger:
-        return ledger.observe_provider(root,task,token,'chatgpt',account,value,kind=kind,revision=revision,fresh=fresh,observed_at=observed_at,delivery_receipt=delivery_receipt)
+        return ledger.observe_provider(root,task,token,'chatgpt',account,value,kind=kind,revision=revision,fresh=fresh,observed_at=observed_at,delivery_receipt=delivery_receipt,authority=authority)
 
 
 def notification(settings,root,task,token,message):

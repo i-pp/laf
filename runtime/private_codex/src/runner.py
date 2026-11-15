@@ -1,4 +1,4 @@
-"""Single active task runner using dedicated Codex App Server stdio processes.
+"""Owned task runner using dedicated Codex App Server stdio processes.
 
 Modified 2026-11-13: pass the daemon's pinned effective policy to ordinary leases.
 """
@@ -38,6 +38,10 @@ RESULT_INSTRUCTIONS = ("Return the final result using the requested JSON schema.
                        "Use outcome=failure for a denied, failed, unavailable or unperformed operation, "
                        "even when the user asked you to report that failure. Never claim execution without evidence.")
 
+
+
+class PreTurnCancelled(Exception):
+    pass
 
 
 class Runner:
@@ -221,6 +225,13 @@ class Runner:
         failures = []
         final_messages = []
         usage = None
+        import provider_control
+        feedback=provider_control.enabled(getattr(self,'scheduler_settings',{}))
+        feedback_gate=None
+        if feedback:
+            from ordinary_provider_feedback import OrdinaryFeedback
+            feedback_gate=OrdinaryFeedback(self.root,self.store,self.scheduler_settings,task_id,self.resource_token)
+        authorization=None
         historical_turns = set()
         if task["resume_of"]:
             source_thread = self.store.get(task["resume_of"])["session_id"]
@@ -285,6 +296,40 @@ class Runner:
                     raise ProtocolError("Unknown terminal turn status")
                 terminal = candidate
 
+        def authorize_feedback():
+            nonlocal authorization
+            # A known provider restriction is owned pre-turn waiting, not a new
+            # execution attempt. Never enter this loop after the wire checkpoint.
+            while True:
+                if cancelled():raise PreTurnCancelled()
+                remaining()
+                try:
+                    authorization=scheduler.authorize_task_provider(self.root,task_id,self.scheduler_settings,self.resource_token,None,
+                        feedback_rpc=lambda method,params:proc.call(method,params,remaining()),feedback_client=proc,feedback_store=self.store)
+                    if cancelled():raise PreTurnCancelled()
+                    remaining()
+                    self.store.provider_wait(task_id,execution_id,None)
+                    return
+                except scheduler.AdmissionWait as error:
+                    if error.code not in provider_control.WAIT_REASONS or dispatched:raise
+                    self.store.provider_wait(task_id,execution_id,error.code)
+                retry_at=time.monotonic()+self.scheduler_settings['resource_admission']['providers']['chatgpt']['backoff_seconds']
+                while time.monotonic()<retry_at:
+                    if cancelled():raise PreTurnCancelled()
+                    budget=min(.2,remaining(),max(.001,retry_at-time.monotonic()))
+                    control=getattr(proc,'resources',None)
+                    if control is not None:control.check()
+                    message=proc.next_message(budget)
+                    if message:handle(message)
+                    proc.observe_children()
+
+        def before_wire():
+            if cancelled():raise PreTurnCancelled()
+            remaining()
+            scheduler.before_provider_wire(self.root,self.store,self.scheduler_settings,self.resource_token,task_id,proc,authorization)
+            if cancelled():raise PreTurnCancelled()
+            remaining()
+
         with log_path.open("x", encoding="utf-8") as stream:
             log = resources.BudgetLog(stream, self.resource_limits["log_bytes"]) if self.resource_limits else stream
             self.store.update(task_id, log_path=str(log_path))
@@ -306,15 +351,20 @@ class Runner:
                 proc = Process(argv, cwd=workroot / "workspace", env=env, log=log,
                                on_observed=lambda ids: self.observe(execution_id, ids), context=log_context,
                                resources=self.resource_control(task, execution_id))
+                if feedback:
+                    proc.on_provider_message=feedback_gate.capture
+                    proc.before_turn_send=before_wire
                 proc.call("initialize", {"clientInfo": {"name": "agent_orchestrator_phase1", "version": "0.1.0"},
                                          "capabilities": {"experimentalApi": False}}, remaining())
                 proc.send({"method": "initialized", "params": {}})
-                account = proc.call("account/read", {"refreshToken": False}, remaining())
-                if account.get("account", {}).get("type") != "chatgpt":
-                    raise RuntimeError("ChatGPT subscription authentication required; no API fallback")
                 import scheduler
-                scheduler.authorize_task_provider(self.root, task_id, self.scheduler_settings,
-                                                  self.resource_token, account)
+                if feedback:authorize_feedback()
+                else:
+                    account = proc.call("account/read", {"refreshToken": False}, remaining())
+                    if account.get("account", {}).get("type") != "chatgpt":
+                        raise RuntimeError("ChatGPT subscription authentication required; no API fallback")
+                    scheduler.authorize_task_provider(self.root, task_id, self.scheduler_settings,
+                                                      self.resource_token, account)
                 params = {"cwd": str(workroot / "workspace"), "sandbox": task["access"], "approvalPolicy": "never",
                           "developerInstructions": RESULT_INSTRUCTIONS + (
                               " You are an independent Reviewer. Inspect the supplied frozen snapshot read-only. "
@@ -332,6 +382,9 @@ class Runner:
                 if scheduler.resource_only(self.scheduler_settings) and result.get('modelProvider') != 'openai':
                     raise resources.ResourceExceeded('resource_provider_workload_unknown')
                 thread_id = result["thread"]["id"]
+                if feedback:
+                    from ordinary_provider_feedback import opaque
+                    if not opaque(thread_id):raise ProtocolError("Invalid owned native thread identity")
                 self.store.update(task_id, session_id=thread_id)
                 self.store.execution_update(execution_id, thread_id=thread_id)
                 log_context["thread_id"] = thread_id
@@ -341,7 +394,11 @@ class Runner:
                 if cancelled():
                     stop_reason = "CANCELLED"
                 else:
-                    if scheduler.resource_only(self.scheduler_settings):
+                    if feedback:
+                        authorize_feedback()
+                        if cancelled():raise PreTurnCancelled()
+                        remaining()
+                    elif scheduler.resource_only(self.scheduler_settings):
                         # Context creation/resume may be slow or observe an
                         # account change. Re-read immediately before this turn.
                         notices_before = len(getattr(proc, 'notifications', ()))
@@ -366,8 +423,15 @@ class Runner:
                                                           "networkAccess": False, "excludeSlashTmp": True, "excludeTmpdirEnvVar": True}
                                                          if task["access"] == "workspace-write" else {"type": "readOnly"}))}, remaining())
                     turn_id = result["turn"]["id"]
-                    self.store.update(task_id, turn_id=turn_id)
-                    self.store.execution_update(execution_id, turn_id=turn_id)
+                    if feedback:
+                        feedback_gate.bind(result['turn'])
+                        if result['turn'].get('status') in ('completed','failed','interrupted'):
+                            for item in result['turn'].get('items',[]):
+                                if isinstance(item,dict) and item.get('type')=='agentMessage' and item.get('phase')!='commentary':final_messages.append(item.get('text',''))
+                            terminal=result['turn']
+                    else:
+                        self.store.update(task_id, turn_id=turn_id)
+                        self.store.execution_update(execution_id, turn_id=turn_id)
                     self.store.execution_update(execution_id, codex_status="RUNNING")
                     self.store.update(task_id, codex_status="RUNNING")
                     next_poll = time.monotonic()
@@ -386,17 +450,31 @@ class Runner:
                             proc.record("monitor", {"threadId": thread_id, "status": status["thread"]["status"]})
                             proc.observe_children()
                             next_poll = time.monotonic() + 1
+            except PreTurnCancelled:
+                stop_reason = "CANCELLED"
             except (TimeoutError, subprocess.TimeoutExpired):
                 stop_reason = "TIMED_OUT"
             except resources.ResourceExceeded as exc:
                 failures.append(str(exc))
                 stop_reason = "FAILED"
             except RpcError as exc:
+                if feedback:
+                    if dispatched and turn_id is None and exc.method=='turn/start' and exc.correlated:
+                        try:feedback_gate.rejected(exc)
+                        except Exception:
+                            proc.provider_feedback_failed=True;stop_reason='UNKNOWN'
+                    else:provider_control.rejection(self.scheduler_settings,self.root,task_id,self.resource_token,exc)
+                    if dispatched and turn_id is None and exc.method=='turn/start' and exc.correlated:
+                        # Preserve attempted-wire evidence and add the exact
+                        # correlated rejection proof; never retry this turn.
+                        terminal={'status':'failed','error':{'kind':'correlated_rpc_rejection','method':'turn/start','code':exc.code}}
+                    elif dispatched and turn_id is None:
+                        stop_reason='UNKNOWN'
                 failures.append(str(exc))
                 # An explicit server rejection of turn/start did not accept the turn.
-                if turn_id is None:
+                if turn_id is None and not feedback:
                     dispatched = False
-                stop_reason = "UNKNOWN" if dispatched and turn_id is not None else "FAILED"
+                if stop_reason is None:stop_reason = "UNKNOWN" if dispatched and turn_id is not None else "FAILED"
             except (OSError, EOFError, ProtocolError, RuntimeError, KeyError, TypeError, AttributeError,
                     ValueError, subprocess.SubprocessError) as exc:
                 failures.append(f"{type(exc).__name__}: {exc}")
@@ -421,6 +499,10 @@ class Runner:
                             failures.append("Unsubscribe acknowledgement unavailable")
                     cleanup = proc.close()
 
+            if feedback and dispatched and terminal is None:
+                stop_reason='UNKNOWN';failures.append('Turn outcome remains unconfirmed after dispatch')
+            if feedback and getattr(proc,'provider_feedback_failed',False):
+                stop_reason='UNKNOWN';failures.append('Provider feedback persistence is unknown')
             resource_result = cleanup.get("resources", {}) if cleanup else {}
             if resource_result.get("exceeded") or (cleanup and cleanup.get("log_limit_exceeded")):
                 stop_reason = "FAILED"
@@ -443,6 +525,9 @@ class Runner:
                         failures.append("Agent reported an unsuccessful operation")
                 except (ValueError, TypeError):
                     failures.append("Final result did not satisfy the required JSON schema")
+            if feedback:feedback_gate.retry_capture_failures()
+            if feedback and (getattr(proc,'provider_feedback_failed',False) or not feedback_gate.flush() or dispatched and terminal is None):
+                stop_reason='UNKNOWN'
             if cleanup and cleanup["survivors"]:
                 state = "UNKNOWN"
                 failures.append("Live descendant survived cleanup")
@@ -467,8 +552,9 @@ class Runner:
             codex_status = ("SUCCEEDED" if terminal and terminal["status"] == "completed" and cleanup
                             and cleanup["exit_code"] == 0 and not cleanup["survivors"]
                             else state)
+            execution_status=('PROVIDER_CAPTURE_UNKNOWN:'+json.dumps(list(feedback_gate.capture_faults))) if feedback and feedback_gate.capture_faults else codex_status
             self.store.execution_update(execution_id, phase="VERIFYING" if state == "COMPLETED" else state,
-                                        terminal=json.dumps(terminal), codex_status=codex_status, agent_outcome=outcome,
+                                        terminal=json.dumps(terminal), codex_status=execution_status, agent_outcome=outcome,
                                         cleanup=json.dumps(cleanup), finished=None if state == "COMPLETED" else time.time())
             self.store.update(task_id, result=result_text, error="; ".join(failures) or None, codex_status=codex_status,
                               usage=json.dumps(usage) if usage else None,

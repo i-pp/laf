@@ -243,11 +243,11 @@ def account_fingerprint(result):
 
 def generation(value):
     validated = policy(value)
-    # Protocol11 pins terminal and pre-ACK negative delivery before release; schema2 keeps protocol5.
+    # Protocol13 pins host capture uncertainty and ordinary delivery authority; schema2 keeps protocol5.
     # Protocol 5 pins descriptor-bound release and strict positive absence proofs.
     # Counterless DRM/KFD descriptors cannot prove physical release. Earlier
     # unpublished participants must not join this stricter resource generation.
-    encoded = {'protocol': 11 if validated['schema']==3 else 5, 'policy': validated} if resource_only(validated) else validated
+    encoded = {'protocol': 13 if validated['schema']==3 else 5, 'policy': validated} if resource_only(validated) else validated
     return hashlib.sha256(json.dumps(encoded, sort_keys=True,
                                      separators=(',', ':')).encode()).hexdigest()
 
@@ -321,8 +321,9 @@ def provider_restriction(code=None,data=None):
 
 
 def require_ordinary_provider(settings):
-    """Feedback requires pipeline queue/operation lineage; ordinary work waits."""
-    if provider_feedback(settings.get('resource_admission',{}).get('providers',{}).get('chatgpt')):
+    """Ordinary feedback requires the explicit resource-only schema3 contract."""
+    selected=settings.get('resource_admission',{})
+    if provider_feedback(selected.get('providers',{}).get('chatgpt')) and not (resource_only(selected) and selected.get('schema')==3):
         raise AdmissionWait('resource_provider_feedback_unsupported')
 
 
@@ -333,7 +334,7 @@ def ordinary_request(settings, *, worker):
     if worker: limits.append(settings['worker'])
     controlled = resource_only(settings.get('resource_admission'))
     return {'kind': 'local_control' if controlled else 'cloud_api',
-            'provider': 'chatgpt',
+            'provider': None if controlled and provider_feedback(settings['resource_admission']['providers'].get('chatgpt')) else 'chatgpt',
             'resources': {'cpu_millicores': sum(v['cpu_percent'] * 10 for v in limits),
                           'ram_bytes': sum(v['memory_bytes'] for v in limits),
                           'gpu_milliunits': 0, 'vram_bytes': 0}}
@@ -751,7 +752,7 @@ class Ledger:
         if not provider_feedback(quota):return 0
         return self._feedback_state(provider,quota['account_sha256'])['revision']
 
-    def observe_provider(self,runtime,task,token,provider,account,observation,*,kind,revision=None,fresh=False,observed_at=None,delivery_receipt=None):
+    def observe_provider(self,runtime,task,token,provider,account,observation,*,kind,revision=None,fresh=False,observed_at=None,delivery_receipt=None,authority=None):
         """Charged trusted host only. Feedback never releases a grant or retries."""
         if kind not in ('snapshot','notification','rejection','unknown'):raise ValueError('Invalid provider observation kind')
         if not isinstance(observation,dict) or set(observation)!={'decision','usage_account_sha256','denied_scopes','clear_scopes'} or observation['decision'] not in ('allow','block','unknown','unavailable'):
@@ -765,22 +766,32 @@ class Ledger:
         if usage is not None and (not isinstance(usage,str) or not re.fullmatch('[a-f0-9]{64}',usage)):raise ValueError('Invalid usage account pin')
         receipt_id=receipt_evidence=None
         if delivery_receipt is not None:
-            if (kind!='rejection' or observation['decision']!='block' or not isinstance(delivery_receipt,dict)
-                    or set(delivery_receipt)!={'binding','thread','turn','generation','event'}
-                    or delivery_receipt['event'] not in ('terminal','preack_error')
+            event=delivery_receipt.get('event') if isinstance(delivery_receipt,dict) else None
+            fields={'binding','thread','turn','generation','event'}|({'event_id'} if event in ('live_error','capture_unknown') else set())
+            allowed=(kind=='unknown' and observation['decision']=='unknown') if event=='capture_unknown' else (kind=='rejection' and observation['decision'] in (('block','unknown') if event=='rpc_rejection' else ('block',)))
+            thread=delivery_receipt.get('thread') if isinstance(delivery_receipt,dict) else None
+            turn=delivery_receipt.get('turn') if isinstance(delivery_receipt,dict) else None
+            native=(thread is None and turn is None) if event=='capture_unknown' else (isinstance(thread,str) and 0<len(thread)<=512 and (event=='rpc_rejection' and turn is None or isinstance(turn,str) and 0<len(turn)<=512))
+            if (not allowed or not isinstance(delivery_receipt,dict) or set(delivery_receipt)!=fields
+                    or event not in ('terminal','preack_error','live_error','rpc_rejection','capture_unknown')
                     or delivery_receipt['generation']!=self.generation
                     or not isinstance(delivery_receipt['binding'],str) or not re.fullmatch('[a-f0-9]{64}',delivery_receipt['binding'])
-                    or any(not isinstance(delivery_receipt[k],str) or not 0<len(delivery_receipt[k])<=512 for k in ('thread','turn'))):
-                raise ValueError('Exact bounded terminal restriction receipt required')
+                    or not native):
+                raise ValueError('Exact bounded turn or host capture receipt required')
+            if event in ('live_error','capture_unknown'):_identifier(delivery_receipt['event_id'])
             _identifier(task);_identifier(token)
             quota=self.policy['providers'].get(provider)
             if not provider_feedback(quota):raise ValueError('Terminal receipts require provider feedback')
-            receipt_evidence={'kind':'provider_terminal_restriction' if delivery_receipt['event']=='terminal' else 'provider_preack_restriction','runtime':str(Path(runtime).absolute()),
+            receipt_evidence={'kind':{'terminal':'provider_terminal_restriction','preack_error':'provider_preack_restriction','live_error':'provider_live_restriction','rpc_rejection':'provider_rpc_restriction','capture_unknown':'provider_capture_unknown'}[event],'runtime':str(Path(runtime).absolute()),
                 'task':task,'token':token,'generation':self.generation,'binding':delivery_receipt['binding'],
                 'provider':provider,'account':quota['account_sha256'],
-                'thread_sha256':hashlib.sha256(delivery_receipt['thread'].encode()).hexdigest(),
-                'turn_sha256':hashlib.sha256(delivery_receipt['turn'].encode()).hexdigest()}
+                'thread_sha256':hashlib.sha256(delivery_receipt['thread'].encode()).hexdigest() if delivery_receipt['thread'] is not None else None,
+                'turn_sha256':hashlib.sha256(delivery_receipt['turn'].encode()).hexdigest() if delivery_receipt['turn'] is not None else None}
+            if event in ('live_error','capture_unknown'):receipt_evidence['event_id']=delivery_receipt['event_id']
             receipt_id=str(uuid.uuid5(uuid.NAMESPACE_URL,json.dumps(receipt_evidence,sort_keys=True,separators=(',',':'))))
+        if authority is not None and (receipt_id is None or not isinstance(authority,dict) or set(authority)!={'task','token'}):
+            raise ValueError('Only receipted negative facts accept charged probe authority')
+        authority_evidence=None
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
             if receipt_id is not None:
@@ -789,7 +800,24 @@ class Ledger:
                     if old['token']!=token or json.loads(old['evidence'])!=receipt_evidence:
                         raise AdmissionWait('resource_provider_feedback_unknown')
                     return False  # Immutable fact already delivered, even after release/recovery.
-            self.join(runtime,task,token)
+            if authority is not None:
+                permit=self.join(runtime,authority['task'],authority['token'])
+                demand=json.loads(permit['demand']);scopes=json.loads(permit['scopes'])
+                owner=self.db.execute('SELECT owner FROM reservation_owners WHERE token=?',(authority['token'],)).fetchone()
+                actor=self._owner(owner['owner'],runtime) if owner else None
+                if (not actor or actor['role']!='standalone' or json.loads(actor['identity'])!=owner_identity()
+                        or demand['kind']!='reconciliation' or demand['provider'] is not None or not scopes):
+                    raise AdmissionWait('resource_controller_required')
+                for descriptor in scopes:_scope_credit(descriptor)
+                if event=='capture_unknown':
+                    subject=self.db.execute('SELECT 1 FROM reservations WHERE runtime=? AND task=? AND token=? AND generation=?',
+                        (str(Path(runtime).absolute()),task,token,self.generation)).fetchone()
+                    if not subject:raise AdmissionWait('resource_reservation_missing')
+                else:self.join(runtime,task,token,require_owner=False)
+                authority_evidence={'kind':'provider_feedback_authority','receipt':receipt_id,
+                    'subject_task':task,'subject_token':token,'authority_task':authority['task'],
+                    'authority_token':authority['token'],'generation':self.generation}
+            else:self.join(runtime,task,token)
             quota=self.policy['providers'].get(provider)
             if not provider_feedback(quota):return
             expected=quota['account_sha256'];state=self._feedback_state(provider,expected)
@@ -832,6 +860,9 @@ class Ledger:
             if receipt_id is not None:
                 self.db.execute('INSERT INTO resource_reconciliations VALUES(?,?,?,?)',
                     (receipt_id,token,json.dumps(receipt_evidence,sort_keys=True),now))
+                if authority_evidence is not None:
+                    self.db.execute('INSERT INTO resource_reconciliations VALUES(?,?,?,?)',
+                        (str(uuid.uuid4()),authority['token'],json.dumps(authority_evidence,sort_keys=True),now))
         return True
 
     def authorize_provider(self, runtime, task, token, provider, account_sha256):

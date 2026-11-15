@@ -227,10 +227,9 @@ an operator can select a complete private scheduler document whose nested
 resource_admission has schema2 or schema3 and admission_mode resources. It must
 omit maximum_sessions and pass the selected resource/controller/provider
 validators. Schema2 retains the finite-quota contract. Schema3 selects the
-explicit [pipeline provider-feedback contract](provider-feedback-admission.md)
-without inventing a provider concurrency limit; ordinary/standalone online
-dispatch is unsupported in that mode. No top-level schema field or inferred
-resource values are added.
+explicit [provider-feedback contract](provider-feedback-admission.md) for the
+pipeline and bounded ordinary Runner without inventing a provider concurrency
+limit. No top-level schema field or inferred resource values are added.
 
     RESOURCE_POLICY="/absolute/selected/private/scheduler-policy.json"
     RESOURCE_SHA256="replace-with-reviewed-raw-file-sha256"
@@ -247,9 +246,10 @@ The original packaged scheduler-config.json and executable source stay intact.
 Later source-policy edits/deletion do not change the selected snapshot.
 
 Selection alone enables none of the seven backend groups and performs no
-native/account probe. Supported schema2 ordinary execution needs no Codex
-pipeline profile; schema3 does not enable ordinary execution. Codex remains a
-separate binding and requires a schema2 pipeline policy plus its finite local
+native/account probe. Ordinary execution in schema2 or schema3 needs its
+verified controller/worker/client ceilings and explicit backend prerequisites;
+it needs no pipeline profile. The Codex pipeline remains a separate binding and
+requires a schema2 pipeline policy plus its finite local
 pipeline/controller profile when activated. That pipeline-policy version is
 distinct from the nested resource-admission schema. Daemon foreground, workers, limit checks, HostGateway
 and standalone all select through the same copied private_codex project;

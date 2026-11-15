@@ -25,7 +25,7 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 # External provider acceptance and local resource admission
 
 Added 2026-11-15. Resource admission schema3 introduces an explicit account-bound
-provider feedback contract for Codex pipeline only. It does not manufacture concurrency entitlement from
+provider feedback contract for Codex pipeline and bounded ordinary Runner. It does not manufacture concurrency entitlement from
 plan names, usage percentages, reset times, a successful canary or LAF slot
 settings. Existing schema1/2 finite provider quotas keep their enforcement.
 
@@ -112,19 +112,36 @@ final SQLite transaction after identity/state/kernel reads; a cached freshness
 boolean cannot authorize a delayed recovery commit. Nested bucket identities
 must be valid and agree with their map keys before any recovery receipt exists.
 
-Ordinary tasks and standalone online controllers/probes do not support the new
-feedback policy. They refuse with resource_provider_feedback_unsupported before
-claim, local metadata reservation, worker scope or native child creation; a
-daemon keeps the original task QUEUED with that diagnostic. Enabling pipeline
-on the same daemon does not authorize ordinary dispatch. Use the existing
-pipeline task path for feedback mode. Existing schema1/2 finite-quota ordinary
-execution remains supported. Supporting deferred ordinary turns needs a separate
-review of immutable task/grant/dispatch lineage; a pre-turn wait must not be
-implemented as terminal failure, task replay or reuse of a released grant.
+Ordinary pre-turn waiting retains the claimed RUNNING task, the same execution,
+reservation, dispatch token and workspace lock. Its execution phase and public
+codex_status expose WAITING_PROVIDER with a fixed scheduler wait reason. The
+bounded native process remains supervised while cancellation, deadline and
+resource checks continue. Successful authorization never bypasses a final
+cancel/deadline/account-age/notification-epoch check at the actual send boundary.
+An expired receipt after the durable wire checkpoint remains UNKNOWN; no turn
+is replayed. Schema1/2 finite provider quotas retain their enforcement.
+
+Ordinary ACKs, decoded events and recovery history use a compact outbox in the
+same private task database. Exact execution/grant/native identities stay fixed;
+live error nonces are allocated once at frame capture, while terminal and
+pre-ACK facts have deterministic identities. Queue dequeue and repeated history
+cannot create another negative delivery. Pending/uncertain records block onward
+authorization and release. A definitive start rejection requires an exact typed
+RPC id, response-only envelope and result/error exclusivity before any no-turn
+proof can be stored. Uncorrelated or lost ACKs remain UNKNOWN and charged.
+
+A fresh bounded recovery probe can deliver an old execution's negative under
+its own current charged reconciliation authority. Only the current standalone
+actor's held grant with a valid scope can supply that authority. It cannot
+publish favorable observations, bypass positive owner checks or release the old
+grant. The fact receipt remains bound to the original grant/execution/native
+turn; a separate atomic audit identifies the probe. Probe-token changes cannot
+reblock an account after valid recovery. Missing original turn identity or
+unsupported recovery proof retains uncertainty and the original grant.
 
 
-Recovery is driven by a later queued pipeline task's bounded metadata read under
-its existing local grant. The refused original turn is never requeued. A full
+Recovery is driven by bounded metadata reads under an existing charged local
+intent, including a waiting ordinary execution or a later queued pipeline task. The refused original turn is never requeued. A full
 negative response continues the shared block; a favorable response before the
 backoff deadline leaves the task queued. After both deadlines, only the causal
 full receipt described above may clear the shared restriction, followed by the
@@ -181,7 +198,7 @@ after shared commit is idempotent: an already delivered terminal fact does not
 reblock an account after valid later recovery. Live retrying error observations
 remain new restrictions and are not suppressed as terminal duplicates.
 
-Schema3 protocol11 fences earlier unpublished participants lacking this delivery
+Schema3 protocol13 fences earlier unpublished participants lacking this delivery
 contract. Schema1/2 finite quotas retain their previous generation and enforcement.
 No existing ledger is repaired, migrated or adopted by these source tests.
 
@@ -194,3 +211,27 @@ terminal null error cannot disprove an earlier lost retrying error. It retains
 UNKNOWN unless an exact matching negative can be delivered. Malformed or
 unsupported terminal error shapes cannot resolve uncertainty or release grants;
 bounded native error metadata is checked without parsing message text.
+
+Capture uncertainty (modified2026-11-15) is a separate negative host fact, not a
+fabricated native turn. A decoded callback failure allocates one event UUID and
+keeps it through marker/outbox/shared-write retries. The private execution owner
+record retains the marker without replacing identity or resource-scope fields.
+If that write fails, the same fact can be published directly to the shared
+UNKNOWN receipt; if publication also fails, the final execution checkpoint keeps
+the event IDs. An unfinished lost owner with an observed process or launch intent
+derives a deterministic observer-loss fact. These paths never claim durable
+completion when storage is unavailable.
+
+Authorization and release materialize pending host facts before proceeding.
+Only a shared commit permits the exact private marker to be acknowledged. A
+replayed receipt cannot reblock after valid causal recovery. Host capture facts
+require null native identities and UNKNOWN-only semantics. A released subject
+is accepted only for this fact under a separately verified current charged probe;
+other negative subjects still require a held grant. Capture-marker overflow is
+unclassified uncertainty and remains blocked for investigation.
+
+Turn-scoped notifications before this execution's dispatch intent cannot belong
+to its turn and are not queued for its later handler. Account notifications,
+RPC responses and approval requests keep their normal validation and handling.
+
+Capture-marker materialization reads and changes owner, checkpoint and outbox state in one immediate private-store write transaction. Acknowledgement uses the same SQLite writer lock. A stale observer cannot recreate an acknowledged marker. Exact acknowledged non-overflow markers may be cleaned idempotently; the deterministic overflow sentinel retains its unclassified refusal even when only the final execution checkpoint survived.

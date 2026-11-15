@@ -23,7 +23,7 @@
 
 # Added 2026-11-15: external provider acceptance, durable restrictions and CAS.
 """Synthetic account/provider/cgroup data and private SQLite only; no inference."""
-from contextlib import closing
+from contextlib import closing,ExitStack
 import copy,hashlib,json,os,stat,subprocess,sys,tempfile,time,unittest,uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -383,54 +383,51 @@ class ProtocolFeedback(unittest.TestCase):
    return value
   with patch.object(boot.os,'open',side_effect=opening),patch.object(boot.os,'fstat',side_effect=metadata):f.refuse(f.configure)
   self.assertTrue(pins);self.assertEqual(reads,[])
- def test_ordinary_demand_refuses_feedback_but_preserves_finite_quota_demand(self):
+ def test_ordinary_demand_uses_metadata_without_inventing_provider_entitlement(self):
   settings={'resource_admission':policy(),'runner_resource_policy':{'cpu_percent':100,'memory_bytes':100},'worker':{'cpu_percent':100,'memory_bytes':100}}
-  with self.assertRaisesRegex(admission.AdmissionWait,'provider_feedback_unsupported'):admission.ordinary_request(settings,worker=True)
+  demand=admission.ordinary_request(settings,worker=True)
+  self.assertEqual(demand['kind'],'local_control');self.assertIsNone(demand['provider']);self.assertEqual(demand['resources']['cpu_millicores'],2000)
   settings['resource_admission']=fixtures.policy();demand=admission.ordinary_request(settings,worker=True)
-  self.assertEqual(demand['kind'],'local_control');self.assertEqual(demand['provider'],'chatgpt');self.assertEqual(demand['resources']['cpu_millicores'],2000)
- def test_ordinary_reservation_refuses_before_ledger_construction(self):
-  with patch.object(admission,'Ledger',side_effect=AssertionError('Ledger forbidden')):
-   with self.assertRaisesRegex(admission.AdmissionWait,'provider_feedback_unsupported'):
-    scheduler.reserve_task_resources(Path('/unused'),ident(1),{'resource_admission':policy()},ident(2),worker=True)
- def test_standalone_run_refuses_before_task_claim_or_ledger(self):
+  self.assertEqual(demand['kind'],'local_control');self.assertEqual(demand['provider'],'chatgpt')
+ def test_feedback_ordinary_support_cannot_be_selected_outside_schema3(self):
+  for schema in (1,2,None):
+   selected=policy();selected['schema']=schema
+   with self.subTest(schema=schema),patch.object(admission,'Ledger',side_effect=AssertionError('Ledger forbidden')):
+    with self.assertRaisesRegex(admission.AdmissionWait,'provider_feedback_unsupported'):
+     admission.require_ordinary_provider({'resource_admission':selected})
+ def test_standalone_run_still_requires_a_charged_controller_before_claim(self):
   import runner
   with tempfile.TemporaryDirectory() as temporary:
    active=object.__new__(runner.Runner);active.root=Path(temporary);active.store=SimpleNamespace(claim=Mock(),get=Mock())
    active.task_lock=Mock(side_effect=AssertionError('No task lock or claim'));active.resource_token=None
-   with patch.object(scheduler,'configuration',return_value={'resource_admission':policy()}),patch.object(admission,'Ledger',side_effect=AssertionError('Ledger forbidden')):
-    with self.assertRaisesRegex(admission.AdmissionWait,'provider_feedback_unsupported'):active.run(ident(1))
+   with patch.object(scheduler,'configuration',return_value={'resource_admission':policy()}),patch.object(scheduler,'lease',return_value=ExitStack()),patch.object(scheduler,'pool_generation',return_value=ExitStack()),patch.object(scheduler,'require_charged_controller',side_effect=admission.AdmissionWait('resource_controller_required')),patch.object(admission,'Ledger',side_effect=AssertionError('Ledger forbidden')):
+    with self.assertRaisesRegex(admission.AdmissionWait,'resource_controller_required'):active.run(ident(1))
    active.store.get.assert_not_called();active.store.claim.assert_not_called();self.assertIsNone(active.resource_token)
- def test_dispatch_bound_ordinary_worker_refuses_before_authorization(self):
+ def test_dispatch_bound_ordinary_worker_still_requires_exact_generation(self):
   db=SimpleNamespace(execute=Mock(return_value=SimpleNamespace(fetchone=lambda:{'owner':'{}'})))
   with patch.object(scheduler,'live',return_value=True),patch.object(scheduler,'worker_configuration',return_value={'codex_pipeline':True,'resource_admission':policy()}),patch.object(admission,'Ledger',side_effect=AssertionError('Ledger forbidden')):
-   with self.assertRaisesRegex(admission.AdmissionWait,'provider_feedback_unsupported'):
+   with self.assertRaisesRegex(ValueError,'generation/budget'):
     scheduler.execution_admission(Path('/unused'),SimpleNamespace(db=db),ident(1),ident(2))
   self.assertEqual(db.execute.call_count,1)
- def test_standalone_controller_refuses_before_scope_or_private_state(self):
+ def test_standalone_controller_rejects_a_forged_bound_scope_marker(self):
   import standalone
   args=SimpleNamespace(command='run',dispatch_token=None)
-  with patch.object(scheduler,'configuration',return_value={'resource_admission':policy()}),patch.object(standalone,'_private_root',side_effect=AssertionError('No state directory')),patch.object(standalone,'Control',side_effect=AssertionError('No scope')),patch.object(admission,'Ledger',side_effect=AssertionError('Ledger forbidden')):
-   with self.assertRaisesRegex(admission.AdmissionWait,'provider_feedback_unsupported'):
-    with standalone.controller(Path('/unused'),args):self.fail('Unsupported controller')
- def test_ordinary_probe_and_owner_refuse_before_ledger(self):
+  with tempfile.TemporaryDirectory() as temporary:
+   root=Path(temporary)/'runtime'
+   with patch.object(scheduler,'configuration',return_value={'resource_admission':policy(),'pool_generation':'a'*64}),patch.dict(os.environ,{standalone.MARKER:'{}'}),patch.object(standalone,'Control',side_effect=AssertionError('No new scope')),patch.object(admission,'Ledger',side_effect=AssertionError('Ledger forbidden')):
+    with self.assertRaisesRegex(admission.AdmissionWait,'resource_controller_required'):
+     with standalone.controller(root,args):self.fail('Forged controller')
+ def test_ordinary_probe_still_requires_a_charged_controller_before_ledger(self):
   active=SimpleNamespace(root=Path('/unused'),scheduler_settings={'resource_admission':policy()})
+  with patch.object(scheduler,'require_charged_controller',side_effect=admission.AdmissionWait('resource_controller_required')),patch.object(admission,'Ledger',side_effect=AssertionError('Ledger forbidden')):
+   with self.assertRaisesRegex(admission.AdmissionWait,'resource_controller_required'):
+    with scheduler.resource_probe(active,ident(1)):self.fail('Uncharged probe')
+ def test_ordinary_provider_authorization_requires_owned_metadata_and_private_outbox(self):
+  rpc=Mock()
   with patch.object(admission,'Ledger',side_effect=AssertionError('Ledger forbidden')):
-   with self.assertRaisesRegex(admission.AdmissionWait,'provider_feedback_unsupported'):
-    with scheduler.resource_probe(active,ident(1)):self.fail('Unsupported probe')
-   for role in ('standalone','standalone_controller'):
-    with self.assertRaisesRegex(admission.AdmissionWait,'provider_feedback_unsupported'):scheduler.register_resource_owner(active.root,active.scheduler_settings,role)
- def test_pipeline_enabled_daemon_keeps_ordinary_task_queued_with_wait_reason(self):
-  import daemon,test_ordinary_session_pool as pool
-  case=pool.PoolDispatcher('test_status_and_dispatch_agree_on_one_two_eight');case.setUp();self.addCleanup(case.doCleanups)
-  obj=case.fake_daemon(1);obj.settings['resource_admission']=policy();obj.settings['maximum_sessions']=None;obj.allow_codex_pipeline=True
-  obj.start_worker=lambda task:daemon.Daemon.start_worker(obj,task)
-  obj.pool_policy_current=lambda:True;before=[tuple(row) for row in obj.store.db.execute('SELECT * FROM tasks')]
-  with patch.object(scheduler,'ensure_controller_resources',return_value=None),patch.object(admission,'Ledger',side_effect=AssertionError('Ledger forbidden')),patch.object(daemon,'Control',side_effect=AssertionError('No worker scope')),patch.object(daemon,'Process',side_effect=AssertionError('No worker/native')):
-   obj.tick()
-  self.assertEqual(before,[tuple(row) for row in obj.store.db.execute('SELECT * FROM tasks')]);self.assertFalse(obj.children)
-  self.assertEqual(obj.store.db.execute('SELECT count(*) FROM scheduler_dispatches').fetchone()[0],0)
-  self.assertEqual(obj.task_wait_reason(obj.store.get(pool.task(1)['id'])),'resource_provider_feedback_unsupported')
-  self.assertIn('resource_provider_feedback_unsupported',scheduler.TASK_WAIT_REASONS)
+   with self.assertRaisesRegex(admission.AdmissionWait,'provider_feedback_unknown'):
+    scheduler.authorize_task_provider(Path('/unused'),ident(1),{'resource_admission':policy()},ident(2),None,feedback_rpc=rpc)
+  rpc.assert_not_called()
  def test_schema3_selects_resource_only_maximum_sessions_refusal(self):
   value=json.loads((ROOT/'runtime/private_codex/scheduler-config.json').read_text());value.pop('maximum_sessions');value['resource_admission']=policy()
   value['resource_admission']['reserve']=fixtures.fixtures.v(1000,2*1024**3,0,0);value['resource_admission']['capacity']['ram_bytes']=32*1024**3

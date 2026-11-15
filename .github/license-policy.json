@@ -209,7 +209,9 @@
         "scripts/source_test_isolation.py",
         "scripts/test_source_test_isolation.py",
         "runtime/public_laf/scripts/source_test_isolation.py",
-        "scripts/test_provider_history_feedback.py"
+        "scripts/test_provider_history_feedback.py",
+        "runtime/private_codex/src/ordinary_provider_feedback.py",
+        "scripts/test_ordinary_provider_feedback.py"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",

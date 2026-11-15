@@ -53,11 +53,12 @@ for the selected package. Raw account, process and receipt evidence stays privat
 For Codex registration and the local marketplace option, see [Codex install](docs/codex-install.md).
 
 The optional [provider-feedback contract](docs/provider-feedback-admission.md)
-supports resource-admission schema3 for the Codex pipeline without inferring a
-provider concurrency limit. Local resources, account ownership, durable provider
-restrictions and UNKNOWN/no-replay guards still apply. Ordinary/standalone online
-dispatch is unsupported in this new mode and refuses before claim or execution;
-existing schema1/2 finite-quota behavior is retained. This staged source path
+supports resource-admission schema3 for bounded Codex pipeline and ordinary
+Runner execution without inferring a provider concurrency limit. Local resources,
+account ownership, durable provider restrictions and UNKNOWN/no-replay guards
+still apply. Ordinary pre-turn waiting retains one execution, reservation and
+workspace lock; it never requeues a dispatched task. Existing schema1/2 finite
+provider quotas retain their enforcement. This staged source path
 does not select a calibrated policy or establish live resource-mode acceptance.
 
 For a NEW independent private prefix, use the [prepare and configure guide](docs/bootstrap.md).

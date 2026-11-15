@@ -69,6 +69,10 @@ def inspect_session(runner, task, execution, log, probe_execution_id=None, deadl
     if not thread_id:
         facts["reason"] = "thread_id_not_recorded"
         return facts
+    import provider_control
+    settings=getattr(runner,'scheduler_settings',{})
+    if provider_control.enabled(settings) and not turn_id:
+        facts['reason']='turn_id_not_recorded';return facts
     proc = None
     def budget():
         remaining = 10 if deadline is None else min(10, deadline - time.monotonic())
@@ -85,6 +89,14 @@ def inspect_session(runner, task, execution, log, probe_execution_id=None, deadl
                                 "workspace_id": task["workspace_id"], "snapshot_id": task["snapshot_id"],
                                 "probe_execution_id": probe_execution_id, "operation": "reconcile"},
                        resources=runner.resource_control(task, probe_execution_id))
+        import provider_control
+        settings=getattr(runner,'scheduler_settings',{})
+        feedback=None
+        if provider_control.enabled(settings):
+            from ordinary_provider_feedback import OrdinaryFeedback
+            authority={'task':runner.resource_grant_task_id,'token':runner.resource_token}
+            feedback=OrdinaryFeedback(runner.root,runner.store,settings,task['id'],authority=authority)
+            proc.on_provider_message=feedback.capture
         proc.call("initialize", {"clientInfo": {"name": "agent_orchestrator_phase2", "version": "0.2.0"},
                                  "capabilities": {"experimentalApi": False}}, budget())
         proc.send({"method": "initialized", "params": {}})
@@ -97,6 +109,7 @@ def inspect_session(runner, task, execution, log, probe_execution_id=None, deadl
         if scheduler.resource_only(settings): facts['resource_provider_account_verified'] = True
         thread = proc.call("thread/read", {"threadId": thread_id, "includeTurns": False}, budget())["thread"]
         facts["exists"] = thread.get("id") == thread_id
+        if not facts['exists']:raise RuntimeError('Owned thread history identity does not match')
         facts["runtime_status"] = thread.get("status")
         if thread.get("cwd") and Path(thread["cwd"]).resolve() != (runner.workroot(task) / "workspace").resolve():
             raise RuntimeError("Stored session working directory does not match this workspace")
@@ -115,6 +128,16 @@ def inspect_session(runner, task, execution, log, probe_execution_id=None, deadl
             if found or not cursor:
                 break
         if found:
+            if feedback is not None:
+                observed_at=time.monotonic();epoch=proc.provider_epoch
+                current_account=proc.call('account/read',{'refreshToken':False},budget())
+                scheduler.verify_resource_account(settings,current_account)
+                if proc.provider_epoch!=epoch or not 0<=time.monotonic()-observed_at<=settings['resource_admission']['max_age_seconds']:
+                    raise RuntimeError('Current provider identity is uncertain')
+                feedback.observe_history(found)
+                if not feedback.flush():raise RuntimeError('Provider feedback remains uncertain')
+                facts['provider_account_observed_at']=observed_at
+                facts['provider_account_boot']=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
             facts["turn"] = {k: found.get(k) for k in ["id", "status", "error", "startedAt", "completedAt"]}
             facts["ended"] = found.get("status") in ["completed", "failed", "interrupted"]
             items = found.get("items", [])

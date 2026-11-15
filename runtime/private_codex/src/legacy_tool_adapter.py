@@ -83,6 +83,9 @@ def runtime_path(root, project_root=None):
     return scoped_runtime_path(root, project_root=project_root or PROJECT)
 
 
+from provider_control import WAIT_REASONS as PROVIDER_WAIT_REASONS
+
+
 def task_view(task):
     if not isinstance(task, dict) or not uuid_value(task.get('id')) or task.get('state') not in STATES:
         raise ValueError('Invalid daemon task')
@@ -93,7 +96,7 @@ def task_view(task):
     result['turn_id'] = uuid_value(task.get('turn_id'))
     # No prompt/result/error, config, command, owner, environment or log path is exported.
     enums = {
-        'codex_status': {'NOT_STARTED', 'DISPATCHING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'UNKNOWN', 'CANCELLED', 'TIMED_OUT', 'LEGACY_UNVERIFIED', 'BLOCKED'},
+        'codex_status': {'WAITING_PROVIDER', 'NOT_STARTED', 'DISPATCHING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'UNKNOWN', 'CANCELLED', 'TIMED_OUT', 'LEGACY_UNVERIFIED', 'BLOCKED'},
         'verification_status': {'NOT_VERIFIED', 'RUNNING', 'PASSED', 'FAILED', 'UNKNOWN', 'CANCELLED', 'TIMED_OUT', 'LEGACY_UNVERIFIED', 'BLOCKED'},
         'human_status': {'NOT_REQUIRED', 'PENDING', 'APPROVED', 'REJECTED', 'WAITING'},
         'scheduler_phase': {'RESERVED', 'STARTED', 'AUTHORIZED', 'FINISHED', 'ORPHANED'},
@@ -110,8 +113,8 @@ def task_view(task):
                 'NESTED_ISOLATION_FORBIDDEN', 'ISOLATION_CONTEXT_UNKNOWN'):
             result['blocking_reason'] = block['reason_code']
     reason = task.get('scheduler_wait_reason')
-    result['scheduler_wait_reason'] = (reason if task['state'] == 'QUEUED' and isinstance(reason, str)
-                                       and reason in TASK_WAIT_REASONS else None)
+    result['scheduler_wait_reason'] = (reason if isinstance(reason,str) and reason in TASK_WAIT_REASONS
+                                       and (task['state']=='QUEUED' or task['state']=='RUNNING' and result['codex_status']=='WAITING_PROVIDER' and reason in PROVIDER_WAIT_REASONS) else None)
     for key in ['completion_verified', 'worker_pending']:
         result[key] = task.get(key) is True
     return result

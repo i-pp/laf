@@ -133,7 +133,10 @@ class Daemon:
         This is diagnostic evidence, never a reservation or a promise to start.
         Retained handoffs take precedence and can never become ordinary queue work.
         """
-        if task['state'] != 'QUEUED': return None
+        if task['state'] != 'QUEUED':
+            reason=task.get('scheduler_wait_reason')
+            if reason is None and task.get('codex_status')=='WAITING_PROVIDER':reason=self.store.get(task['id']).get('scheduler_wait_reason')
+            return reason if task['state']=='RUNNING' and task.get('codex_status')=='WAITING_PROVIDER' and reason in scheduler.PROVIDER_WAIT_REASONS else None
         dispatch = self.store.db.execute('SELECT phase FROM scheduler_dispatches WHERE task_id=?',
                                          (task['id'],)).fetchone()
         if dispatch:

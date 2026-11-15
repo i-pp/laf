@@ -27,7 +27,7 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 # Resource-led queued admission
 
 The optional scheduler `resource_admission` policy retains two protocols and
-adds the pipeline-only schema3 feedback extension described below.
+adds the schema3 feedback extension for pipeline and bounded ordinary execution.
 Schema 1 adds an atomic resource gate to legacy slot admission. Schema 2 requires
 `admission_mode: "resources"`, forbids an explicit `maximum_sessions`, and replaces
 ordinary session slots and the whole-pool memory envelope with per-request atomic
