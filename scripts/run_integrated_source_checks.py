@@ -51,12 +51,13 @@ def main():
   bootstrap=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_bootstrap'),28,runner)
   bindings=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_bootstrap_bindings'),30,runner)
   isolation=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_source_test_isolation'),23,runner)
+  history=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_provider_history_feedback'),36,runner)
   provider=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_provider_feedback'),62,runner)
   selector=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_bootstrap_resource_policy'),28,runner)
   production=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_bootstrap_production_policy'),36,runner)
   combined=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_combined_setup_resources'),12,runner)
  except ValueError as exc:print(json.dumps({'status':'failed','reason':str(exc)}));return 1
- print(json.dumps({'status':'passed','gate_oracles':gates,'source_cases':source,'codex_selection_cases':codex_selection,'bootstrap_cases':bootstrap,'binding_cases':bindings,'provider_feedback_cases':provider,'test_isolation_cases':isolation,'resource_selector_cases':selector,'production_policy_cases':production,'combined_setup_cases':combined,'bootstrap_scope':'source/tempfiles/fake native and peer; bounded stdlib copied doctor/config CLI children; no SDK/native/socket/service/model','scope':'pure gates/source/fake Codex peer and owner HTTP handler/fake controller; no SDK child or service'}));return 0
+ print(json.dumps({'status':'passed','gate_oracles':gates,'source_cases':source,'codex_selection_cases':codex_selection,'bootstrap_cases':bootstrap,'binding_cases':bindings,'provider_feedback_cases':provider,'provider_history_cases':history,'test_isolation_cases':isolation,'resource_selector_cases':selector,'production_policy_cases':production,'combined_setup_cases':combined,'bootstrap_scope':'source/tempfiles/fake native and peer; bounded stdlib copied doctor/config CLI children; no SDK/native/socket/service/model','scope':'pure gates/source/fake Codex peer and owner HTTP handler/fake controller; no SDK child or service'}));return 0
 if __name__ == '__main__':
     from source_test_isolation import entrypoint
     raise SystemExit(entrypoint('integrated', main))

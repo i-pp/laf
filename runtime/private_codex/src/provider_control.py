@@ -35,10 +35,29 @@ def observation(decision):
     return {'decision':decision,'usage_account_sha256':None,'denied_scopes':['provider'] if decision in ('block','unknown') else [],'clear_scopes':[]}
 
 
-def record(settings,root,task,token,account,value,*,kind,revision=None,fresh=False,observed_at=None):
+def terminal_error_complete(value):
+    """Bounded native TurnError shape; never infer codes from message text."""
+    if value is None:return True
+    if (type(value) is not dict or not {'message'}<=set(value)
+            or set(value)-{'message','codexErrorInfo','additionalDetails','misalignment'}
+            or not isinstance(value['message'],str) or len(value['message'])>4096
+            or value.get('misalignment') is not None):return False
+    details=value.get('additionalDetails')
+    if details is not None and (not isinstance(details,str) or len(details)>4096):return False
+    info=value.get('codexErrorInfo')
+    if info is None:return True
+    if isinstance(info,str):return 0<len(info)<=128
+    if type(info) is not dict or len(info)!=1:return False
+    name=next(iter(info));frame=info[name]
+    if name not in ('httpConnectionFailed','responseStreamConnectionFailed','responseStreamDisconnected','responseTooManyFailedAttempts') or type(frame) is not dict or set(frame)-{'httpStatusCode'}:return False
+    code=frame.get('httpStatusCode')
+    return code is None or type(code) is int and 0<=code<=65535
+
+
+def record(settings,root,task,token,account,value,*,kind,revision=None,fresh=False,observed_at=None,delivery_receipt=None):
     if not enabled(settings):return
     with closing(Ledger(settings['resource_admission'])) as ledger:
-        ledger.observe_provider(root,task,token,'chatgpt',account,value,kind=kind,revision=revision,fresh=fresh,observed_at=observed_at)
+        return ledger.observe_provider(root,task,token,'chatgpt',account,value,kind=kind,revision=revision,fresh=fresh,observed_at=observed_at,delivery_receipt=delivery_receipt)
 
 
 def notification(settings,root,task,token,message):

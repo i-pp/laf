@@ -589,7 +589,8 @@ class HostGateway:
             result=self.protocol.request(method,params)
             if method=='turn/start' and getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:
                 task=self.pipeline._mutate(lambda s:dict(s['tasks'][params['clientUserMessageId']]))
-                self.resource_gate.turn_error(task,result.get('turn',{}).get('error'))
+                if result.get('turn',{}).get('status') not in ('completed','failed','interrupted'):
+                    self.resource_gate.turn_error(task,result.get('turn',{}).get('error'))
             return result
         except RpcError as error:
             if method=='turn/start' and getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:

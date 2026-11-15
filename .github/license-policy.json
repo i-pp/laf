@@ -208,7 +208,8 @@
         "docs/provider-feedback-admission.md",
         "scripts/source_test_isolation.py",
         "scripts/test_source_test_isolation.py",
-        "runtime/public_laf/scripts/source_test_isolation.py"
+        "runtime/public_laf/scripts/source_test_isolation.py",
+        "scripts/test_provider_history_feedback.py"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",

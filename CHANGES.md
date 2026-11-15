@@ -24,6 +24,15 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: preserve terminal-history provider restrictions (2026-11-15)
+
+Persist exact terminal and matching pre-ACK error negatives through refresh,
+early completion and direct reap before new authorization or release. Refuse
+malformed history as a resolution of uncertainty. Use a durable private outbox and atomic
+shared receipts; preserve uncertainty on failure and deduplicate old terminal
+facts after valid provider recovery. Fence earlier unpublished schema3 clients
+while retaining finite quotas and no replay. No live state is changed.
+
 ## Unreleased: isolated source-test resource ledgers (2026-11-15)
 
 Run supported source suites in verified disposable namespaces, hiding the real

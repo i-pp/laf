@@ -243,11 +243,11 @@ def account_fingerprint(result):
 
 def generation(value):
     validated = policy(value)
-    # Protocol 9 pins commit-time provider receipts; schema2 keeps protocol5.
+    # Protocol11 pins terminal and pre-ACK negative delivery before release; schema2 keeps protocol5.
     # Protocol 5 pins descriptor-bound release and strict positive absence proofs.
     # Counterless DRM/KFD descriptors cannot prove physical release. Earlier
     # unpublished participants must not join this stricter resource generation.
-    encoded = {'protocol': 9 if validated['schema']==3 else 5, 'policy': validated} if resource_only(validated) else validated
+    encoded = {'protocol': 11 if validated['schema']==3 else 5, 'policy': validated} if resource_only(validated) else validated
     return hashlib.sha256(json.dumps(encoded, sort_keys=True,
                                      separators=(',', ':')).encode()).hexdigest()
 
@@ -751,7 +751,7 @@ class Ledger:
         if not provider_feedback(quota):return 0
         return self._feedback_state(provider,quota['account_sha256'])['revision']
 
-    def observe_provider(self,runtime,task,token,provider,account,observation,*,kind,revision=None,fresh=False,observed_at=None):
+    def observe_provider(self,runtime,task,token,provider,account,observation,*,kind,revision=None,fresh=False,observed_at=None,delivery_receipt=None):
         """Charged trusted host only. Feedback never releases a grant or retries."""
         if kind not in ('snapshot','notification','rejection','unknown'):raise ValueError('Invalid provider observation kind')
         if not isinstance(observation,dict) or set(observation)!={'decision','usage_account_sha256','denied_scopes','clear_scopes'} or observation['decision'] not in ('allow','block','unknown','unavailable'):
@@ -763,8 +763,33 @@ class Ledger:
                 raise ValueError('Bounded provider restriction scopes required')
         usage=observation['usage_account_sha256']
         if usage is not None and (not isinstance(usage,str) or not re.fullmatch('[a-f0-9]{64}',usage)):raise ValueError('Invalid usage account pin')
+        receipt_id=receipt_evidence=None
+        if delivery_receipt is not None:
+            if (kind!='rejection' or observation['decision']!='block' or not isinstance(delivery_receipt,dict)
+                    or set(delivery_receipt)!={'binding','thread','turn','generation','event'}
+                    or delivery_receipt['event'] not in ('terminal','preack_error')
+                    or delivery_receipt['generation']!=self.generation
+                    or not isinstance(delivery_receipt['binding'],str) or not re.fullmatch('[a-f0-9]{64}',delivery_receipt['binding'])
+                    or any(not isinstance(delivery_receipt[k],str) or not 0<len(delivery_receipt[k])<=512 for k in ('thread','turn'))):
+                raise ValueError('Exact bounded terminal restriction receipt required')
+            _identifier(task);_identifier(token)
+            quota=self.policy['providers'].get(provider)
+            if not provider_feedback(quota):raise ValueError('Terminal receipts require provider feedback')
+            receipt_evidence={'kind':'provider_terminal_restriction' if delivery_receipt['event']=='terminal' else 'provider_preack_restriction','runtime':str(Path(runtime).absolute()),
+                'task':task,'token':token,'generation':self.generation,'binding':delivery_receipt['binding'],
+                'provider':provider,'account':quota['account_sha256'],
+                'thread_sha256':hashlib.sha256(delivery_receipt['thread'].encode()).hexdigest(),
+                'turn_sha256':hashlib.sha256(delivery_receipt['turn'].encode()).hexdigest()}
+            receipt_id=str(uuid.uuid5(uuid.NAMESPACE_URL,json.dumps(receipt_evidence,sort_keys=True,separators=(',',':'))))
         with self.db:
-            self.db.execute('BEGIN IMMEDIATE');self.join(runtime,task,token)
+            self.db.execute('BEGIN IMMEDIATE')
+            if receipt_id is not None:
+                old=self.db.execute('SELECT token,evidence FROM resource_reconciliations WHERE id=?',(receipt_id,)).fetchone()
+                if old:
+                    if old['token']!=token or json.loads(old['evidence'])!=receipt_evidence:
+                        raise AdmissionWait('resource_provider_feedback_unknown')
+                    return False  # Immutable fact already delivered, even after release/recovery.
+            self.join(runtime,task,token)
             quota=self.policy['providers'].get(provider)
             if not provider_feedback(quota):return
             expected=quota['account_sha256'];state=self._feedback_state(provider,expected)
@@ -804,6 +829,10 @@ class Ledger:
             state.update(revision=state['revision']+1,boot=boot,mono=now,wall=wall)
             self.db.execute('INSERT INTO provider_feedback VALUES(?,?,?) ON CONFLICT(provider,account) DO UPDATE SET body=excluded.body',
                             (provider,expected,json.dumps(state)))
+            if receipt_id is not None:
+                self.db.execute('INSERT INTO resource_reconciliations VALUES(?,?,?,?)',
+                    (receipt_id,token,json.dumps(receipt_evidence,sort_keys=True),now))
+        return True
 
     def authorize_provider(self, runtime, task, token, provider, account_sha256):
         with self.db:

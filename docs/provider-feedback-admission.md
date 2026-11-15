@@ -159,3 +159,38 @@ come from the pinned owned native connection, not copied fixture values. Import
 does not start an executor, load a model, attest admission readiness, change an
 existing service or authorize a live cutover. Fresh process/physical observations
 and any remaining calibration are still required before adoption.
+
+
+Terminal restriction delivery (modified2026-11-15) uses a compact private
+Pipeline outbox in the same transaction that adopts the exact acknowledged
+terminal turn. History refresh and direct reap of terminal tasks both collect
+matching evidence. Terminal ACKs and notifications use the same path. Pre-ACK
+evidence is retained by bounded native turn identity, with a monotone restriction
+bit; unrelated terminals cannot overwrite it. Unmatched identities publish no
+restriction. Overflow without the matching ACK evidence retains uncertainty
+until exact complete history resolves it.
+
+Before any onward provider authorization or grant release, pending negatives
+are flushed from a closed Pipeline snapshot. The shared ledger atomically
+commits each restriction and its exact deterministic receipt in the existing
+reconciliation audit table. Receipts bind runtime, task, grant, generation,
+selection binding and native thread/turn identities. Local acknowledgement is a
+separate exact-record transaction. A failed publication or acknowledgement keeps
+pending evidence and grants, marks uncertainty and never replays a turn. A crash
+after shared commit is idempotent: an already delivered terminal fact does not
+reblock an account after valid later recovery. Live retrying error observations
+remain new restrictions and are not suppressed as terminal duplicates.
+
+Schema3 protocol11 fences earlier unpublished participants lacking this delivery
+contract. Schema1/2 finite quotas retain their previous generation and enforcement.
+No existing ledger is repaired, migrated or adopted by these source tests.
+
+Matching pre-ACK retrying errors keep a monotone per-turn bit and enter a
+separate receipted outbox after
+the exact ACK. Their receipt cannot suppress a later terminal restriction.
+Acknowledging the early error does not infer terminal execution state or clear
+another uncertainty. Early-error overflow is separate from terminal overflow:
+terminal null error cannot disprove an earlier lost retrying error. It retains
+UNKNOWN unless an exact matching negative can be delivered. Malformed or
+unsupported terminal error shapes cannot resolve uncertainty or release grants;
+bounded native error metadata is checked without parsing message text.

@@ -704,7 +704,7 @@ class Pipeline:
 
     @staticmethod
     def _view(t):
-        return {k: v for k, v in t.items() if k not in ('prompt', 'remote_turn', 'stop_sent', 'pending_turn', 'pending_approval_turn', 'resource_token', 'resource_binding')}
+        return {k: v for k, v in t.items() if k not in ('prompt', 'remote_turn', 'stop_sent', 'pending_turn', 'pending_approval_turn', 'resource_token', 'resource_binding', 'provider_feedback_pending', 'provider_error_pending', 'provider_feedback_uncertain', 'provider_error_uncertain', 'pending_provider_turns', 'pending_provider_turn_overflow', 'pending_provider_error_overflow')}
 
     def queue(self, task_id, request_key):
         def prepare(s):
@@ -826,30 +826,54 @@ class Pipeline:
             task['remote_turn'] = turn['id']
             task['reasoning_effort_evidence']['turn_transport'] = 'acknowledged'
             if task['state'] in ('DISPATCHING', 'UNKNOWN'): task['state'] = 'RUNNING'
-            pending = task.pop('pending_turn', None)
-            if pending and pending.get('id') == turn['id']: self._adopt_turn(s, task, pending)
+            candidates=task.pop('pending_provider_turns',{})
+            pending=candidates.get(turn['id']) or task.pop('pending_turn',None)
+            overflow=task.pop('pending_provider_turn_overflow',False)
+            error_overflow=task.pop('pending_provider_error_overflow',False)
+            if (overflow or error_overflow) and pending is None:
+                task.update(state='UNKNOWN',provider_feedback_uncertain=True,reason_code='PROVIDER_FEEDBACK_PERSISTENCE_UNKNOWN')
+                if error_overflow:task['provider_error_uncertain']=True
+            if pending and pending.get('id') == turn['id']:
+                if pending.get('preack_error') is True:self.resource_gate.stage_preack_error(s,task,pending)
+                self._adopt_turn(s,task,pending)
             self._adopt_turn(s, task, turn)
             if task.pop('pending_approval_turn', None) == turn['id'] and task['state'] not in TERMINAL:
                 task['state'] = 'WAITING_APPROVAL'
                 self._event(s, 'approval_waiting', task['thread_id'], ident, automatic_approval=False)
             self._event(s, 'turn_bound', task['thread_id'], ident)
             return self._view(task)
-        return self._operation('dispatch:' + ident, 'dispatch', ident, prepare,
+        result=self._operation('dispatch:' + ident, 'dispatch', ident, prepare,
             lambda c: self.client.request('turn/start', {'threadId': c['remote_thread'], 'clientUserMessageId': ident,
                 'model': task['model'], 'effort': task['reasoning_effort'], 'input': [{'type': 'text', 'text': task['prompt'], 'text_elements': []}],
                 'cwd': self.policy['workspaces'][self._mutate(lambda s: self._thread(s, task['thread_id'])['workspace'])],
                 'approvalPolicy': 'on-request', 'approvalsReviewer': 'user', 'sandboxPolicy': {'type': 'readOnly'}}), finish)
+        if getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:
+            self.resource_gate.flush_feedback()
+            if isinstance(result,dict) and result.get('id')==ident:
+                result={**result,**self._mutate(lambda s:self._view(self._task(s,ident)))}
+        return result
 
-    def _adopt_turn(self, s, task, turn):
+    def _adopt_turn(self, s, task, turn, *, history=False):
         mapping = {'completed': 'COMPLETED', 'failed': 'FAILED', 'interrupted': 'CANCELLED'}
         state = mapping.get(turn.get('status'))
-        if not state: return
+        if not state or not task.get('remote_turn') or turn.get('id')!=task['remote_turn']: return
+        if getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:
+            try:
+                self.resource_gate.stage_terminal(s,task,turn,history=history)
+                if task.get('provider_feedback_uncertain') or task.get('provider_error_uncertain'):
+                    task.update(state='UNKNOWN',reason_code='PROVIDER_FEEDBACK_PERSISTENCE_UNKNOWN')
+                    return
+            except Exception:
+                task.update(state='UNKNOWN',provider_feedback_uncertain=True,reason_code='PROVIDER_FEEDBACK_PERSISTENCE_UNKNOWN')
+                return
         if task['state'] in TERMINAL: return
         answer = '\n'.join(i['text'] for i in turn.get('items', []) if isinstance(i, dict) and i.get('type') == 'agentMessage' and isinstance(i.get('text'), str))
         encoded = answer.encode()
         task.update(state=state, answer=encoded[:4096].decode('utf-8', errors='ignore'),
                     answer_truncated=len(encoded) > 4096 or turn.get('answer_truncated') is True)
-        s['threads'][task['thread_id']]['active_task'] = None
+        if (task.get('reason_code')=='PROVIDER_FEEDBACK_PERSISTENCE_UNKNOWN'
+                and not any(task.get(key) for key in ('provider_feedback_pending','provider_error_pending','provider_feedback_uncertain','provider_error_uncertain'))):task.pop('reason_code')
+        if s['threads'][task['thread_id']]['active_task']==task['id']:s['threads'][task['thread_id']]['active_task']=None
         self._event(s, 'task_' + state.lower(), task['thread_id'], task['id'])
 
     def refresh(self, task_id):
@@ -864,7 +888,7 @@ class Pipeline:
                 task = self._task(s, task_id)
                 turns = remote.get('turns', [])
                 turn = next((t for t in turns if t.get('id') == task['remote_turn']), None)
-                if turn: self._adopt_turn(s, task, turn)
+                if turn: self._adopt_turn(s,task,turn,history=True)
                 # A lost turn/start acknowledgement cannot be inferred from list order.
                 if task['remote_turn'] is None: task['state'] = 'UNKNOWN'
                 flags = remote.get('status', {}).get('activeFlags', [])
@@ -872,7 +896,12 @@ class Pipeline:
                     task['state'] = 'WAITING_APPROVAL'
                     self._event(s, 'approval_waiting', task['thread_id'], task_id, automatic_approval=False)
                 return self._view(task)
-            return self._mutate(reconcile)
+            result=self._mutate(reconcile)
+            if getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:
+                ready=self.resource_gate.flush_feedback()
+                result=self._mutate(lambda s:self._view(self._task(s,task_id)))
+                if not ready:result.update(reconciliation='UNKNOWN',automatic_retry=False)
+            return result
         except (ProtocolUnknown, RpcError):
             # Modified 2026-11-15: notifications can advance the task while the
             # read is in flight. Keep that state without treating a failed read
@@ -941,10 +970,16 @@ class Pipeline:
             if not thread['active_task']: return
             task = self._task(s, thread['active_task'])
             if getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:
-                if method=='error' and type(params.get('willRetry')) is bool and task.get('remote_turn') and params.get('turnId')==task['remote_turn']:
-                    self.resource_gate.turn_error(task,params.get('error'))
-                elif method=='turn/completed' and task.get('remote_turn') and params.get('turn',{}).get('id')==task['remote_turn']:
-                    self.resource_gate.turn_error(task,params.get('turn',{}).get('error'))
+                if method=='error' and type(params.get('willRetry')) is bool:
+                    if task.get('remote_turn') and params.get('turnId')==task['remote_turn']:
+                        self.resource_gate.turn_error(task,params.get('error'))
+                    elif task['state']=='DISPATCHING' and task['remote_turn'] is None and opaque(params.get('turnId')):
+                        from resource_admission import provider_restriction
+                        if provider_restriction(data=params.get('error')):
+                            candidates=task.setdefault('pending_provider_turns',{});native=params['turnId']
+                            if native in candidates or len(candidates)<32:
+                                candidates.setdefault(native,{'id':native})['preack_error']=True
+                            else:task['pending_provider_error_overflow']=True
             if method == 'turn/completed':
                 turn = params.get('turn', {})
                 if task['remote_turn'] and turn.get('id') == task['remote_turn']: self._adopt_turn(s, task, turn)
@@ -952,9 +987,19 @@ class Pipeline:
                     # Retain only bounded answer text, never command/tool payloads.
                     answer = '\n'.join(i['text'] for i in turn.get('items', []) if isinstance(i, dict)
                                        and i.get('type') == 'agentMessage' and isinstance(i.get('text'), str))
-                    task['pending_turn'] = {'id': turn['id'], 'status': turn.get('status'),
+                    compact = {'id': turn['id'], 'status': turn.get('status'),
                         'answer_truncated': len(answer.encode()) > 4096,
                         'items': [{'type': 'agentMessage', 'text': answer.encode()[:4096].decode('utf-8', errors='ignore')}]}
+                    if getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:
+                        from resource_admission import provider_restriction
+                        import provider_control
+                        candidates=task.setdefault('pending_provider_turns',{});previous=candidates.get(turn['id'],{})
+                        compact['provider_restriction']=provider_restriction(data=turn.get('error')) or previous.get('provider_restriction') is True
+                        compact['preack_error']=previous.get('preack_error') is True
+                        compact['provider_error_unknown']=previous.get('provider_error_unknown') is True or ('error' in turn and not provider_control.terminal_error_complete(turn['error']))
+                        if turn['id'] in candidates or len(candidates)<32:candidates[turn['id']]=compact
+                        else:task['pending_provider_turn_overflow']=True
+                    else:task['pending_turn']=compact
             elif method in ('item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval'):
                 if task['remote_turn'] and params.get('turnId') == task['remote_turn'] and task['state'] != 'WAITING_APPROVAL':
                     task['state'] = 'WAITING_APPROVAL'
@@ -962,6 +1007,7 @@ class Pipeline:
                 elif task['state'] == 'DISPATCHING' and task['remote_turn'] is None and opaque(params.get('turnId')):
                     task['pending_approval_turn'] = params['turnId']
         self._mutate(accept)
+        if getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:self.resource_gate.flush_feedback()
 
     def tick(self, *, dispatch=True):
         transport = getattr(self, 'transport', None)
