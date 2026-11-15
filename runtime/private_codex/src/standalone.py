@@ -104,6 +104,7 @@ def controller(root, args, *, argv=None):
     if not scheduler.resource_only(settings):
         yield None
         return
+    scheduler.require_ordinary_provider(settings)
     _private_root(root)
     marker = os.environ.get(MARKER)
     if marker is None:

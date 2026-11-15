@@ -202,7 +202,10 @@
         "scripts/test_sdk_installer.py",
         "scripts/test_session_pool_boundary.py",
         "scripts/test_strict_source_gate.py",
-        "skills/laf-router/SKILL.md"
+        "skills/laf-router/SKILL.md",
+        "runtime/private_codex/src/provider_control.py",
+        "scripts/test_provider_feedback.py",
+        "docs/provider-feedback-admission.md"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",

@@ -265,6 +265,7 @@ class Daemon:
                 WHEN phase='RESERVED' THEN 'STARTED' ELSE phase END WHERE task_id=?""", (json.dumps(old), task_id))
 
     def start_worker(self, task):
+        scheduler.require_ordinary_provider(self.settings)
         scheduler.require_pool_generation(self.settings, codex_pipeline=self.allow_codex_pipeline)
         scheduler.require_pool_headroom(self.settings)
         token = str(uuid.uuid4())

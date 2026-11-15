@@ -172,6 +172,15 @@
         "threadId",
         "turnId"
       ]
+    },
+    "account/rateLimits/read": {
+      "schema": "ClientRequest.json#/definitions/GetAccountRateLimitsParams",
+      "sha256": "e22f082de3dbcd39927de011dcb19dea04cc930e00af9792e9259f2745f8289e",
+      "required": [],
+      "properties": [
+        "excludeResetCreditDetails",
+        "supportsLunaReserve"
+      ]
     }
   },
   "reasoning_contract": {
@@ -203,5 +212,12 @@
         "sha256": "b75b88c2f507685b948d06166b5436678fd320c9878883d97f5a17f620a25116"
       }
     }
+  },
+  "provider_usage_contract": {
+    "concurrency_entitlement_exposed": false,
+    "parameters_exposed": [],
+    "supportsLunaReserve_exposed": false,
+    "response_schema_sha256": "9c0def7f8ab2396122af939dffbf01b34b8d66082fe4129dd20917bfd4313fdc",
+    "raw_account_id_exported": false
   }
 }

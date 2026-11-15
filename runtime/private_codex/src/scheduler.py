@@ -44,6 +44,7 @@ TASK_WAIT_REASONS = frozenset({
     'resource_scope_unknown', 'resource_observation_unknown', 'resource_observation_stale',
     'resource_usage_unknown', 'resource_gpu_topology_unknown',
     'resource_provider_quota', 'resource_provider_quota_unknown',
+    'resource_provider_backoff','resource_provider_feedback_unknown','resource_provider_feedback_unsupported',
     *('resource_' + dimension + '_' + reason
       for dimension in ('cpu_millicores', 'ram_bytes', 'gpu_milliunits', 'vram_bytes')
       for reason in ('unknown', 'budget', 'headroom')),
@@ -221,16 +222,23 @@ def require_pool_headroom(settings):
     return available
 
 
+def require_ordinary_provider(settings):
+    from resource_admission import require_ordinary_provider as require
+    require(settings)
+
+
 def reserve_task_resources(root, task_id, settings, token, *, worker, scopes=(), owner=None):
     if 'resource_admission' not in settings: return False
     from resource_admission import Ledger, ordinary_request, linux_observation
+    demand = ordinary_request(settings, worker=worker)
     with closing(Ledger(settings['resource_admission'])) as ledger:
-        ledger.reserve(root, task_id, token, ordinary_request(settings, worker=worker),
+        ledger.reserve(root, task_id, token, demand,
                        linux_observation, scopes=scopes, owner=owner)
     return True
 
 
 def register_resource_owner(root, settings, role):
+    if role in ('standalone','standalone_controller'): require_ordinary_provider(settings)
     if not resource_only(settings): return None
     from resource_admission import Ledger
     with closing(Ledger(settings['resource_admission'])) as ledger:
@@ -247,13 +255,13 @@ def verify_resource_account(settings, account):
     if not resource_only(settings): return
     from resource_admission import AdmissionWait, account_fingerprint
     quota = settings['resource_admission']['providers'].get('chatgpt')
-    if (not quota or quota['valid_until'] <= time.time()
-            or account_fingerprint(account) != quota['account_sha256']):
-        raise AdmissionWait('resource_provider_account_unknown')
+    from resource_admission import provider_identity
+    provider_identity(quota,account_fingerprint(account))
 
 
 def authorize_task_provider(root, task_id, settings, token, account, *, observed_at=None):
     if not resource_only(settings): return
+    require_ordinary_provider(settings)
     from resource_admission import Ledger, account_fingerprint, linux_observation
     verify_resource_account(settings, account)
     with closing(Ledger(settings['resource_admission'])) as ledger:
@@ -417,6 +425,7 @@ def resource_probe(runner, task_id):
         yield
         return
     from resource_admission import Ledger, linux_observation
+    require_ordinary_provider(settings)
     require_charged_controller(runner.root, settings)
     owner = register_resource_owner(runner.root, settings, 'standalone')
     probe, token = str(uuid.uuid4()), str(uuid.uuid4())
@@ -491,6 +500,7 @@ def execution_admission(root, store, task_id, token=None):
                ('LAF_SESSION_POOL_GENERATION', 'LAF_SESSION_POOL_CODEX_PIPELINE')):
             raise PoolPolicyError("A dispatch-bound worker requires its authorized token")
         settings = configuration()
+        require_ordinary_provider(settings)
         with ExitStack() as stack:
             stack.enter_context(lease(Path(root) / "daemon.lock", shared=True))
             stack.enter_context(pool_generation(root, settings))
@@ -514,6 +524,7 @@ def execution_admission(root, store, task_id, token=None):
             raise ValueError("Dispatch owner/token is invalid or no longer alive")
         owner = json.loads(row["owner"])
         current = worker_configuration()
+        require_ordinary_provider(current)
         if (type(owner.get('session_pool_codex_pipeline')) is not bool
                 or owner['session_pool_codex_pipeline'] is not current['codex_pipeline']
                 or owner.get('session_pool_generation') != current['pool_generation']):

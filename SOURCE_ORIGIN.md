@@ -191,3 +191,20 @@ these generic seams are incorporated; that integration's NPU ownership,
 protocol, native-header and Router changes are excluded. The existing
 non-admitting NPU observer remains optional, unaccepted source rather than an
 additional 0.1.0 operational requirement.
+
+## 2026-11-15: pipeline provider-feedback integration
+
+Adapt the reviewed project-authored provider-feedback delta onto the combined
+setup candidate while retaining its protected reader/discovery fixes and five
+regressions. The new provider_control.py, common-ledger changes, narrow native
+method metadata, fake-peer tests and provider contract guide remain within the
+existing first-party KOL scope. No SDK schema corpus, provider implementation,
+credential, account record, private policy or operational evidence is imported.
+
+Schema3 leaves external capacity unknown and relies on provider acceptance,
+durable account-bound restrictions and causal fresh-read recovery. Schema1/2
+finite-quota behavior is retained. The new feedback path supports the Codex
+pipeline; ordinary/standalone online execution refuses before effects. The
+three common resource cores remain byte-identical. This source integration
+does not adopt a running ledger generation, configure a real policy or transfer
+predecessor model/cancellation acceptance to the new package.

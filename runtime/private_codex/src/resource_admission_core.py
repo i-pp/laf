@@ -60,7 +60,7 @@ def vector(value):
 
 
 def resource_only(value):
-    return isinstance(value, dict) and value.get('schema') == 2 and value.get('admission_mode') == 'resources'
+    return isinstance(value, dict) and value.get('schema') in (2,3) and value.get('admission_mode') == 'resources'
 
 
 def state_directory():
@@ -134,11 +134,11 @@ def owner_live(identity):
 
 def policy(value):
     keys = {'schema', 'capacity', 'reserve', 'max_age_seconds', 'providers', 'workload'}
-    if not isinstance(value, dict) or type(value.get('schema')) is not int or value['schema'] not in (1, 2):
+    if not isinstance(value, dict) or type(value.get('schema')) is not int or value['schema'] not in (1, 2, 3):
         raise ValueError('Invalid resource admission policy')
-    if value['schema'] == 2: keys.add('admission_mode')
-    allowed = keys | ({'pipeline', 'local_inference'} if value['schema'] == 2 else set())
-    if not keys <= set(value) or set(value) - allowed or value['schema'] == 2 and value['admission_mode'] != 'resources':
+    if value['schema'] in (2,3): keys.add('admission_mode')
+    allowed = keys | ({'pipeline', 'local_inference'} if value['schema'] in (2,3) else set())
+    if not keys <= set(value) or set(value) - allowed or value['schema'] in (2,3) and value['admission_mode'] != 'resources':
         raise ValueError('Invalid resource admission fields or mode')
     capacity, reserve = vector(value['capacity']), vector(value['reserve'])
     if not capacity['cpu_millicores'] or not capacity['ram_bytes']:
@@ -152,15 +152,25 @@ def policy(value):
     providers = value['providers']
     if not isinstance(providers, dict) or len(providers) > 32: raise ValueError('Invalid provider quota evidence')
     for name, quota in providers.items():
-        quota_keys = {'limit', 'valid_until', 'evidence'} | ({'account_sha256'} if value['schema'] == 2 else set())
-        if (not isinstance(name, str) or not re.fullmatch(r'[a-z][a-z0-9_-]{0,63}', name)
-                or not isinstance(quota, dict) or set(quota) != quota_keys
-                or type(quota['limit']) is not int or not 1 <= quota['limit'] <= MAX_INTEGER
-                or type(quota['valid_until']) not in (int, float) or not math.isfinite(quota['valid_until'])
-                or quota['valid_until'] <= 0 or not isinstance(quota['evidence'], str)
-                or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', quota['evidence'])
-                or value['schema'] == 2 and (not isinstance(quota['account_sha256'], str)
-                    or not re.fullmatch(r'[0-9a-f]{64}', quota['account_sha256']))):
+        if not isinstance(name,str) or not re.fullmatch(r'[a-z][a-z0-9_-]{0,63}',name) or not isinstance(quota,dict):
+            raise ValueError('Invalid provider contract')
+        if value['schema']==3 and quota.get('mode')=='feedback':
+            required={'mode','account_sha256','backoff_seconds'}
+            if (not required<=set(quota) or set(quota)-required-{'usage_account_sha256'}
+                    or type(quota['backoff_seconds']) not in (int,float)
+                    or not math.isfinite(quota['backoff_seconds']) or not 1<=quota['backoff_seconds']<=3600
+                    or not isinstance(quota['account_sha256'],str) or not re.fullmatch('[a-f0-9]{64}',quota['account_sha256'])
+                    or 'usage_account_sha256' in quota and (not isinstance(quota['usage_account_sha256'],str)
+                        or not re.fullmatch('[a-f0-9]{64}',quota['usage_account_sha256']))):
+                raise ValueError('Explicit account-bound provider feedback contract required')
+            continue
+        if value['schema']==3:raise ValueError('Schema3 providers require explicit feedback mode')
+        quota_keys={'limit','valid_until','evidence'}|({'account_sha256'} if value['schema']==2 else set())
+        if (set(quota)!=quota_keys
+                or type(quota['limit']) is not int or not 1<=quota['limit']<=MAX_INTEGER
+                or type(quota['valid_until']) not in (int,float) or not math.isfinite(quota['valid_until']) or quota['valid_until']<=0
+                or not isinstance(quota['evidence'],str) or not re.fullmatch('[A-Za-z0-9_.:-]{1,128}',quota['evidence'])
+                or value['schema'] in (2,3) and (not isinstance(quota['account_sha256'],str) or not re.fullmatch('[a-f0-9]{64}',quota['account_sha256']))):
             raise ValueError('Provider quota needs finite explicit limits and account evidence')
     if 'pipeline' in value:
         child = vector(value['pipeline'])
@@ -233,16 +243,92 @@ def account_fingerprint(result):
 
 def generation(value):
     validated = policy(value)
+    # Protocol 9 pins commit-time provider receipts; schema2 keeps protocol5.
     # Protocol 5 pins descriptor-bound release and strict positive absence proofs.
     # Counterless DRM/KFD descriptors cannot prove physical release. Earlier
     # unpublished participants must not join this stricter resource generation.
-    encoded = {'protocol': 5, 'policy': validated} if resource_only(validated) else validated
+    encoded = {'protocol': 9 if validated['schema']==3 else 5, 'policy': validated} if resource_only(validated) else validated
     return hashlib.sha256(json.dumps(encoded, sort_keys=True,
                                      separators=(',', ':')).encode()).hexdigest()
 
 
+
+def provider_feedback(quota):
+    return isinstance(quota,dict) and quota.get('mode')=='feedback'
+
+
+def provider_identity(quota,account,wall=None):
+    if (not isinstance(quota,dict) or quota.get('account_sha256')!=account
+            or not provider_feedback(quota) and quota.get('valid_until',0)<=(time.time() if wall is None else wall)):
+        raise AdmissionWait('resource_provider_account_unknown')
+
+
+def provider_snapshot(value):
+    """Narrow usage facts, never capacity, payment or concurrency entitlement."""
+    if not isinstance(value,dict) or not isinstance(value.get('rateLimits'),dict):raise ValueError('Invalid usage snapshot')
+    allowed=value.get('ordinaryUsageAllowed')
+    if allowed is not None and type(allowed) is not bool:raise ValueError('Invalid ordinary usage permission')
+    account=value.get('accountId')
+    if account is not None and (not isinstance(account,str) or not 0<len(account)<=4096):raise ValueError('Invalid usage account')
+    usage=hashlib.sha256(account.encode()).hexdigest() if account is not None else None
+    legacy=value['rateLimits'];limit=legacy.get('limitId')
+    if limit is not None and (not isinstance(limit,str) or not 0<len(limit)<=128):raise ValueError('Invalid usage bucket id')
+    buckets=[('limit:'+limit if limit is not None else 'legacy',legacy)];many=value.get('rateLimitsByLimitId')
+    if many is not None:
+        if not isinstance(many,dict) or len(many)>32 or any(not isinstance(k,str) or not 0<len(k)<=128 or not isinstance(v,dict) for k,v in many.items()):raise ValueError('Invalid usage buckets')
+        buckets += [('limit:'+key,bucket) for key,bucket in many.items()]
+    denied=set();clear=set();meaningful=False
+    if allowed is False:denied.add('provider')
+    for ident,bucket in buckets:
+        declared=bucket.get('limitId')
+        if declared is not None:
+            if not isinstance(declared,str) or not 0<len(declared)<=128:raise ValueError('Invalid nested usage bucket id')
+            if ident!='limit:'+declared:raise ValueError('Contradictory usage bucket identity')
+        spent=bucket.get('spendControlReached')
+        if spent is not None and type(spent) is not bool:raise ValueError('Invalid spending feedback')
+        if spent is True:denied.add(ident+'/spend')
+        elif spent is False:clear.add(ident+'/spend')
+        reached=bucket.get('rateLimitReachedType')
+        if reached is not None:
+            if not isinstance(reached,str) or not 0<len(reached)<=128:raise ValueError('Invalid reached feedback')
+            denied.add(ident+'/reached')
+        elif 'rateLimitReachedType' in bucket:clear.add(ident+'/reached')
+        for name in ('primary','secondary'):
+            window=bucket.get(name)
+            if window is None:continue
+            if not isinstance(window,dict) or type(window.get('usedPercent')) is not int or not 0<=window['usedPercent']<=2**31-1:raise ValueError('Invalid usage window')
+            for field in ('resetsAt','windowDurationMins'):
+                if window.get(field) is not None and (type(window[field]) is not int or not 0<=window[field]<=2**63-1):raise ValueError('Invalid usage window time')
+            meaningful=True
+            if window['usedPercent']>=100:denied.add(ident+'/'+name)
+            else:clear.add(ident+'/'+name)
+    if allowed is True and meaningful and not denied:clear.add('provider')
+    return {'decision':'block' if denied else 'allow' if 'provider' in clear else 'unavailable',
+            'usage_account_sha256':usage,'denied_scopes':sorted(denied),'clear_scopes':sorted(clear)}
+
+
+def provider_restriction(code=None,data=None):
+    """Only structured correlated codes; message strings are never parsed."""
+    if type(code) is int and code==429:return True
+    if not isinstance(data,dict):return False
+    info=data.get('codexErrorInfo')
+    if isinstance(info,str):return info in ('rateLimitExceeded','usageLimitExceeded')
+    if isinstance(info,dict) and len(info)==1:
+        key=next(iter(info));frame=info[key]
+        return (key in ('httpConnectionFailed','responseStreamConnectionFailed','responseStreamDisconnected','responseTooManyFailedAttempts')
+                and isinstance(frame,dict) and type(frame.get('httpStatusCode')) is int and frame['httpStatusCode']==429)
+    return False
+
+
+def require_ordinary_provider(settings):
+    """Feedback requires pipeline queue/operation lineage; ordinary work waits."""
+    if provider_feedback(settings.get('resource_admission',{}).get('providers',{}).get('chatgpt')):
+        raise AdmissionWait('resource_provider_feedback_unsupported')
+
+
 def ordinary_request(settings, *, worker):
     """Reserve actual unchanged cgroup ceilings for the locally supervised tree."""
+    require_ordinary_provider(settings)
     limits = [settings['runner_resource_policy']]
     if worker: limits.append(settings['worker'])
     controlled = resource_only(settings.get('resource_admission'))
@@ -319,6 +405,7 @@ class Ledger:
                 self.db.execute("CREATE TABLE IF NOT EXISTS admission_owners(id TEXT PRIMARY KEY,runtime TEXT NOT NULL,role TEXT NOT NULL,identity TEXT NOT NULL,generation TEXT NOT NULL,phase TEXT NOT NULL CHECK(phase IN ('HELD','RELEASED')))")
                 self.db.execute('CREATE TABLE IF NOT EXISTS reservation_owners(token TEXT PRIMARY KEY REFERENCES reservations(token),owner TEXT NOT NULL REFERENCES admission_owners(id))')
                 self.db.execute('CREATE TABLE IF NOT EXISTS resource_reconciliations(id TEXT PRIMARY KEY,token TEXT NOT NULL,evidence TEXT NOT NULL,created REAL NOT NULL)')
+                self.db.execute('CREATE TABLE IF NOT EXISTS provider_feedback(provider TEXT NOT NULL,account TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(provider,account))')
                 self.db.execute('CREATE TABLE IF NOT EXISTS reservation_parents(token TEXT PRIMARY KEY,parent TEXT NOT NULL)')
                 self.db.execute('CREATE TABLE IF NOT EXISTS local_instances(token TEXT PRIMARY KEY,model TEXT NOT NULL,engine TEXT NOT NULL,owner TEXT NOT NULL,artifact TEXT NOT NULL)')
                 self.db.execute('CREATE TABLE IF NOT EXISTS local_references(token TEXT PRIMARY KEY,instance TEXT NOT NULL)')
@@ -454,10 +541,13 @@ class Ledger:
             raise AdmissionWait('resource_gpu_topology_unknown')
         if demand['provider'] is not None:
             quota = self.policy['providers'].get(demand['provider'])
-            if quota is None or quota['valid_until'] <= wall:
+            if quota is None or not provider_feedback(quota) and quota['valid_until'] <= wall:
                 raise AdmissionWait('resource_provider_quota_unknown')
-            active = sum(json.loads(row['demand'])['provider'] == demand['provider'] for row in rows)
-            if active >= quota['limit']: raise AdmissionWait('resource_provider_quota')
+            if provider_feedback(quota):
+                if existing is None:self._provider_available(demand['provider'],quota)
+            else:
+                active = sum(json.loads(row['demand'])['provider'] == demand['provider'] for row in rows)
+                if active >= quota['limit']: raise AdmissionWait('resource_provider_quota')
 
     def _container(self, runtime, owner, within, demand, sample, *, excluding=None):
         parent_task = self.db.execute('SELECT task FROM reservations WHERE token=?', (within,)).fetchone()
@@ -635,21 +725,100 @@ class Ledger:
                 'local_grants_releasable': len(clear),
                 'provider_grants_retained': len(snapshot['grants']) - len(clear), 'automatic_retry': False}
 
+    def _feedback_state(self,provider,account):
+        row=self.db.execute('SELECT body FROM provider_feedback WHERE provider=? AND account=?',(provider,account)).fetchone()
+        state=json.loads(row[0]) if row else {'revision':0,'blocked':False,'reason':None,'not_before':0,'not_before_mono':0,'boot':None,'mono':None,'wall':None,'denied_scopes':[],'restriction_usage_account_sha256':None,'restriction_generation':None}
+        keys={'revision','blocked','reason','not_before','not_before_mono','boot','mono','wall','denied_scopes','restriction_usage_account_sha256','restriction_generation'}
+        if (not isinstance(state,dict) or set(state)!=keys or type(state['revision']) is not int or not 0<=state['revision']<MAX_INTEGER
+                or type(state['blocked']) is not bool or state['reason'] not in (None,'resource_provider_backoff','resource_provider_feedback_unknown')
+                or any(state[k] is not None and (not isinstance(state[k],str) or not re.fullmatch('[a-f0-9]{64}',state[k])) for k in ('restriction_usage_account_sha256','restriction_generation'))
+                or state['blocked']!=(state['reason'] is not None)
+                or any(type(state[k]) not in (int,float) or not math.isfinite(state[k]) or state[k]<0 for k in ('not_before','not_before_mono'))
+                or any(state[k] is not None and (type(state[k]) not in (int,float) or not math.isfinite(state[k])) for k in ('mono','wall'))
+                or state['boot'] is not None and (not isinstance(state['boot'],str) or len(state['boot'])>64)
+                or type(state['denied_scopes']) is not list or len(state['denied_scopes'])>200
+                or any(not isinstance(x,str) or not 0<len(x)<=160 for x in state['denied_scopes'])):
+            raise AdmissionWait('resource_provider_feedback_unknown')
+        return state
+
+    def _provider_available(self,provider,quota):
+        state=self._feedback_state(provider,quota['account_sha256'])
+        if state['blocked']:raise AdmissionWait(state['reason'])
+
+    def provider_revision(self,runtime,task,token,provider):
+        self.join(runtime,task,token)
+        quota=self.policy['providers'].get(provider)
+        if not provider_feedback(quota):return 0
+        return self._feedback_state(provider,quota['account_sha256'])['revision']
+
+    def observe_provider(self,runtime,task,token,provider,account,observation,*,kind,revision=None,fresh=False,observed_at=None):
+        """Charged trusted host only. Feedback never releases a grant or retries."""
+        if kind not in ('snapshot','notification','rejection','unknown'):raise ValueError('Invalid provider observation kind')
+        if not isinstance(observation,dict) or set(observation)!={'decision','usage_account_sha256','denied_scopes','clear_scopes'} or observation['decision'] not in ('allow','block','unknown','unavailable'):
+            raise ValueError('Invalid provider observation')
+        for field in ('denied_scopes','clear_scopes'):
+            scopes=observation[field]
+            if (type(scopes) is not list or len(scopes)>200 or len(set(scopes))!=len(scopes)
+                    or any(not isinstance(x,str) or not 0<len(x)<=160 for x in scopes)):
+                raise ValueError('Bounded provider restriction scopes required')
+        usage=observation['usage_account_sha256']
+        if usage is not None and (not isinstance(usage,str) or not re.fullmatch('[a-f0-9]{64}',usage)):raise ValueError('Invalid usage account pin')
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE');self.join(runtime,task,token)
+            quota=self.policy['providers'].get(provider)
+            if not provider_feedback(quota):return
+            expected=quota['account_sha256'];state=self._feedback_state(provider,expected)
+            boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+            now=time.monotonic();wall=time.time()
+            if state['blocked'] and state['boot']!=boot:
+                # A prior boot's monotonic value is not an elapsed deadline.
+                state['not_before_mono']=now+quota['backoff_seconds']
+                state['not_before']=max(state['not_before'],wall+quota['backoff_seconds'])
+            decision=observation['decision']
+            identity=account==expected and (usage is None or quota.get('usage_account_sha256') is None or usage==quota['usage_account_sha256'])
+            if not identity:
+                decision='unavailable' if decision=='unavailable' or kind=='notification' and decision=='allow' else 'unknown'
+            if kind in ('rejection','unknown') or decision in ('block','unknown'):
+                if not state['blocked']:
+                    state['restriction_usage_account_sha256']=quota.get('usage_account_sha256')
+                    state['restriction_generation']=self.generation
+                elif state['restriction_usage_account_sha256']!=quota.get('usage_account_sha256'):
+                    state['denied_scopes']=sorted(set(state['denied_scopes'])|{'unclassified'})
+                state['denied_scopes']=sorted(set(state.get('denied_scopes',[]))|set(observation['denied_scopes'])|({'provider'} if kind in ('rejection','unknown') or decision=='unknown' else set()))
+                if len(state['denied_scopes'])>200:
+                    state['denied_scopes']=['unclassified'];decision='unknown'
+                state.update(blocked=True,reason='resource_provider_backoff' if decision=='block' else 'resource_provider_feedback_unknown',
+                             not_before=max(state['not_before'],wall+quota['backoff_seconds']),
+                             not_before_mono=max(state['not_before_mono'],now+quota['backoff_seconds']))
+            elif (kind=='snapshot' and decision=='allow' and fresh is True and revision==state['revision']
+                    and type(observed_at) in (int,float) and math.isfinite(observed_at)
+                    and 0<=now-observed_at<=self.policy['max_age_seconds']
+                    and quota.get('usage_account_sha256') is not None and usage==quota['usage_account_sha256']
+                    and set(state.get('denied_scopes',[]))<=set(observation['clear_scopes'])
+                    and (not state['blocked'] or state['restriction_usage_account_sha256'] is not None
+                         and state['restriction_usage_account_sha256']==usage)
+                    and (not state['blocked'] or state['boot']==boot and state['mono'] is not None and now>=state['mono']
+                         and wall>=state['wall'] and wall>=state['not_before'] and now>=state['not_before_mono'])):
+                state.update(blocked=False,reason=None,not_before=0,not_before_mono=0,denied_scopes=[],restriction_usage_account_sha256=None,restriction_generation=None)
+            # Every delivered event advances the durable cross-process read epoch.
+            state.update(revision=state['revision']+1,boot=boot,mono=now,wall=wall)
+            self.db.execute('INSERT INTO provider_feedback VALUES(?,?,?) ON CONFLICT(provider,account) DO UPDATE SET body=excluded.body',
+                            (provider,expected,json.dumps(state)))
+
     def authorize_provider(self, runtime, task, token, provider, account_sha256):
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
             row = self.join(runtime, task, token)
             demand = json.loads(row['demand'])
             quota = self.policy['providers'].get(provider)
-            if (not quota or quota['valid_until'] <= time.time() or not isinstance(account_sha256, str)
-                    or quota.get('account_sha256') != account_sha256):
-                raise AdmissionWait('resource_provider_account_unknown')
+            provider_identity(quota,account_sha256)
+            if provider_feedback(quota):self._provider_available(provider,quota)
             if demand['kind'] == 'cloud_api':
                 if demand['provider'] != provider: raise AdmissionWait('resource_provider_account_unknown')
                 return
             if demand['kind'] != 'local_control': raise AdmissionWait('resource_provider_account_unknown')
             active = sum(json.loads(other['demand'])['provider'] == provider for other in self.held())
-            if active + (demand['provider'] != provider) > quota['limit']:
+            if not provider_feedback(quota) and active + (demand['provider'] != provider) > quota['limit']:
                 raise AdmissionWait('resource_provider_quota')
             demand.update(kind='cloud_api', provider=provider)
             self.db.execute('UPDATE reservations SET demand=? WHERE token=?', (json.dumps(demand), token))

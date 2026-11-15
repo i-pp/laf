@@ -43,12 +43,22 @@ scoped to its original source. Later local predecessors were checked separately:
 `c2ab056` completed installed stdio Flash and Codex canaries, correlated terminal
 history and same-runtime restart/reconciliation; `438b2aa` passed installed
 private-policy setup and 33-tool discovery with an expired synthetic policy.
-The canaries used legacy admission with resource mode off. Those observations
+`e42ebd1` later completed installed Flash/Codex canaries, original-key restart
+replay, active Codex cancellation and owned local executor cleanup. The model
+canaries used compatibility admission with resource mode off. Those observations
 do not accept a newer package, production resource policy, provider quota or
 the production Tunnel/client path. Use the [installed acceptance procedure](docs/installed-acceptance.md)
 for the selected package. Raw account, process and receipt evidence stays private.
 
 For Codex registration and the local marketplace option, see [Codex install](docs/codex-install.md).
+
+The optional [provider-feedback contract](docs/provider-feedback-admission.md)
+supports resource-admission schema3 for the Codex pipeline without inferring a
+provider concurrency limit. Local resources, account ownership, durable provider
+restrictions and UNKNOWN/no-replay guards still apply. Ordinary/standalone online
+dispatch is unsupported in this new mode and refuses before claim or execution;
+existing schema1/2 finite-quota behavior is retained. This staged source path
+does not select a calibrated policy or establish live resource-mode acceptance.
 
 For a NEW independent private prefix, use the [prepare and configure guide](docs/bootstrap.md).
 It connects explicit existing Router/Codex prerequisites without copying another

@@ -53,6 +53,7 @@ METHOD_SCHEMAS = {
     "initialize": ("v1/InitializeParams.json", "v1/InitializeResponse.json", ("clientInfo",)),
     "model/list": ("v2/ModelListParams.json", "v2/ModelListResponse.json", ()),
     "account/read": ("v2/GetAccountParams.json", "v2/GetAccountResponse.json", ()),
+    "account/rateLimits/read": ("ClientRequest.json#/definitions/GetAccountRateLimitsParams", "v2/GetAccountRateLimitsResponse.json", ()),
     "thread/start": ("v2/ThreadStartParams.json", "v2/ThreadStartResponse.json", ()),
     "thread/resume": ("v2/ThreadResumeParams.json", "v2/ThreadResumeResponse.json", ("threadId",)),
     "thread/read": ("v2/ThreadReadParams.json", "v2/ThreadReadResponse.json", ("threadId",)),
@@ -69,6 +70,7 @@ _FIELDS = {
     "initialize": {"clientInfo"},
     "model/list": {"cursor", "limit", "includeHidden"},
     "account/read": {"refreshToken"},
+    "account/rateLimits/read": set(),
     "thread/start": _THREAD_FIELDS | {"ephemeral"},
     "thread/resume": _THREAD_FIELDS | {"threadId", "excludeTurns"},
     "thread/read": {"threadId", "includeTurns"},
@@ -162,11 +164,13 @@ class ProtocolUnknown(ProtocolError):
 class RpcError(ProtocolError):
     status = "FAILED"
 
-    def __init__(self, code, message):
+    def __init__(self, code, message, data=None):
         # Keep untrusted server messages out of implicit logs/exception rendering.
         super().__init__(f"app-server rejected request (code {code})")
         self.code = code
         self.server_message = message
+        from resource_admission import provider_restriction
+        self.provider_restriction = provider_restriction(code,data)
 
 
 def _object(value, allowed, required=()):
@@ -299,6 +303,10 @@ def validate_model_page(result):
 def _result(method, result):
     if type(result) is not dict:
         raise ProtocolError("result must be an object")
+    if method == "account/rateLimits/read":
+        from resource_admission import provider_snapshot
+        try:return provider_snapshot(result)
+        except ValueError as error:raise ProtocolError("invalid usage feedback") from error
     if method == "account/read":
         if type(result.get("requiresOpenaiAuth")) is not bool:
             raise ProtocolError("invalid account result")
@@ -411,7 +419,7 @@ class ProtocolClient:
                 _object(error, {"code", "message", "data"}, {"code", "message"})
                 if type(error["code"]) is not int or type(error["message"]) is not str:
                     raise ProtocolError("invalid RPC error")
-                raise RpcError(error["code"], error["message"])
+                raise RpcError(error["code"], error["message"], error.get("data"))
             self._diag['stage'] = 'result_validation'
             result = _result(message["method"], response["result"])
             if message['method'] == 'account/read':

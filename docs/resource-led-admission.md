@@ -320,3 +320,7 @@ temporary SQLite/leases, synthetic telemetry and a fake native peer; no model,
 service or external account is invoked. Test cardinality lives in the executable
 refusal guard, not in this specification. Passing source fixtures is not a claim
 of real parallel model execution, profile calibration or live adoption.
+
+Modification notice (2026-11-15): [provider feedback](provider-feedback-admission.md)
+adds an explicit schema3 submission contract when no actual provider concurrency
+entitlement is exposed. It retains local physical admission and known quotas.

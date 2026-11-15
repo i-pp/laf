@@ -585,8 +585,15 @@ class HostGateway:
         if timeout is not None:
             if type(original_timeout) not in (int, float): raise PipelineError('INVALID_PROTOCOL_DEADLINE')
             client.timeout_s = min(original_timeout, timeout)
-        try: return self.protocol.request(method, params)
+        try:
+            result=self.protocol.request(method,params)
+            if method=='turn/start' and getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:
+                task=self.pipeline._mutate(lambda s:dict(s['tasks'][params['clientUserMessageId']]))
+                self.resource_gate.turn_error(task,result.get('turn',{}).get('error'))
+            return result
         except RpcError as error:
+            if method=='turn/start' and getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:
+                self.resource_gate.rejected(params.get('clientUserMessageId'),error)
             # A correlated rejection of a read is not a lost connection or a
             # successful turn. Keep the task held until notification/history
             # reconciliation; never replay a turn because this read failed.
@@ -594,7 +601,7 @@ class HostGateway:
             # from transport uncertainty. The task/operation state still holds
             # refused stop/steer or marks a rejected start FAILED; never replay.
             handled = {'thread/read','thread/start','turn/start','turn/steer','turn/interrupt','thread/archive',
-                       'thread/resume','account/read','model/list'}
+                       'thread/resume','account/read','account/rateLimits/read','model/list'}
             if method != 'thread/read' and (self.pipeline.policy['schema'] == 1 or method not in handled): self.failed = True
             self.record_failure(method,error)
             raise

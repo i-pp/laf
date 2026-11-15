@@ -461,6 +461,10 @@ class Pipeline:
         if getattr(self, 'resource_gate', None) is not None:
             for bound in ('max_threads', 'max_tasks', 'concurrency'): result['bounds'][bound] = None
             result['admission_mode'] = 'resources'
+            if getattr(self.resource_gate,'policy',{}).get('providers',{}).get('chatgpt',{}).get('mode')=='feedback':
+                result['provider_concurrency_limit']=None
+                result['provider_capacity']='unknown'
+                result['provider_acceptance']='external_feedback'
         if self.policy['schema'] == 2: result['capacity'] = self._mutate(self.capacity)
         # The MCP envelope exports data twice (text and structuredContent).
         # Keep headroom for escaping, and do not duplicate all option metadata
@@ -927,6 +931,7 @@ class Pipeline:
         if isinstance(message, dict) and 'message' in message: message = message['message']
         if not isinstance(message, dict) or not isinstance(message.get('params'), dict): return
         method, params = message.get('method'), message['params']
+        if getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:self.resource_gate.notification(message)
         def accept(s):
             thread = next((t for t in s['threads'].values() if t['remote_id'] == params.get('threadId')), None)
             if not thread: return
@@ -935,6 +940,11 @@ class Pipeline:
                 self._event(s, 'thread_archived', thread['id'])
             if not thread['active_task']: return
             task = self._task(s, thread['active_task'])
+            if getattr(getattr(self,'resource_gate',None),'policy',{}).get('schema')==3:
+                if method=='error' and type(params.get('willRetry')) is bool and task.get('remote_turn') and params.get('turnId')==task['remote_turn']:
+                    self.resource_gate.turn_error(task,params.get('error'))
+                elif method=='turn/completed' and task.get('remote_turn') and params.get('turn',{}).get('id')==task['remote_turn']:
+                    self.resource_gate.turn_error(task,params.get('turn',{}).get('error'))
             if method == 'turn/completed':
                 turn = params.get('turn', {})
                 if task['remote_turn'] and turn.get('id') == task['remote_turn']: self._adopt_turn(s, task, turn)

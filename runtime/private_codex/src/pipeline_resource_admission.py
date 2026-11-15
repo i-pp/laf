@@ -66,7 +66,8 @@ class PipelineAdmission:
                     raise AdmissionWait('resource_generation_held')
                 return token
             token = str(uuid.uuid4())
-            demand = {'kind': 'local_control', 'provider': 'chatgpt', 'resources': self.policy['pipeline']}
+            from resource_admission import provider_feedback
+            demand = {'kind': 'local_control', 'provider': None if provider_feedback(self.policy['providers'].get('chatgpt')) else 'chatgpt', 'resources': self.policy['pipeline']}
             ledger.reserve(self.gateway.root, task['id'], token, demand, linux_observation,
                            owner=owner, within=parent)
         return token
@@ -82,6 +83,8 @@ class PipelineAdmission:
         return digest
 
     def authorize(self, task):
+        import provider_control
+        provider_control.refresh(self.settings,self.gateway.root,task['id'],task['resource_token'],self.gateway.rpc,client=lambda:self.gateway.protocol)
         digest = self.account()
         with closing(Ledger(self.policy)) as ledger:
             ledger.recheck(self.gateway.root, task['id'], task['resource_token'], linux_observation)
@@ -98,6 +101,32 @@ class PipelineAdmission:
         with closing(Ledger(self.policy)) as ledger:
             row = ledger.join(self.gateway.root, task_id, task.get('resource_token'))
             if json.loads(row['demand'])['kind'] != 'cloud_api': raise AdmissionWait('resource_provider_account_unknown')
+            ledger.authorize_provider(self.gateway.root,task_id,task['resource_token'],'chatgpt',client._resource_account_sha256)
+
+    def feedback_scope(self,task=None):
+        if task is not None:return task['id'],task['resource_token']
+        _,token=self.controller()
+        with closing(Ledger(self.policy)) as ledger:
+            row=ledger.db.execute('SELECT task FROM reservations WHERE token=? AND runtime=?',(token,str(self.gateway.root.absolute()))).fetchone()
+            if not row:raise AdmissionWait('resource_controller_required')
+            return row[0],token
+
+    def notification(self,message):
+        import provider_control
+        if not provider_control.enabled(self.settings):return
+        task,token=self.feedback_scope()
+        provider_control.notification(self.settings,self.gateway.root,task,token,message)
+
+    def rejected(self,task_id,error):
+        import provider_control
+        if not provider_control.enabled(self.settings):return
+        task=self.gateway.pipeline._mutate(lambda s:dict(s['tasks'][task_id]))
+        provider_control.rejection(self.settings,self.gateway.root,*self.feedback_scope(task),error)
+
+    def turn_error(self,task,error):
+        import provider_control
+        if not provider_control.enabled(self.settings):return
+        provider_control.turn_error(self.settings,self.gateway.root,*self.feedback_scope(task),error)
 
     def pending(self, thread_id):
         state = self.gateway.pipeline._mutate(lambda s: json.loads(json.dumps(s)))

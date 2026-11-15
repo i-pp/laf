@@ -24,6 +24,18 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: provider-owned acceptance without inferred slots (2026-11-15)
+
+Added an explicit schema3 pipeline-only external provider-feedback contract alongside retained
+finite quota policies. Local resource and account/owner guards remain enforced;
+external concurrency stays unknown rather than becoming an arbitrary LAF cap.
+Shared durable restrictions, causal full-read recovery and correlated native
+rate feedback preserve UNKNOWN and no replay. Usage/account metadata is narrowly
+read without reserve fallback or payment capabilities. Selector metadata errors
+now refuse rather than masquerading as missing resource configuration. Ordinary
+and standalone online feedback work waits before claim without launching a
+worker; existing finite-quota ordinary execution remains supported.
+
 ## Unreleased: protected policy discovery and reader fixes (2026-11-15)
 
 Treat only a missing selector as absence; denied or indeterminate metadata
