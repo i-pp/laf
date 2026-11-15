@@ -24,6 +24,21 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: explicit owner-daemon metadata binding (2026-11-15)
+
+Add a new-prefix orchestrator binding using the existing owner control socket.
+The portable profile retains its three read-only metadata tools and creates no
+task-write policy, mailbox authority or model selection. Old schema2 bindings
+remain valid. Configuration keeps the same atomic publication, immutable
+snapshot and unused-prefix checks.
+
+The printed daemon command can now select ordinary metadata mode without a
+Codex binding or native/account probe. Codex mode retains its explicit native
+pin and opt-in. Add configuration/refusal/source-fixture checks and document
+which optional backends need separate operator inputs. This updates
+the bootstrap, backend-state validator, license path declarations and minimum
+CI; it does not change scheduler implementation or configure a running service.
+
 ## Unreleased: bounded installed-package acceptance (2026-11-15)
 
 Add a private append-only receipt/request-key acceptance runner, regression

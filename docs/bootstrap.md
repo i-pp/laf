@@ -165,6 +165,27 @@ Its finite schema1 HostGateway policy has concurrency1, four thread records,
 sixteen task records and a120s turn budget. This does not change ordinary
 `maximum_sessions=8`, claim eight Codex turns, or establish provider quota.
 
+### Optional owner-daemon metadata
+
+Modification notice (2026-11-15): add explicit configuration of the three
+orchestrator metadata tools in the portable profile. Configure this before any
+daemon/database/receipt use, just like the other bindings:
+
+    python3 -B "$BOOT" configure-orchestrator --prefix "$PREFIX" --dry-run
+    python3 -B "$BOOT" configure-orchestrator --prefix "$PREFIX"
+
+This binds the existing owner-control-socket protocol to this prefix's own
+runtime. It does not connect a socket, adopt another runtime, start a service,
+create a task-write policy or submit work. Doctor reports configured but
+unprobed until the separately launched daemon is checked.
+
+With this binding and an existing SDK, daemon-command can emit ordinary metadata
+mode without a Codex native binding or account probe. When Codex is explicitly
+bound, it retains the pinned native and pipeline opt-in. Existing scheduler and
+resource configuration is unchanged. Ordinary tasks and Codex pipeline tasks
+have separate ledgers: an empty ordinary list is valid while Codex history
+exists. See [backend selection](backend-configuration.md) for the other groups.
+
 ### Atomic configuration and explicit daemon launch
 
 Modification notice (2026-11-15): added a read-only admission observation and

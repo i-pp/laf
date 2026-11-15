@@ -184,6 +184,16 @@ jobs:
           suite = unittest.defaultTestLoader.loadTestsFromName('test_installed_acceptance')
           print(run_checked(suite, 47, unittest.TextTestRunner(verbosity=2)))
           PYCODE
+      - name: Check explicit owner-daemon metadata binding offline
+        run: |
+          python3 -B - <<'PYCODE'
+          import sys
+          import unittest
+          sys.path.insert(0, 'scripts')
+          from run_integrated_source_checks import run_checked
+          suite = unittest.defaultTestLoader.loadTestsFromName('test_bootstrap_orchestrator')
+          print(run_checked(suite, 20, unittest.TextTestRunner(verbosity=2)))
+          PYCODE
 
   license:
     name: License policy checks
