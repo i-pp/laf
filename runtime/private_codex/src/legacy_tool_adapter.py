@@ -7,6 +7,7 @@ Do not edit the original worktree from here; later consolidation should factor
 this shared surface into a common module and remove the duplicate facade.
 """
 # Modified 2026-11-13: explicit NEW-prefix bootstrap/deny-all setup; legacy behavior retained.
+# Modified 2026-11-15: export only fixed scheduler task wait codes.
 
 import argparse
 import hashlib
@@ -25,6 +26,7 @@ import uuid
 
 from control_socket import request
 from storage import STATES
+from scheduler import TASK_WAIT_REASONS
 from verification import normalize_acceptance
 from workspaces import spec
 from chat_mailbox import Mailbox, MailboxError, TOOLS as MAILBOX_TOOLS, validate_arguments as mailbox_arguments
@@ -107,6 +109,9 @@ def task_view(task):
         if isinstance(block, dict) and block.get('reason_code') in (
                 'NESTED_ISOLATION_FORBIDDEN', 'ISOLATION_CONTEXT_UNKNOWN'):
             result['blocking_reason'] = block['reason_code']
+    reason = task.get('scheduler_wait_reason')
+    result['scheduler_wait_reason'] = (reason if task['state'] == 'QUEUED' and isinstance(reason, str)
+                                       and reason in TASK_WAIT_REASONS else None)
     for key in ['completion_verified', 'worker_pending']:
         result[key] = task.get(key) is True
     return result

@@ -20,6 +20,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Added 2026-11-13: ordinary-pool status evidence boundary regressions.
+# Modified 2026-11-15: fixed task wait codes through both facade boundaries.
 
 """Fake daemon only: status must reflect observed capacity, never fabricate2."""
 import copy
@@ -30,6 +31,7 @@ import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'runtime/private_codex/src'))
 import legacy_tool_adapter as legacy
 import mcp_adapter as http
+from scheduler import TASK_WAIT_REASONS
 TASK='00000000-0000-4000-8000-000000000001'
 class SessionStatusBoundary(unittest.TestCase):
     def call(self,module,raw):
@@ -69,4 +71,23 @@ class SessionStatusBoundary(unittest.TestCase):
             self.assertEqual(data['active_task_ids'],[TASK]);self.assertFalse(data['stopping'])
             self.assertNotIn('resource_policy',data);self.assertNotIn('worker_resource_policy',data)
         self.assertEqual(raw['active_tasks'],[TASK,'not-an-id'])
+    def test_fixed_wait_reasons_survive_both_task_projections(self):
+        for module in (legacy,http):
+            for reason in TASK_WAIT_REASONS:
+                with self.subTest(module=module.__name__,reason=reason):
+                    result=module.task_view({'id':TASK,'state':'QUEUED','scheduler_wait_reason':reason})
+                    self.assertEqual(result['scheduler_wait_reason'],reason)
+    def test_missing_unknown_and_malformed_wait_reasons_remain_unknown(self):
+        for module in (legacy,http):
+            for value in (None,True,123,'/private/runtime/task.log','provider-secret',[],{}):
+                with self.subTest(module=module.__name__,value=value):
+                    result=module.task_view({'id':TASK,'state':'QUEUED','scheduler_wait_reason':value,
+                                             'prompt':'private task','error':'private error'})
+                    self.assertIsNone(result['scheduler_wait_reason'])
+                    self.assertNotIn('prompt',result);self.assertNotIn('error',result)
+    def test_terminal_task_never_exports_a_stale_wait_code(self):
+        for module in (legacy,http):
+            for state in ('RUNNING','VERIFYING','UNKNOWN','CANCELLED','COMPLETED','FAILED'):
+                result=module.task_view({'id':TASK,'state':state,'scheduler_wait_reason':'workspace_busy'})
+                self.assertIsNone(result['scheduler_wait_reason'])
 if __name__=='__main__':unittest.main(verbosity=2)

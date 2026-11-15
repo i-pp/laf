@@ -1,6 +1,7 @@
 """One persistent FIFO dispatcher; task execution remains in the existing runner.
 
 Modified 2026-11-13: pin validated ordinary-pool policy and sample memory admission.
+Modified 2026-11-15: fixed, redacted task wait codes for queue observability.
 """
 
 from contextlib import ExitStack
@@ -20,6 +21,18 @@ from transport import proc_identity
 
 CONFIG = Path(__file__).resolve().parents[1] / "scheduler-config.json"
 MEMINFO = Path('/proc/meminfo')
+
+# Diagnostics only; none of these codes authorizes or releases an execution.
+TASK_WAIT_REASONS = frozenset({
+    'queue_pending', 'workspace_busy', 'unknown_workspace',
+    'exclusive_task_wait', 'exclusive_queue_barrier', 'exclusive_worker_active',
+    'session_pool_capacity', 'worker_pending', 'dispatch_record_retained',
+    'scheduler_paused', 'scheduler_stopping', 'recovery_pending',
+    'unreleased_unknown', 'unreconciled_unknown', 'storage_budget',
+    'pipeline_operation_unknown', 'pipeline_held', 'pipeline_recovery_pending',
+    'session_pool_policy_changed', 'session_pool_memory_headroom',
+    'external_active_owner', 'sqlite_locked',
+})
 
 
 class PoolPolicyError(RuntimeError):

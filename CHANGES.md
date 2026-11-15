@@ -24,6 +24,23 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: eligible ordinary queue dispatch
+
+Updated the vendored daemon to scan a finite FIFO horizon across independent
+SQLite pages, skip busy/protected workspaces and preserve no-workspace exclusive
+barriers. Retained dispatches, UNKNOWN recovery, policy generations, provider and
+resource guards remain enforced. Added fixed `scheduler_wait_reason` diagnostics
+to task status/list and both MCP facades, with fake-worker/SQLite and redaction
+regressions in the ordinary-pool and adapter boundary scripts. Updated the strict
+source inventory accordingly.
+
+`docs/ordinary-session-pool.md` describes the correction;
+`docs/resource-led-admission.md` defines the staged atomic CPU/RAM/GPU/VRAM and
+provider admission contract. The latter is not implemented by this change:
+existing local slots and whole-pool memory admission remain until a complete
+reservation protocol is verified. No live service, configuration or external
+state is changed by this source correction.
+
 ## Unreleased: optional shared rolling-pressure policy
 
 Add versioned opt-in Host/Core rolling swap policy, fresh admission and provider

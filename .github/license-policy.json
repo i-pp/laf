@@ -174,7 +174,8 @@
         "docs/bootstrap-policy-provenance.md",
         "inference/laf_service/swap_window.py",
         "inference/laf_service/test_swap_window.py",
-        "docs/validation/rolling-policy-lab.md"
+        "docs/validation/rolling-policy-lab.md",
+        "docs/resource-led-admission.md"
       ],
       "kind": "first_party",
       "license": "LicenseRef-KOL-v1",

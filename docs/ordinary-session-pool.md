@@ -23,6 +23,7 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 -->
 
 <!-- Added 2026-11-13: configurable ordinary-pool policy and source-only verification boundaries. -->
+<!-- Modified 2026-11-15: eligible queue scanning and staged resource-led admission. -->
 
 # Choose ordinary worker parallelism
 
@@ -60,8 +61,8 @@ Booleans, fractional values, strings, out-of-range limits, duplicate configurati
 fields and unreadable policy files are rejected. There is no fallback to 8.
 A fingerprint of the validated scheduler and runner resource policy, including
 the effective pipeline mode and daemon budget, pins each participating daemon
-and worker to one generation. Status, FIFO queue-page size, child admission and
-worker handoff use that generation's limit and budget. A missing, malformed or
+and worker to one generation. Status, child admission and worker handoff use that generation's limit and
+budget. Queue scan pages are independent of the worker ceiling. A missing, malformed or
 stale worker mode is rejected rather than replaced with the ordinary budget.
 
 An edited policy leaves status at the pinned limit and reports
@@ -77,6 +78,40 @@ Workers join a daemon only through its current-generation marker and matching
 handoff. This is not an automatic rolling-upgrade protocol: drain and inspect old
 participants before adopting new source, rather than restarting an old binary
 alongside new workers.
+
+## Eligible FIFO queue scanning
+
+The dispatcher examines queued tasks in submission row order, across fixed-size
+SQLite pages up to the rowid observed at the start of that tick. A busy workspace
+or a released UNKNOWN workspace without a matching `allow_resume` decision leaves
+that task queued and allows the scan to reach another eligible workspace. The
+page size limits each database result; it does not limit the candidates examined
+or the workers admitted. New arrivals beyond the horizon wait for the next tick.
+Older tasks in the same workspace keep their order when that workspace is free.
+
+A queued task without a workspace remains an exclusive FIFO barrier. When older
+workers are active, newer tasks wait so the pool can drain and the exclusive task
+can run alone. An active exclusive worker blocks every other ordinary dispatch.
+Unreleased UNKNOWN work, pending recovery, external active owners, policy changes,
+held pipelines, storage failures and memory uncertainty still block admission.
+Any retained dispatch record is excluded from fresh dispatch, including a task
+whose runner has not yet changed its database state from QUEUED.
+
+Task `status` and bounded `list` return `scheduler_wait_reason`. Both the stdio
+and HTTP task views export only the fixed codes in
+[`TASK_WAIT_REASONS`](../runtime/private_codex/src/scheduler.py); missing or unknown
+codes remain null. Codes include `workspace_busy`, `unknown_workspace`,
+`exclusive_task_wait`, `exclusive_queue_barrier`, `exclusive_worker_active`,
+`session_pool_capacity`, `worker_pending`, `dispatch_record_retained` and the
+existing global blocker names. `queue_pending` means the task has no more specific
+observation yet. Workspace and barrier codes describe the last tick; current
+pause, stopping and policy guards are checked on read. Non-queued tasks report
+null. Reading diagnostics neither dispatches work nor changes task state.
+
+These changes correct queue starvation within the existing guarded pool. The
+[resource-led admission contract](resource-led-admission.md) defines the staged
+replacement for fixed local slots and the whole-pool memory envelope. That
+replacement is not implemented by this queue correction.
 
 ## Held work still counts
 

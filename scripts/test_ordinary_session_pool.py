@@ -20,6 +20,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Added 2026-11-13: configurable ordinary-pool admission without real workers.
+# Modified 2026-11-15: eligible FIFO scanning and observable wait regressions.
 
 """Pure/fake/temp-file regressions; no socket, model, cgroup or child launch."""
 
@@ -569,7 +570,11 @@ class PoolDispatcher(PoolFixture):
             CREATE TABLE scheduler_state(id INTEGER, paused INTEGER);
             INSERT INTO scheduler_state VALUES(1,0);
             CREATE TABLE tasks(id TEXT PRIMARY KEY, state TEXT, workspace_id TEXT,
-                               resume_of TEXT, resume_approval TEXT);
+                               resume_of TEXT, resume_approval TEXT, active_execution_id TEXT,
+                               created REAL DEFAULT 0, updated REAL DEFAULT 0,
+                               codex_status TEXT DEFAULT 'NOT_STARTED',
+                               verification_status TEXT DEFAULT 'NOT_VERIFIED');
+            CREATE TABLE decisions(id TEXT, task_id TEXT, execution_id TEXT, kind TEXT);
             CREATE TABLE scheduler_options(task_id TEXT PRIMARY KEY, timeout REAL);
             CREATE TABLE scheduler_dispatches(task_id TEXT PRIMARY KEY, token TEXT,
                 owner TEXT, phase TEXT, processes TEXT, worker TEXT, resources TEXT,
@@ -577,14 +582,14 @@ class PoolDispatcher(PoolFixture):
         """)
         for number in range(1, maximum + 4):
             candidate = task(number)
-            db.execute("INSERT INTO tasks VALUES(?,'QUEUED',?,NULL,NULL)",
+            db.execute("INSERT INTO tasks(id,state,workspace_id) VALUES(?,'QUEUED',?)",
                        (candidate['id'], candidate['workspace_id']))
         db.commit()
         obj = object.__new__(daemon.Daemon)
         obj.settings = settings
         obj.root = self.root
-        obj.store = SimpleNamespace(db=db, get=lambda key: dict(db.execute(
-            'SELECT * FROM tasks WHERE id=?', (key,)).fetchone()))
+        obj.store = SimpleNamespace(db=db, get=lambda key: {**dict(db.execute(
+            'SELECT * FROM tasks WHERE id=?', (key,)).fetchone()), 'completion_verified': False})
         obj.runner = SimpleNamespace(development=False, root=self.root, store=obj.store,
                                      resource_limits=resources.policy())
         obj.owner = {}
@@ -603,14 +608,14 @@ class PoolDispatcher(PoolFixture):
         def start(candidate):
             obj.started.append(candidate['id'])
             obj.children[candidate['id']] = SimpleNamespace(closed=True)
-            db.execute('INSERT INTO scheduler_dispatches(task_id) VALUES(?)', (candidate['id'],))
+            db.execute("INSERT INTO scheduler_dispatches(task_id,phase) VALUES(?,'STARTED')", (candidate['id'],))
         obj.start_worker = start
         self.patched(patch.object(scheduler, 'recover_dispatches', return_value=[]))
         self.patched(patch.object(scheduler, 'blocked_unknown', return_value=([], set())))
         self.patched(patch.object(daemon, 'storage_check', return_value=None))
         return obj
 
-    def test_status_fifo_page_and_dispatch_agree_on_one_two_eight(self):
+    def test_status_and_dispatch_agree_on_one_two_eight(self):
         for maximum in (1, 2, 8):
             with self.subTest(maximum=maximum):
                 obj = self.fake_daemon(maximum)
@@ -619,16 +624,212 @@ class PoolDispatcher(PoolFixture):
                 self.assertEqual(obj.status()['maximum_sessions'], maximum)
                 obj.tick()
                 self.assertEqual(len(obj.started), maximum)
-                self.assertTrue(any('ORDER BY t.rowid LIMIT ' + str(maximum) in query
-                                    for query in statements))
+                self.assertTrue(any('ORDER BY t.rowid LIMIT 64' in query for query in statements))
                 obj.tick()
                 self.assertEqual(len(obj.started), maximum)
+
+    def active(self, obj, workspace, number=999):
+        retained = task(number)['id']
+        obj.store.db.execute("INSERT INTO tasks(id,state,workspace_id) VALUES(?,'RUNNING',?)",
+                             (retained, workspace))
+        obj.children[retained] = SimpleNamespace(closed=True)
+        return retained
+
+    def reason(self, obj, number):
+        return obj.handle('status', {'task_id': task(number)['id']})['scheduler_wait_reason']
+
+    def test_busy_workspace_does_not_starve_next_eligible_task_in_either_order(self):
+        for busy_first in (True, False):
+            with self.subTest(busy_first=busy_first):
+                obj = self.fake_daemon(2)
+                busy = task(50)['workspace_id']
+                self.active(obj, busy)
+                number = 1 if busy_first else 2
+                obj.store.db.execute('UPDATE tasks SET workspace_id=? WHERE id=?',
+                                     (busy, task(number)['id']))
+                obj.tick()
+                self.assertEqual(obj.started, [task(2 if busy_first else 1)['id']])
+                if busy_first:
+                    self.assertEqual(self.reason(obj, number), 'workspace_busy')
+                self.assertEqual(self.reason(obj, 3), 'session_pool_capacity')
+
+    def test_eligible_task_is_found_beyond_multiple_conflicting_pages(self):
+        obj = self.fake_daemon(2)
+        busy = task(50)['workspace_id']
+        self.active(obj, busy)
+        obj.store.db.execute("UPDATE tasks SET workspace_id=? WHERE state='QUEUED'", (busy,))
+        for number in range(10, 150):
+            obj.store.db.execute("INSERT INTO tasks(id,state,workspace_id) VALUES(?,'QUEUED',?)",
+                                 (task(number)['id'], busy))
+        obj.store.db.execute("INSERT INTO tasks(id,state,workspace_id) VALUES(?,'QUEUED',?)",
+                             (task(200)['id'], task(200)['workspace_id']))
+        obj.tick()
+        self.assertEqual(obj.started, [task(200)['id']])
+        self.assertEqual(self.reason(obj, 100), 'workspace_busy')
+
+    def test_unknown_workspace_without_matching_approval_is_skipped(self):
+        obj = self.fake_daemon(2)
+        protected = task(1)['workspace_id']
+        with patch.object(scheduler, 'blocked_unknown', return_value=([], {protected})):
+            obj.tick()
+        self.assertEqual(obj.started, [task(2)['id'], task(3)['id']])
+        self.assertEqual(self.reason(obj, 1), 'unknown_workspace')
+        self.assertTrue(obj.ordinary_busy())
+
+    def test_unknown_resume_approval_must_match_source_active_execution(self):
+        for variant in ('valid', 'old_execution', 'wrong_source', 'wrong_kind'):
+            with self.subTest(variant=variant):
+                obj = self.fake_daemon(1)
+                source = task(4)['id']
+                execution = task(500)['id']
+                obj.store.db.execute('UPDATE tasks SET active_execution_id=? WHERE id=?',
+                                     (execution, source))
+                obj.store.db.execute('UPDATE tasks SET resume_of=?,resume_approval=? WHERE id=?',
+                                     (source, 'approval', task(1)['id']))
+                obj.store.db.execute('INSERT INTO decisions VALUES(?,?,?,?)',
+                    ('approval', task(3)['id'] if variant == 'wrong_source' else source,
+                     task(501)['id'] if variant == 'old_execution' else execution,
+                     'reject' if variant == 'wrong_kind' else 'allow_resume'))
+                with patch.object(scheduler, 'blocked_unknown', return_value=([], {task(1)['workspace_id']})):
+                    obj.tick()
+                self.assertEqual(obj.started, [task(1 if variant == 'valid' else 2)['id']])
+
+    def test_approved_resume_still_cannot_share_an_active_workspace(self):
+        obj = self.fake_daemon(2)
+        workspace = task(1)['workspace_id']
+        source = self.active(obj, workspace)
+        obj.store.db.execute('UPDATE tasks SET active_execution_id=? WHERE id=?', ('execution', source))
+        obj.store.db.execute('UPDATE tasks SET resume_of=?,resume_approval=? WHERE id=?',
+                             (source, 'approval', task(1)['id']))
+        obj.store.db.execute("INSERT INTO decisions VALUES('approval',?,'execution','allow_resume')", (source,))
+        with patch.object(scheduler, 'blocked_unknown', return_value=([], {workspace})):
+            obj.tick()
+        self.assertEqual(obj.started, [task(2)['id']])
+        self.assertEqual(self.reason(obj, 1), 'workspace_busy')
+
+    def test_unreleased_unknown_and_recovery_pending_remain_global_blockers(self):
+        obj = self.fake_daemon(2)
+        with patch.object(scheduler, 'blocked_unknown', return_value=(['unreleased'], set())):
+            obj.tick()
+        self.assertEqual(obj.started, [])
+        self.assertEqual(self.reason(obj, 1), 'unreleased_unknown')
+        with patch.object(scheduler, 'recover_dispatches', return_value=['pending']):
+            obj.tick()
+        self.assertEqual(obj.started, [])
+        self.assertEqual(self.reason(obj, 1), 'recovery_pending')
+
+    def test_exclusive_task_is_a_fifo_barrier_until_workers_drain(self):
+        obj = self.fake_daemon(2)
+        retained = self.active(obj, task(99)['workspace_id'])
+        obj.store.db.execute('UPDATE tasks SET workspace_id=NULL WHERE id=?', (task(1)['id'],))
+        obj.tick()
+        self.assertEqual(obj.started, [])
+        self.assertEqual(self.reason(obj, 1), 'exclusive_task_wait')
+        self.assertEqual(self.reason(obj, 2), 'exclusive_queue_barrier')
+        del obj.children[retained]
+        obj.store.db.execute("UPDATE tasks SET state='COMPLETED' WHERE id=?", (retained,))
+        obj.tick()
+        self.assertEqual(obj.started, [task(1)['id']])
+        self.assertEqual(self.reason(obj, 2), 'exclusive_worker_active')
+
+    def test_active_exclusive_worker_prevents_all_other_dispatch(self):
+        obj = self.fake_daemon(2)
+        self.active(obj, None)
+        obj.tick()
+        self.assertEqual(obj.started, [])
+        self.assertEqual(self.reason(obj, 1), 'exclusive_worker_active')
+
+    def test_oldest_eligible_task_keeps_workspace_order_after_release(self):
+        obj = self.fake_daemon(2)
+        busy = task(1)['workspace_id']
+        retained = self.active(obj, busy)
+        obj.store.db.execute('UPDATE tasks SET workspace_id=? WHERE id=?', (busy, task(2)['id']))
+        obj.tick()
+        self.assertEqual(obj.started, [task(3)['id']])
+        obj.children.clear()
+        obj.store.db.execute("UPDATE tasks SET state='COMPLETED' WHERE id IN (?,?)", (retained, task(3)['id']))
+        obj.tick()
+        self.assertEqual(obj.started, [task(3)['id'], task(1)['id'], task(4)['id']])
+        self.assertEqual(self.reason(obj, 2), 'workspace_busy')
+
+    def test_retained_dispatch_is_never_replayed_and_reason_is_observable(self):
+        obj = self.fake_daemon(2)
+        obj.store.db.execute("INSERT INTO scheduler_dispatches(task_id,phase) VALUES(?,'STARTED')", (task(1)['id'],))
+        obj.tick()
+        self.assertNotIn(task(1)['id'], obj.started)
+        self.assertEqual(self.reason(obj, 1), 'worker_pending')
+        obj.store.db.execute("UPDATE scheduler_dispatches SET phase='FINISHED' WHERE task_id=?", (task(1)['id'],))
+        self.assertEqual(self.reason(obj, 1), 'dispatch_record_retained')
+
+    def test_wait_reason_is_readable_in_bounded_list_and_clears_on_terminal_state(self):
+        obj = self.fake_daemon(2)
+        self.active(obj, task(1)['workspace_id'])
+        obj.tick()
+        listed = obj.handle('list', {'limit': 2})
+        self.assertEqual(listed[0]['scheduler_wait_reason'], 'workspace_busy')
+        self.assertEqual(listed[1]['scheduler_wait_reason'], 'worker_pending')
+        obj.store.db.execute("UPDATE tasks SET state='CANCELLED' WHERE id=?", (task(1)['id'],))
+        self.assertIsNone(self.reason(obj, 1))
+
+    def test_wait_reads_compose_with_both_facades_without_dispatch_or_mutation(self):
+        import legacy_tool_adapter
+        import mcp_adapter
+        obj = self.fake_daemon(2)
+        self.active(obj, task(1)['workspace_id'])
+        obj.tick()
+        before = obj.store.db.total_changes
+        started = list(obj.started)
+        for module in (legacy_tool_adapter, mcp_adapter):
+            adapter = object.__new__(module.Adapter)
+            adapter.unconfigured = frozenset()
+            adapter.tools = module.tool_definitions()
+            adapter.shared_tool_names = set()
+            adapter.audit = SimpleNamespace(tell=lambda: 0)
+            adapter.record = lambda *args, **kwargs: None
+            adapter.daemon = obj.handle
+            result = adapter.call_tool('orchestrator_get_task', {'task_id': task(1)['id']}, 1)
+            self.assertFalse(result['isError'])
+            self.assertEqual(result['structuredContent']['data']['scheduler_wait_reason'], 'workspace_busy')
+            result = adapter.call_tool('orchestrator_list_tasks', {'limit': 2}, 2)
+            self.assertFalse(result['isError'])
+            self.assertEqual([t['scheduler_wait_reason'] for t in result['structuredContent']['data']['tasks']],
+                             ['workspace_busy', 'worker_pending'])
+        self.assertEqual(obj.store.db.total_changes, before)
+        self.assertEqual(obj.started, started)
+
+    def test_pause_pipeline_and_external_active_owner_are_observable(self):
+        obj = self.fake_daemon(2)
+        obj.store.db.execute('UPDATE scheduler_state SET paused=1')
+        obj.tick()
+        self.assertEqual(self.reason(obj, 1), 'scheduler_paused')
+        obj.store.db.execute('UPDATE scheduler_state SET paused=0')
+        obj.pipeline.held = True
+        obj.tick()
+        self.assertEqual(self.reason(obj, 1), 'pipeline_held')
+        obj.pipeline.held = False
+        self.active(obj, task(99)['workspace_id'])
+        obj.children.clear()
+        obj.tick()
+        self.assertEqual(obj.started, [])
+        self.assertEqual(self.reason(obj, 1), 'external_active_owner')
+
+    def test_admission_failure_stops_scan_and_preserves_existing_children(self):
+        for error, reason in ((resources.ResourceExceeded('fixture'), 'session_pool_memory_headroom'),
+                              (scheduler.PoolPolicyError('fixture'), 'session_pool_policy_changed')):
+            with self.subTest(reason=reason):
+                obj = self.fake_daemon(2)
+                retained = self.active(obj, task(99)['workspace_id'])
+                obj.start_worker = Mock(side_effect=error)
+                obj.tick()
+                self.assertEqual(obj.start_worker.call_count, 1)
+                self.assertEqual(self.reason(obj, 1), reason)
+                self.assertEqual(list(obj.children), [retained])
 
     def test_changed_generation_blocks_dispatch_without_stopping_children(self):
         obj = self.fake_daemon(8)
         retained = task(999)['id']
         obj.children[retained] = SimpleNamespace(closed=True)
-        obj.store.db.execute("INSERT INTO tasks VALUES(?,'RUNNING',?,NULL,NULL)",
+        obj.store.db.execute("INSERT INTO tasks(id,state,workspace_id) VALUES(?,'RUNNING',?)",
                              (retained, task(999)['workspace_id']))
         self.write_config(1)
         obj.tick()
@@ -655,7 +856,7 @@ class PoolDispatcher(PoolFixture):
         obj = self.fake_daemon(8)
         retained = task(999)['id']
         obj.children[retained] = SimpleNamespace(closed=True)
-        obj.store.db.execute("INSERT INTO tasks VALUES(?,'RUNNING',?,NULL,NULL)",
+        obj.store.db.execute("INSERT INTO tasks(id,state,workspace_id) VALUES(?,'RUNNING',?)",
                              (retained, task(999)['workspace_id']))
         raw = self.write_config(8)
         raw['poll_seconds'] = 10**400

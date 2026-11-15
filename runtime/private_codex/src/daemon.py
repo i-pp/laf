@@ -1,6 +1,7 @@
 """Foreground daemon core: private local socket and a pinned guarded-worker pool.
 
 Modified 2026-11-13: configurable ordinary capacity with fail-closed generation admission.
+Modified 2026-11-15: scan eligible FIFO pages and expose bounded task wait codes.
 """
 
 from contextlib import ExitStack
@@ -46,6 +47,8 @@ class Daemon:
             self.children = {}
             self.stopping = False
             self.blocked = []
+            self.task_waits = {}
+            self.queue_wait = 'queue_pending'
             self.pending_recovery = []
             self.reconciled_unknowns = set()
             self.selector = selectors.DefaultSelector()
@@ -113,8 +116,31 @@ class Daemon:
 
     def ordinary_busy(self):
         return bool(not self.pool_policy_current() or self.stopping or self.children or self.blocked or self.pending_recovery
+            or 'unknown_workspace' in getattr(self, 'task_waits', {}).values()
             or self.store.db.execute("SELECT paused FROM scheduler_state WHERE id=1").fetchone()[0]
             or self.store.db.execute("SELECT 1 FROM tasks WHERE state IN ('RUNNING','VERIFYING') LIMIT 1").fetchone())
+
+    def task_wait_reason(self, task):
+        """Last tick's queue observation plus current read-only global guards.
+
+        This is diagnostic evidence, never a reservation or a promise to start.
+        Retained handoffs take precedence and can never become ordinary queue work.
+        """
+        if task['state'] != 'QUEUED': return None
+        dispatch = self.store.db.execute('SELECT phase FROM scheduler_dispatches WHERE task_id=?',
+                                         (task['id'],)).fetchone()
+        if dispatch:
+            return ('worker_pending' if dispatch[0] in ('RESERVED', 'STARTED', 'AUTHORIZED')
+                    else 'dispatch_record_retained')
+        if self.stopping: return 'scheduler_stopping'
+        if self.store.db.execute('SELECT paused FROM scheduler_state WHERE id=1').fetchone()[0]:
+            return 'scheduler_paused'
+        if not self.pool_policy_current(): return 'session_pool_policy_changed'
+        if self.blocked: return self.blocked[0]
+        reason = getattr(self, 'task_waits', {}).get(task['id'])
+        if reason: return reason
+        if len(self.children) >= self.settings['maximum_sessions']: return 'session_pool_capacity'
+        return getattr(self, 'queue_wait', 'queue_pending')
 
     def handle(self, method, params):
         if not isinstance(params, dict): raise ValueError("params must be an object")
@@ -172,6 +198,7 @@ class Daemon:
                 task["scheduler_timeout"] = option[0] if option else None
                 task["worker_pending"] = bool(dispatch and dispatch[0] in ["RESERVED", "STARTED", "AUTHORIZED"])
                 task["completion_verified"] &= not task["worker_pending"]
+                task["scheduler_wait_reason"] = self.task_wait_reason(task)
                 return task
             return self.status()
         if method == "list":
@@ -180,8 +207,10 @@ class Daemon:
             offset = params.get("offset", 0)
             if type(limit) is not int or not 1 <= limit <= 100: raise ValueError("limit must be 1..100")
             if type(offset) is not int or not 0 <= offset <= 1000000: raise ValueError("Invalid list offset")
-            return [dict(r) for r in self.store.db.execute("""SELECT id,state,created,updated,workspace_id,
+            tasks = [dict(r) for r in self.store.db.execute("""SELECT id,state,created,updated,workspace_id,
                 codex_status,verification_status FROM tasks ORDER BY rowid LIMIT ? OFFSET ?""", (limit, offset))]
+            for task in tasks: task['scheduler_wait_reason'] = self.task_wait_reason(task)
+            return tasks
         if method == "cancel":
             if set(params) != {"task_id"}: raise ValueError("cancel requires only task_id")
             return self.store.cancel(params["task_id"])
@@ -266,6 +295,8 @@ class Daemon:
             del self.children[task_id]
 
     def tick(self):
+        self.task_waits = {}
+        self.queue_wait = 'queue_pending'
         for task_id, child in self.children.items():
             if not child.closed:
                 child.observe_children(persist=False)
@@ -286,7 +317,8 @@ class Daemon:
         if self.pipeline is not None:
             try: self.pipeline.pump()
             except (OSError, ValueError, RuntimeError, sqlite3.Error): self.blocked.append('pipeline_operation_unknown')
-            if self.pipeline.held: return
+            if self.pipeline.held:
+                self.blocked.append('pipeline_held'); return
         else:
             from codex_host import pipeline_held
             if pipeline_held(self.root):
@@ -300,27 +332,45 @@ class Daemon:
         active = [dict(r) for r in self.store.db.execute("SELECT * FROM tasks WHERE state IN ('RUNNING','VERIFYING')")]
         if any(t["id"] not in self.children for t in active):
             self.blocked.append("external_active_owner"); return
-        if any(not self.store.get(t)["workspace_id"] for t in self.children): return
-        rows = self.store.db.execute("""SELECT t.* FROM tasks t WHERE state='QUEUED' AND NOT EXISTS
-            (SELECT 1 FROM scheduler_dispatches d WHERE d.task_id=t.id) ORDER BY t.rowid LIMIT ?""", (self.settings["maximum_sessions"],)).fetchall()
-        for row in rows:
-            if len(self.children) >= self.settings["maximum_sessions"]: break
-            task = dict(row)
-            if task["workspace_id"] in protected_workspaces:
-                approval = self.store.db.execute("""SELECT 1 FROM decisions d JOIN tasks s ON s.id=d.task_id
-                    WHERE d.id=? AND d.kind='allow_resume' AND d.task_id=? AND d.execution_id=s.active_execution_id""",
-                    (task["resume_approval"], task["resume_of"])).fetchone()
-                if not approval:
-                    self.blocked.append("unknown_workspace"); break
-            if not task["workspace_id"] and self.children: break
-            if task["workspace_id"] and any(self.store.get(t)["workspace_id"] == task["workspace_id"] for t in self.children): break
-            try:
-                self.start_worker(task)
-            except scheduler.PoolPolicyError:
-                self.blocked.append('session_pool_policy_changed'); break
-            except ResourceExceeded:
-                self.blocked.append('session_pool_memory_headroom'); break
-            if not task["workspace_id"]: break
+        if any(not self.store.get(t)["workspace_id"] for t in self.children):
+            self.blocked.append('exclusive_worker_active'); return
+        # A finite rowid horizon prevents a growing queue from extending this tick.
+        # Page size bounds each SQLite result, independently of worker capacity.
+        last = 0
+        horizon = self.store.db.execute('SELECT coalesce(max(rowid),0) FROM tasks').fetchone()[0]
+        while len(self.children) < self.settings['maximum_sessions']:
+            rows = self.store.db.execute("""SELECT t.rowid AS queue_rowid,t.* FROM tasks t
+                WHERE state='QUEUED' AND t.rowid>? AND t.rowid<=? AND NOT EXISTS
+                (SELECT 1 FROM scheduler_dispatches d WHERE d.task_id=t.id)
+                ORDER BY t.rowid LIMIT 64""", (last, horizon)).fetchall()
+            if not rows: return
+            for row in rows:
+                if len(self.children) >= self.settings['maximum_sessions']: return
+                task = dict(row)
+                last = task.pop('queue_rowid')
+                if task['workspace_id'] in protected_workspaces:
+                    approval = self.store.db.execute("""SELECT 1 FROM decisions d JOIN tasks s ON s.id=d.task_id
+                        WHERE d.id=? AND d.kind='allow_resume' AND d.task_id=? AND d.execution_id=s.active_execution_id""",
+                        (task['resume_approval'], task['resume_of'])).fetchone()
+                    if not approval:
+                        self.task_waits[task['id']] = 'unknown_workspace'; continue
+                if not task['workspace_id'] and self.children:
+                    # An exclusive task is a FIFO barrier so later arrivals cannot
+                    # keep the pool occupied and starve its opportunity to run alone.
+                    self.task_waits[task['id']] = 'exclusive_task_wait'
+                    self.queue_wait = 'exclusive_queue_barrier'
+                    return
+                if task['workspace_id'] and any(self.store.get(t)['workspace_id'] == task['workspace_id']
+                                                for t in self.children):
+                    self.task_waits[task['id']] = 'workspace_busy'; continue
+                try:
+                    self.start_worker(task)
+                except scheduler.PoolPolicyError:
+                    self.blocked.append('session_pool_policy_changed'); return
+                except ResourceExceeded:
+                    self.blocked.append('session_pool_memory_headroom'); return
+                if not task['workspace_id']:
+                    self.queue_wait = 'exclusive_worker_active'; return
 
     def close_client(self, connection):
         self.selector.unregister(connection)

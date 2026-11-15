@@ -1,5 +1,6 @@
 """Bounded MCP facade; stdio default, optional loopback HTTP, no resident scheduler."""
 # Modified 2026-11-13: explicit NEW-prefix bootstrap/deny-all setup; legacy behavior retained.
+# Modified 2026-11-15: export only fixed scheduler task wait codes.
 
 # Modified 2026-11-13: bounded owner pages/catalog ACL parity and proof-bound blocked-input origins.
 import argparse
@@ -24,6 +25,7 @@ from local_principal import LocalPrincipal, OAuthPrincipal, current_local_princi
 from notification_outbox import NotificationError
 from runtime_scope import resolve_project_root, runtime_path
 from storage import STATES
+from scheduler import TASK_WAIT_REASONS
 from verification import normalize_acceptance
 from workspaces import spec
 from chat_mailbox import Mailbox, MailboxError, TOOLS as MAILBOX_TOOLS, validate_arguments as mailbox_arguments
@@ -97,6 +99,9 @@ def task_view(task):
     }
     for key, values in enums.items():
         result[key] = task.get(key) if task.get(key) in values else None
+    reason = task.get('scheduler_wait_reason')
+    result['scheduler_wait_reason'] = (reason if task['state'] == 'QUEUED' and isinstance(reason, str)
+                                       and reason in TASK_WAIT_REASONS else None)
     for key in ['completion_verified', 'worker_pending']:
         result[key] = task.get(key) is True
     return result
