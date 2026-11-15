@@ -140,9 +140,12 @@ class Daemon:
         if self.blocked: return self.blocked[0]
         reason = getattr(self, 'task_waits', {}).get(task['id'])
         if reason: return reason
-        if task['workspace_id'] in getattr(self, 'busy_workspaces', set()): return 'workspace_busy'
+        if task['workspace_id'] and task['workspace_id'] in getattr(self, 'busy_workspaces', set()):
+            return 'workspace_busy'
+        queue_wait = getattr(self, 'queue_wait', 'queue_pending')
+        if queue_wait != 'queue_pending': return queue_wait
         if len(self.children) >= self.settings['maximum_sessions']: return 'session_pool_capacity'
-        return getattr(self, 'queue_wait', 'queue_pending')
+        return queue_wait
 
     def handle(self, method, params):
         if not isinstance(params, dict): raise ValueError("params must be an object")

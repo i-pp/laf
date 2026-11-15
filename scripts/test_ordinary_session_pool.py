@@ -739,6 +739,16 @@ class PoolDispatcher(PoolFixture):
         self.assertEqual(obj.started, [])
         self.assertEqual(self.reason(obj, 1), 'exclusive_worker_active')
 
+    def test_second_exclusive_task_reports_exclusive_worker_even_at_capacity(self):
+        for maximum in (1, 2, 8):
+            with self.subTest(maximum=maximum):
+                obj = self.fake_daemon(maximum)
+                obj.store.db.execute('UPDATE tasks SET workspace_id=NULL WHERE id IN (?,?)',
+                                     (task(1)['id'], task(2)['id']))
+                obj.tick()
+                self.assertEqual(obj.started, [task(1)['id']])
+                self.assertEqual(self.reason(obj, 2), 'exclusive_worker_active')
+
     def test_oldest_eligible_task_keeps_workspace_order_after_release(self):
         obj = self.fake_daemon(2)
         busy = task(1)['workspace_id']
