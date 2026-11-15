@@ -22,6 +22,7 @@
 # Added 2026-11-12: always-run, offline minimum CI; not hardware or release acceptance.
 # Modified 2026-11-15: include installed-acceptance offline refusal regressions.
 # Modified 2026-11-15: provision FD-bind-capable Bubblewrap on the hosted source runner.
+# Modified 2026-11-15: create protected SDK test fixtures with an explicit caller umask.
 
 name: Minimum source CI
 
@@ -131,6 +132,7 @@ jobs:
           PYCODE
       - name: Run SDK installer regressions without installing the SDK
         run: |
+          umask 0022
           python3 -B - <<'PYCODE'
           import json
           import unittest
