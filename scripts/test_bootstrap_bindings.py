@@ -330,4 +330,108 @@ class NativeSnapshotTests(unittest.TestCase):
   with self.assertRaises((OSError,ValueError)):boot.snapshot_codex(self.prefix,source=link/'codex',expected_sha256=self.digest)
   self.assertFalse((self.prefix/'bin').exists());self.assertEqual(source.read_bytes(),self.native.read_bytes())
 
+ def host_source(self):
+  p=self.parent/'installed-code-mode-host';p.write_bytes(b'\x7fELFsynthetic-code-mode-host');p.chmod(0o775)
+  return p,hashlib.sha256(p.read_bytes()).hexdigest()
+ def pair(self,**kw):
+  host,sha=self.host_source()
+  result=self.snapshot(code_mode_host_source=host,code_mode_host_sha256=sha,**kw)
+  return host,sha,result
+ def bind_pair(self,*,imported=False):
+  host,sha,result=self.pair();main=self.prefix/'bin/codex';helper=self.prefix/'bin/codex-code-mode-host'
+  args={'binary':main,'binary_sha256':self.digest,'code_mode_host':helper,'code_mode_host_sha256':sha}
+  if imported:
+   policy={'schema':2,'workspaces':{'e2e':str(self.prefix/'workspace')},'models':['opaque.Sol:raw'],'max_threads':4,'max_tasks':16,'concurrency':2,'timeout_seconds':120}
+   source=self.parent/'operator-policy.json';source.write_text(json.dumps(policy));source.chmod(0o600)
+   args.update(policy_file=source,policy_sha256=hashlib.sha256(source.read_bytes()).hexdigest())
+  else:args.update(workspace=self.prefix/'workspace',models=['opaque.Sol:raw'])
+  boot.configure_codex(self.prefix,**args)
+  return main,helper,sha
+ def test_pair_snapshot_is_explicit_private_and_does_not_execute(self):
+  host,sha=self.host_source();before=host.read_bytes()
+  planned=self.snapshot(code_mode_host_source=host,code_mode_host_sha256=sha,dry_run=True)
+  self.assertEqual(planned['code_mode_host']['sha256'],sha);self.assertFalse((self.prefix/'bin').exists())
+  result=self.snapshot(code_mode_host_source=host,code_mode_host_sha256=sha)
+  for name,data in (('codex',self.native.read_bytes()),('codex-code-mode-host',before)):
+   p=self.prefix/'bin'/name;self.assertEqual(p.read_bytes(),data);self.assertEqual(stat.S_IMODE(p.stat().st_mode),0o500);self.assertEqual(p.stat().st_nlink,1)
+  self.assertEqual(host.read_bytes(),before);self.assertEqual(stat.S_IMODE(host.stat().st_mode),0o775)
+  self.assertFalse(result['executed']);self.assertFalse(result['native_version_verified'])
+ def test_pair_partial_flags_bad_hash_and_symlink_preserve_destination(self):
+  host,sha=self.host_source();link=self.parent/'host-link';link.symlink_to(host)
+  for args in ({'code_mode_host_source':host},{'code_mode_host_sha256':sha},
+               {'code_mode_host_source':host,'code_mode_host_sha256':'0'*64},
+               {'code_mode_host_source':link,'code_mode_host_sha256':sha}):
+   with self.subTest(args=args),self.assertRaises((ValueError,OSError)):self.snapshot(**args)
+   self.assertFalse((self.prefix/'bin').exists())
+ def test_pair_second_copy_failure_rolls_back_both_new_files(self):
+  host,sha=self.host_source();real=boot._write_all;calls=[]
+  def fail_second(fd,raw):
+   calls.append(True)
+   if len(calls)==2:raise OSError('synthetic second-copy failure')
+   return real(fd,raw)
+  with patch.object(boot,'_write_all',side_effect=fail_second),self.assertRaises(OSError):
+   self.snapshot(code_mode_host_source=host,code_mode_host_sha256=sha)
+  self.assertEqual(len(calls),2);self.assertFalse((self.prefix/'bin').exists())
+  self.assertEqual(hashlib.sha256(host.read_bytes()).hexdigest(),sha)
+ def test_pair_rollback_does_not_remove_unrelated_actor_file(self):
+  host,sha=self.host_source();real=boot._write_all;calls=[]
+  def fail_second(fd,raw):
+   calls.append(True)
+   if len(calls)==2:
+    (self.prefix/'bin/keep').write_bytes(b'preserve unrelated data')
+    raise OSError('synthetic second-copy failure')
+   return real(fd,raw)
+  with patch.object(boot,'_write_all',side_effect=fail_second),self.assertRaises(OSError):
+   self.snapshot(code_mode_host_source=host,code_mode_host_sha256=sha)
+  self.assertEqual(sorted(p.name for p in (self.prefix/'bin').iterdir()),['keep'])
+  self.assertEqual((self.prefix/'bin/keep').read_bytes(),b'preserve unrelated data')
+ def test_pair_binding_verifies_both_hashes_and_rejects_helper_drift(self):
+  from codex_host import executor_snapshot,PipelineError
+  import codex_host
+  main,helper,sha=self.bind_pair();selected=self.marker.read_bytes()
+  self.assertEqual(self.state()['codex']['code_mode_host']['binary_sha256'],sha)
+  with patch.object(codex_host,'binary_snapshot',wraps=codex_host.binary_snapshot) as checked:
+   executor_snapshot(self.runtime,str(main))
+  self.assertEqual(checked.call_args_list,[unittest.mock.call(str(main),self.digest),unittest.mock.call(str(helper),sha)])
+  helper.chmod(0o700);helper.write_bytes(b'\x7fELFchanged companion');helper.chmod(0o500)
+  with self.assertRaises(PipelineError):executor_snapshot(self.runtime,str(main))
+  self.assertEqual(self.marker.read_bytes(),selected)
+ def test_pair_binding_missing_or_replaced_helper_refuses_before_transport(self):
+  from codex_host import executor_snapshot,PipelineError
+  main,helper,sha=self.bind_pair();original=helper.read_bytes();helper.unlink()
+  with self.assertRaises(PipelineError):executor_snapshot(self.runtime,str(main))
+  helper.write_bytes(original);helper.chmod(0o500)
+  with self.assertRaises(PipelineError):executor_snapshot(self.runtime,str(main))
+ def test_declared_absence_refuses_later_unpinned_sibling(self):
+  from codex_host import executor_snapshot,PipelineError
+  self.codex();self.assertIsNone(self.state()['codex']['code_mode_host'])
+  helper=self.native.with_name('codex-code-mode-host');helper.write_bytes(b'\x7fELFunpinned');helper.chmod(0o500)
+  with self.assertRaisesRegex(PipelineError,'UNPINNED_NATIVE_COMPANION'):executor_snapshot(self.runtime,str(self.native))
+ def test_old_binding_without_companion_field_keeps_metadata_compatibility(self):
+  from codex_host import executor_snapshot
+  self.codex();value=self.state();value['codex'].pop('code_mode_host');self.marker.write_text(json.dumps(value));self.marker.chmod(0o600)
+  self.assertEqual(executor_snapshot(self.runtime,str(self.native))['binary_sha256'],self.digest)
+ def test_pair_supports_schema2_private_policy_without_finite_slot_changes(self):
+  from codex_host import executor_snapshot
+  main,helper,sha=self.bind_pair(imported=True);value=self.state()['codex']
+  self.assertEqual(value['policy']['schema'],2);self.assertEqual(value['policy']['concurrency'],2)
+  self.assertEqual(value['code_mode_host']['binary'],str(helper));executor_snapshot(self.runtime,str(main))
+ def test_cli_companion_pairs_are_action_scoped_and_dry_run_only(self):
+  from contextlib import redirect_stdout,redirect_stderr
+  import io
+  host,sha=self.host_source();base=['snapshot-codex','--prefix',str(self.prefix),'--source',str(self.native),'--sha256',self.digest]
+  with redirect_stdout(io.StringIO()),redirect_stderr(io.StringIO()):
+   self.assertEqual(boot.main(base+['--code-mode-host-source',str(host),'--dry-run']),1)
+   self.assertEqual(boot.main(base+['--code-mode-host-source',str(host),'--code-mode-host-sha256',sha,'--dry-run']),0)
+   self.assertEqual(boot.main(base+['--code-mode-host',str(host),'--code-mode-host-sha256',sha,'--dry-run']),1)
+  self.assertFalse((self.prefix/'bin').exists())
+
+ def test_cli_configure_forwards_the_selected_companion(self):
+  from contextlib import redirect_stdout,redirect_stderr
+  import io
+  host,sha,result=self.pair();main=self.prefix/'bin/codex';helper=self.prefix/'bin/codex-code-mode-host'
+  args=['configure-codex','--prefix',str(self.prefix),'--native',str(main),'--sha256',self.digest,'--code-mode-host',str(helper),'--code-mode-host-sha256',sha,'--workspace',str(self.prefix/'workspace'),'--model','opaque.Sol:raw']
+  with redirect_stdout(io.StringIO()),redirect_stderr(io.StringIO()):self.assertEqual(boot.main(args),0)
+  self.assertEqual(self.state()['codex']['code_mode_host']['binary_sha256'],sha)
+
 if __name__=='__main__':unittest.main(verbosity=2)

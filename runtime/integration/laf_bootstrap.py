@@ -21,6 +21,7 @@
 # Scope: this newly authored file only; imported private source is not relicensed.
 # Modified 2026-11-15: report guarded host admission without starting a daemon.
 # Modified 2026-11-15: configure the existing owner-daemon metadata interface explicitly.
+# Modified 2026-11-16: copy and pin an explicitly selected native code-mode companion.
 """Prepare a NEW owner-only runtime prefix from source. Never start or install."""
 import argparse
 import ast
@@ -485,10 +486,10 @@ def configure_resource_policy(prefix,*,policy_file,policy_sha256,dry_run=False):
  return _binding_change(prefix,'resource_scheduler','scheduler',binding,dry_run=dry_run)
 
 def configure_codex(prefix,*,binary,binary_sha256,workspace=None,models=None,
-                    policy_file=None,policy_sha256=None,dry_run=False):
+                    policy_file=None,policy_sha256=None,code_mode_host=None,code_mode_host_sha256=None,dry_run=False):
  _operator_imports()
  from backend_state import file_identity
- from codex_host import binary_snapshot
+ from codex_host import binary_snapshot,native_companion_snapshot
  from codex_pipeline import validate_policy
  prefix=Path(prefix);path=Path(binary)
  imported=policy_file is not None or policy_sha256 is not None
@@ -500,6 +501,9 @@ def configure_codex(prefix,*,binary,binary_sha256,workspace=None,models=None,
   workspace=Path(workspace)
   if workspace!=prefix/'workspace':raise BootstrapError('Explicit dedicated prefix/workspace required')
  if type(binary_sha256) is not str or not re.fullmatch('[a-f0-9]{64}',binary_sha256):raise BootstrapError('Expected native SHA256 required')
+ if (code_mode_host is None)!=(code_mode_host_sha256 is None):raise BootstrapError('Explicit code-mode host and SHA256 required together')
+ if code_mode_host is not None and (Path(code_mode_host)!=path.with_name('codex-code-mode-host') or type(code_mode_host_sha256) is not str or not re.fullmatch('[a-f0-9]{64}',code_mode_host_sha256)):
+  raise BootstrapError('Explicit sibling code-mode host and SHA256 required')
  canary=None if imported else validate_policy({'schema':1,'workspaces':{'default':str(workspace)},'models':models,
                          'max_threads':4,'max_tasks':16,'concurrency':1,'timeout_seconds':120})
  def binding():
@@ -508,7 +512,11 @@ def configure_codex(prefix,*,binary,binary_sha256,workspace=None,models=None,
   if not 4<=info.st_size<=NATIVE_LIMIT:raise BootstrapError('Native binary exceeds the explicit bound')
   before=file_identity(info);binary_snapshot(str(path),binary_sha256)
   if file_identity(path.lstat())!=before:raise BootstrapError('Native binary changed during validation')
-  value={'binary':str(path),'binary_sha256':binary_sha256,'binary_identity':before,'policy':policy}
+  companion=None
+  if code_mode_host is not None:
+   helper=Path(code_mode_host);companion={'binary':str(helper),'binary_sha256':code_mode_host_sha256,'binary_identity':file_identity(helper.lstat())}
+  native_companion_snapshot(str(path),companion)
+  value={'binary':str(path),'binary_sha256':binary_sha256,'binary_identity':before,'policy':policy,'code_mode_host':companion}
   if source is not None:value['policy_source']=source
   return value
  return _binding_change(prefix,'codex_pipeline','codex',binding,dry_run=dry_run)
@@ -543,10 +551,14 @@ def _native_source(path):
   return fd,info
  except BaseException:os.close(fd);raise
 
-def snapshot_codex(prefix,*,source,expected_sha256,dry_run=False):
+def snapshot_codex(prefix,*,source,expected_sha256,code_mode_host_source=None,
+                   code_mode_host_sha256=None,dry_run=False):
  _operator_imports()
  from backend_state import file_identity,load_state
  if type(expected_sha256) is not str or not re.fullmatch('[a-f0-9]{64}',expected_sha256):raise BootstrapError('Explicit expected native SHA256 required')
+ if (code_mode_host_source is None)!=(code_mode_host_sha256 is None):raise BootstrapError('Explicit code-mode host source and SHA256 required together')
+ if code_mode_host_source is not None and (type(code_mode_host_sha256) is not str or not re.fullmatch('[a-f0-9]{64}',code_mode_host_sha256)):
+  raise BootstrapError('Expected code-mode host SHA256 required')
  with operator_context(prefix) as (prefix,runtime,owner,runtime_fd,receipts_fd):
   unused_runtime(runtime_fd,receipts_fd)
   state,_=load_state(runtime,dir_fd=runtime_fd)
@@ -554,54 +566,69 @@ def snapshot_codex(prefix,*,source,expected_sha256,dry_run=False):
   try:os.stat('bin',dir_fd=owner,follow_symlinks=False)
   except FileNotFoundError:pass
   else:raise BootstrapError('NEW bin destination required; existing data preserved')
-  source_fd,initial=_native_source(source)
-  bin_fd=None;output_fd=None;bin_identity=None;file_identity_value=None;complete=False;old_umask=os.umask(0o077)
+  inputs=[('codex',source,expected_sha256)]
+  if code_mode_host_source is not None:inputs.append(('codex-code-mode-host',code_mode_host_source,code_mode_host_sha256))
+  sources=[];created={};bin_fd=None;output_fd=None;bin_identity=None;complete=False;old_umask=os.umask(0o077)
   try:
-   digest,size=_stream_digest(source_fd)
-   if digest!=expected_sha256 or file_identity(initial)!=file_identity(os.fstat(source_fd)):raise BootstrapError('Native source identity/hash mismatch')
-   result={'status':'planned' if dry_run else 'snapshotted','binary':str(prefix/'bin/codex'),'sha256':digest,'bytes':size,
+   for name,path,expected in inputs:
+    fd,initial=_native_source(path);item={'name':name,'path':path,'fd':fd,'initial':initial};sources.append(item)
+    digest,size=_stream_digest(fd)
+    if digest!=expected or file_identity(initial)!=file_identity(os.fstat(fd)):raise BootstrapError('Native source identity/hash mismatch')
+    item.update(digest=digest,size=size)
+   main=sources[0]
+   result={'status':'planned' if dry_run else 'snapshotted','binary':str(prefix/'bin/codex'),'sha256':main['digest'],'bytes':main['size'],
            'executed':False,'native_version_verified':False,'source_modified':False,'authentication_copied':False}
+   if len(sources)==2:
+    host=sources[1];result['code_mode_host']={'binary':str(prefix/'bin/codex-code-mode-host'),'sha256':host['digest'],'bytes':host['size']}
    if dry_run:return result
    os.mkdir('bin',0o700,dir_fd=owner);info=os.stat('bin',dir_fd=owner,follow_symlinks=False);bin_identity=(info.st_dev,info.st_ino)
    bin_fd=os.open('bin',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=owner)
    if (os.fstat(bin_fd).st_dev,os.fstat(bin_fd).st_ino)!=bin_identity:raise BootstrapError('Native destination identity changed')
-   output_fd=os.open('codex',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o500,dir_fd=bin_fd)
-   info=os.fstat(output_fd);file_identity_value=(info.st_dev,info.st_ino)
-   os.lseek(source_fd,0,os.SEEK_SET);copied=hashlib.sha256();copied_bytes=0
-   while True:
-    raw=os.read(source_fd,1024**2)
-    if not raw:break
-    copied_bytes+=len(raw)
-    if copied_bytes>NATIVE_LIMIT:raise BootstrapError('Native source exceeds512MiB')
-    copied.update(raw);_write_all(output_fd,raw)
-   os.fsync(output_fd);os.close(output_fd);output_fd=None
-   after_digest,after_size=_stream_digest(source_fd)
-   if (copied.hexdigest()!=digest or after_digest!=digest or copied_bytes!=size or after_size!=size
-       or file_identity(initial)!=file_identity(os.fstat(source_fd))):raise BootstrapError('Native source changed during copy')
-   same_directory(prefix,owner);same_directory(prefix/'bin',bin_fd)
    from codex_host import binary_snapshot
-   binary_snapshot(str(prefix/'bin/codex'),digest)
-   os.fsync(bin_fd);os.fsync(owner)
-   observed,observed_info=_native_source(source)
-   try:
-    if file_identity(observed_info)!=file_identity(initial):raise BootstrapError('Native source path changed during copy')
-   finally:os.close(observed)
-   same_directory(prefix,owner);same_directory(prefix/'bin',bin_fd)
+   for item in sources:
+    name,source_fd,initial,digest,size=(item[k] for k in ('name','fd','initial','digest','size'))
+    output_fd=os.open(name,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o500,dir_fd=bin_fd)
+    info=os.fstat(output_fd);created[name]=(info.st_dev,info.st_ino)
+    os.lseek(source_fd,0,os.SEEK_SET);copied=hashlib.sha256();copied_bytes=0
+    while True:
+     raw=os.read(source_fd,1024**2)
+     if not raw:break
+     copied_bytes+=len(raw)
+     if copied_bytes>NATIVE_LIMIT:raise BootstrapError('Native source exceeds512MiB')
+     copied.update(raw);_write_all(output_fd,raw)
+    os.fsync(output_fd);os.close(output_fd);output_fd=None
+    after_digest,after_size=_stream_digest(source_fd)
+    if (copied.hexdigest()!=digest or after_digest!=digest or copied_bytes!=size or after_size!=size
+        or file_identity(initial)!=file_identity(os.fstat(source_fd))):raise BootstrapError('Native source changed during copy')
+    same_directory(prefix,owner);same_directory(prefix/'bin',bin_fd)
+    info=os.stat(name,dir_fd=bin_fd,follow_symlinks=False)
+    if (info.st_dev,info.st_ino)!=created[name]:raise BootstrapError('Native destination identity changed')
+    binary_snapshot(str(prefix/'bin'/name),digest)
+    info=os.stat(name,dir_fd=bin_fd,follow_symlinks=False)
+    if (info.st_dev,info.st_ino)!=created[name]:raise BootstrapError('Native destination identity changed')
+    observed,observed_info=_native_source(item['path'])
+    try:
+     if file_identity(observed_info)!=file_identity(initial):raise BootstrapError('Native source path changed during copy')
+    finally:os.close(observed)
+   same_directory(prefix,owner);same_directory(prefix/'bin',bin_fd);os.fsync(bin_fd);os.fsync(owner)
    complete=True;return result
   finally:
    try:
     if output_fd is not None:os.close(output_fd)
     if not complete and bin_identity is not None:
-     if bin_fd is not None and file_identity_value is not None:
-      try:info=os.stat('codex',dir_fd=bin_fd,follow_symlinks=False)
-      except FileNotFoundError:info=None
-      if info is not None and (info.st_dev,info.st_ino)==file_identity_value:os.unlink('codex',dir_fd=bin_fd)
+     if bin_fd is not None:
+      for name,identity in reversed(list(created.items())):
+       try:info=os.stat(name,dir_fd=bin_fd,follow_symlinks=False)
+       except FileNotFoundError:info=None
+       if info is not None and (info.st_dev,info.st_ino)==identity:os.unlink(name,dir_fd=bin_fd)
      try:info=os.stat('bin',dir_fd=owner,follow_symlinks=False)
      except FileNotFoundError:info=None
      if info is not None and (info.st_dev,info.st_ino)==bin_identity:os.rmdir('bin',dir_fd=owner)
    finally:
     if bin_fd is not None:os.close(bin_fd)
-    os.close(source_fd);os.umask(old_umask)
+    for item in reversed(sources):os.close(item['fd'])
+    os.umask(old_umask)
+
 
 def daemon_command(prefix):
  _operator_imports();prefix=safe_path(prefix);checked=doctor(prefix)
@@ -699,14 +726,15 @@ def main(argv=None):
  parser.add_argument('--prefix',type=Path,required=True);parser.add_argument('--sdk-python',type=Path)
  parser.add_argument('--dry-run',action='store_true');parser.add_argument('--config',type=Path,help='NEW standard config destination for explicit activate-config only')
  parser.add_argument('--socket',type=Path);parser.add_argument('--model',action='append');parser.add_argument('--native',type=Path)
+ parser.add_argument('--code-mode-host-source',type=Path);parser.add_argument('--code-mode-host',type=Path);parser.add_argument('--code-mode-host-sha256')
  parser.add_argument('--sha256');parser.add_argument('--workspace',type=Path);parser.add_argument('--source',type=Path)
  parser.add_argument('--policy-file',type=Path,help='Protected private snapshot for explicit Codex or resource-policy selection')
  parser.add_argument('--policy-sha256',help='Expected SHA256 of the policy source raw bytes')
  try:
   args=parser.parse_args(argv)
-  selected={name for name in ('sdk_python','config','socket','model','native','sha256','workspace','source','policy_file','policy_sha256') if getattr(args,name) is not None}
+  selected={name for name in ('sdk_python','config','socket','model','native','sha256','workspace','source','policy_file','policy_sha256','code_mode_host_source','code_mode_host','code_mode_host_sha256') if getattr(args,name) is not None}
   allowed={'prepare':{'sdk_python'},'doctor':set(),'admission':set(),'activate-config':{'config'},'configure-orchestrator':set(),'configure-router':{'socket','model'},
-           'configure-codex':{'native','sha256','workspace','model','policy_file','policy_sha256'},'configure-resource-policy':{'policy_file','policy_sha256'},'snapshot-codex':{'source','sha256'},'daemon-command':set()}
+           'configure-codex':{'native','sha256','workspace','model','policy_file','policy_sha256','code_mode_host','code_mode_host_sha256'},'configure-resource-policy':{'policy_file','policy_sha256'},'snapshot-codex':{'source','sha256','code_mode_host_source','code_mode_host_sha256'},'daemon-command':set()}
   if selected-allowed[args.action] or args.action in ('doctor','admission','daemon-command') and args.dry_run:raise BootstrapError('Options do not match the explicit action')
   required={'configure-router':{'socket','model'},'configure-codex':{'native','sha256'},'configure-resource-policy':{'policy_file','policy_sha256'},'snapshot-codex':{'source','sha256'}}
   if required.get(args.action,set())-selected:raise BootstrapError('Explicit operator inputs are missing')
@@ -716,9 +744,9 @@ def main(argv=None):
   elif args.action=='activate-config':result=activate_config(args.prefix,config=args.config,dry_run=args.dry_run)
   elif args.action=='configure-orchestrator':result=configure_orchestrator(args.prefix,dry_run=args.dry_run)
   elif args.action=='configure-router':result=configure_router(args.prefix,socket_path=args.socket,models=args.model,dry_run=args.dry_run)
-  elif args.action=='configure-codex':result=configure_codex(args.prefix,binary=args.native,binary_sha256=args.sha256,workspace=args.workspace,models=args.model,policy_file=args.policy_file,policy_sha256=args.policy_sha256,dry_run=args.dry_run)
+  elif args.action=='configure-codex':result=configure_codex(args.prefix,binary=args.native,binary_sha256=args.sha256,workspace=args.workspace,models=args.model,policy_file=args.policy_file,policy_sha256=args.policy_sha256,code_mode_host=args.code_mode_host,code_mode_host_sha256=args.code_mode_host_sha256,dry_run=args.dry_run)
   elif args.action=='configure-resource-policy':result=configure_resource_policy(args.prefix,policy_file=args.policy_file,policy_sha256=args.policy_sha256,dry_run=args.dry_run)
-  elif args.action=='snapshot-codex':result=snapshot_codex(args.prefix,source=args.source,expected_sha256=args.sha256,dry_run=args.dry_run)
+  elif args.action=='snapshot-codex':result=snapshot_codex(args.prefix,source=args.source,expected_sha256=args.sha256,code_mode_host_source=args.code_mode_host_source,code_mode_host_sha256=args.code_mode_host_sha256,dry_run=args.dry_run)
   else:result=daemon_command(args.prefix)
   print(json.dumps(result,indent=2));return 0
  except (OSError,ValueError,RuntimeError,SyntaxError):

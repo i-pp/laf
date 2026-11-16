@@ -49,7 +49,7 @@ def main():
   source=run_checked(unittest.defaultTestLoader.loadTestsFromNames(['test_async_job_ack_disconnect','test_integrated_source','test_codex_package','test_common_policy_language','test_english_source','test_ordinary_session_pool','test_session_pool_boundary','test_resource_admission','test_resource_only','test_resource_pipeline','test_resource_review','test_local_resource_admission','test_resource_completion','test_flash_resource_admission','test_npu_resource_evidence','test_resource_read_integration','test_scope_release_unknown']),310,runner)
   codex_selection=run_checked(unittest.defaultTestLoader.loadTestsFromNames(['test_codex_selection_boundary','test_codex_catalog_effort']),77,runner)
   bootstrap=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_bootstrap'),28,runner)
-  bindings=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_bootstrap_bindings'),30,runner)
+  bindings=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_bootstrap_bindings'),41,runner)
   isolation=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_source_test_isolation'),23,runner)
   history=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_provider_history_feedback'),36,runner)
   provider=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_provider_feedback'),62,runner)

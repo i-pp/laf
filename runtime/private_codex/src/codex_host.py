@@ -2,6 +2,7 @@
 # Modified 2026-11-13: reserve the existing host budget for model-catalog reads.
 # Modified 2026-11-13: read NEW-prefix executor/policy from one atomic binding record.
 # Modified 2026-11-15: retain fixed read-rejection diagnostics without raw messages.
+# Modified 2026-11-16: verify explicitly pinned native code-mode companion before executor use.
 import hashlib
 from contextlib import closing
 import json
@@ -77,6 +78,30 @@ def binary_snapshot(binary, expected):
     return str(path)
 
 
+def native_companion_snapshot(binary, descriptor):
+    """Verify the explicitly selected sibling helper, or its declared absence."""
+    from backend_state import file_identity
+    expected = Path(binary).with_name('codex-code-mode-host')
+    if descriptor is None:
+        try: expected.lstat()
+        except FileNotFoundError: return None
+        except OSError as error: raise PipelineError('NATIVE_COMPANION_UNKNOWN') from error
+        raise PipelineError('UNPINNED_NATIVE_COMPANION')
+    if (not isinstance(descriptor, dict) or set(descriptor) != {'binary', 'binary_sha256', 'binary_identity'}
+            or descriptor.get('binary') != str(expected)):
+        raise PipelineError('INVALID_NATIVE_COMPANION')
+    path = Path(descriptor['binary'])
+    try:
+        if file_identity(path.lstat()) != descriptor['binary_identity']:
+            raise PipelineError('NATIVE_COMPANION_IDENTITY_CHANGED')
+        binary_snapshot(str(path), descriptor['binary_sha256'])
+        if file_identity(path.lstat()) != descriptor['binary_identity']:
+            raise PipelineError('NATIVE_COMPANION_IDENTITY_CHANGED')
+    except OSError as error:
+        raise PipelineError('NATIVE_COMPANION_UNKNOWN') from error
+    return str(path)
+
+
 def executor_configuration(runtime, binary):
     """One immutable NEW bootstrap record, or the unchanged legacy file format."""
     from backend_state import load_state, bootstrap_paths, file_identity, state_sha256
@@ -93,6 +118,7 @@ def executor_configuration(runtime, binary):
         if file_identity(path.lstat()) != binding['binary_identity']: raise PipelineError('NATIVE_BINARY_IDENTITY_CHANGED')
         binary_snapshot(binary, binding['binary_sha256'])
         if file_identity(path.lstat()) != binding['binary_identity']: raise PipelineError('NATIVE_BINARY_IDENTITY_CHANGED')
+        if 'code_mode_host' in binding: native_companion_snapshot(binary, binding['code_mode_host'])
         _, project = bootstrap_paths(root)
         bundle = load_project_policy(project)
         policy = validate_policy(binding['policy'])

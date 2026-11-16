@@ -858,3 +858,20 @@ held. Prospective worker cleanup also refuses unreadable scope state. Old
 unpublished resource participants are fenced by the stricter generation.
 
 Modified 2026-11-15: serialize ordinary capture-marker materialization with local acknowledgements, clean exact acknowledged markers idempotently, and retain permanent overflow uncertainty through checkpoint-only recovery.
+
+
+## 2026-11-16: explicitly pinned native Code Mode companion
+
+Add an opt-in paired `snapshot-codex` copy and `configure-codex` binding for a
+trusted existing `codex-code-mode-host` ELF. A native release using this helper
+can generate a proposal while workspace tools fail when only its main ELF was
+copied. Both expected hashes are explicit; source bytes and permissions remain
+unchanged. New files stay private, and a partial pair is rolled back without
+removing unrelated data.
+
+New Codex bindings record either the selected sibling's identity/hash or its
+explicit absence. Executor preparation refuses changed, missing, replaced or
+newly unpinned helpers. Existing bindings without the field keep legacy
+compatibility. Native protocol methods, tool contracts, resource/provider
+admission, UNKNOWN protection and live configuration are unchanged. Source
+archives include none of the operator's native binaries, credentials or logs.

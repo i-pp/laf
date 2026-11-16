@@ -22,6 +22,7 @@
 # Modified 2026-11-15: explicit new-prefix owner-daemon metadata binding.
 # Modified 2026-11-15: explicit schema2 operator-policy snapshot provenance.
 # Modified 2026-11-15: raw-pinned private resource scheduler policy snapshot.
+# Modified 2026-11-16: validate optional pinned native code-mode companion metadata.
 """Explicit NEW-prefix bindings. Missing marker and schema1 keep legacy behavior."""
 import hashlib
 import os
@@ -106,7 +107,7 @@ def validate_state(value,runtime,raw_size):
  if codex is not None:
   from codex_pipeline import validate_policy
   fields={'binary','binary_sha256','binary_identity','policy'}
-  if (type(codex) is not dict or set(codex) not in (fields,fields|{'policy_source'})
+  if (type(codex) is not dict or not fields<=set(codex) or set(codex)-fields-{'policy_source','code_mode_host'}
       or not _absolute(codex['binary']) or type(codex['binary_sha256']) is not str
       or not re.fullmatch('[a-f0-9]{64}',codex['binary_sha256'])
       or type(codex['binary_identity']) is not list or len(codex['binary_identity'])!=7
@@ -117,8 +118,19 @@ def validate_state(value,runtime,raw_size):
       or not 4<=codex['binary_identity'][4]<=512*1024**2
       or not stat.S_ISREG(codex['binary_identity'][3])):
    raise ValueError('Invalid bounded Codex scope')
+  if 'code_mode_host' in codex and codex['code_mode_host'] is not None:
+   host=codex['code_mode_host']
+   if (type(host) is not dict or set(host)!={'binary','binary_sha256','binary_identity'}
+       or host['binary']!=str(Path(codex['binary']).with_name('codex-code-mode-host'))
+       or type(host['binary_sha256']) is not str or not re.fullmatch('[a-f0-9]{64}',host['binary_sha256'])
+       or type(host['binary_identity']) is not list or len(host['binary_identity'])!=7
+       or any(type(x) is not int or x<0 for x in host['binary_identity'])
+       or host['binary_identity'][2] not in (0,os.getuid()) or host['binary_identity'][3]&0o022
+       or not host['binary_identity'][3]&0o111 or not stat.S_ISREG(host['binary_identity'][3])
+       or not 4<=host['binary_identity'][4]<=512*1024**2):
+    raise ValueError('Invalid pinned native code-mode host')
   if policy['schema']==1:
-   if (set(codex)!=fields or policy['concurrency']!=1
+   if (set(codex)-{'code_mode_host'}!=fields or policy['concurrency']!=1
        or policy['workspaces']!={'default':str(prefix/'workspace')}):
     raise ValueError('Invalid bounded canary scope')
   else:

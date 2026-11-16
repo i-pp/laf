@@ -115,23 +115,54 @@ or prefix in the source marketplace ZIP.
 ```sh
 INSTALLED_NATIVE="/absolute/path/to/trusted/native/codex"
 NATIVE_SHA256="replace-with-trusted-64-lowercase-hex-digest"
+INSTALLED_CODE_MODE_HOST="/absolute/path/to/matching/native/codex-code-mode-host"
+CODE_MODE_HOST_SHA256="replace-with-trusted-companion-sha256"
 
 python3 -B "$BOOT" snapshot-codex --prefix "$PREFIX" \
-  --source "$INSTALLED_NATIVE" --sha256 "$NATIVE_SHA256" --dry-run
+  --source "$INSTALLED_NATIVE" --sha256 "$NATIVE_SHA256" \
+  --code-mode-host-source "$INSTALLED_CODE_MODE_HOST" \
+  --code-mode-host-sha256 "$CODE_MODE_HOST_SHA256" --dry-run
 python3 -B "$BOOT" snapshot-codex --prefix "$PREFIX" \
-  --source "$INSTALLED_NATIVE" --sha256 "$NATIVE_SHA256"
+  --source "$INSTALLED_NATIVE" --sha256 "$NATIVE_SHA256" \
+  --code-mode-host-source "$INSTALLED_CODE_MODE_HOST" \
+  --code-mode-host-sha256 "$CODE_MODE_HOST_SHA256"
 NATIVE="$PREFIX/bin/codex"
+CODE_MODE_HOST="$PREFIX/bin/codex-code-mode-host"
 
 python3 -B "$BOOT" configure-codex --prefix "$PREFIX" \
   --native "$NATIVE" --sha256 "$NATIVE_SHA256" \
-  --workspace "$PREFIX/workspace" --model raw-provider-model-id --dry-run
+  --code-mode-host "$CODE_MODE_HOST" --code-mode-host-sha256 "$CODE_MODE_HOST_SHA256" \
+  --workspace "$PREFIX/workspace" --model gpt-6.1-sol --dry-run
 python3 -B "$BOOT" configure-codex --prefix "$PREFIX" \
   --native "$NATIVE" --sha256 "$NATIVE_SHA256" \
-  --workspace "$PREFIX/workspace" --model raw-provider-model-id
+  --code-mode-host "$CODE_MODE_HOST" --code-mode-host-sha256 "$CODE_MODE_HOST_SHA256" \
+  --workspace "$PREFIX/workspace" --model gpt-6.1-sol
 ```
 
-Skip the copy when an existing protected native path already passes the guard;
-set `NATIVE` to that path. Configuration never executes a version/account probe,
+The observed Codex 0.167.0 Code Mode tool path starts the sibling
+`codex-code-mode-host`. Copying only the main ELF can leave model proposals
+available while workspace tools fail with ENOENT. Select a matching trusted
+companion and its expected digest before the first snapshot, then pin it in
+the first Codex binding as shown above. The copy validates both source files
+before creating the NEW destination and rolls back only its own new files on
+failure. It never executes a source or installs a package.
+
+Both copied ELFs are private mode0500. The immutable binding retains the
+companion path, identity and digest; executor preparation checks them again.
+A changed, replaced or missing selected helper refuses before native dispatch.
+A new binding that explicitly selects no helper refuses if an unpinned sibling
+later appears. Old bindings without the optional field retain their documented
+legacy behavior. For metadata-only use, or releases without this companion,
+omit both companion flags from each command. Do not add a helper or rebind a
+used prefix in place; prepare a NEW prefix.
+
+The helper flags also apply when `configure-codex` imports a private schema2
+policy. Copying or binding the files does not verify their version pairing,
+an account, model execution, maximum resource profiles or every package asset.
+The release's other prerequisites, including supported host Bubblewrap, remain.
+
+Skip the copy when existing protected native and selected helper paths already pass their guards;
+set `NATIVE` and `CODE_MODE_HOST` to those paths. Configuration never executes a version/account probe,
 reads or copies authentication, global AGENTS, model data or existing databases.
 Before the first LAF binding, use your already signed-in official Codex CLI:
 open a normal interactive session, enter `/model`, and inspect the choices
