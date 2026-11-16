@@ -92,7 +92,10 @@ def native_companion_snapshot(binary, descriptor):
         raise PipelineError('INVALID_NATIVE_COMPANION')
     path = Path(descriptor['binary'])
     try:
-        if file_identity(path.lstat()) != descriptor['binary_identity']:
+        info = path.lstat()
+        if not 4 <= info.st_size <= 512 * 1024**2:
+            raise PipelineError('NATIVE_COMPANION_SIZE_EXCEEDED')
+        if file_identity(info) != descriptor['binary_identity']:
             raise PipelineError('NATIVE_COMPANION_IDENTITY_CHANGED')
         binary_snapshot(str(path), descriptor['binary_sha256'])
         if file_identity(path.lstat()) != descriptor['binary_identity']:

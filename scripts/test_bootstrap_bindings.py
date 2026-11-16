@@ -396,6 +396,19 @@ class NativeSnapshotTests(unittest.TestCase):
   helper.chmod(0o700);helper.write_bytes(b'\x7fELFchanged companion');helper.chmod(0o500)
   with self.assertRaises(PipelineError):executor_snapshot(self.runtime,str(main))
   self.assertEqual(self.marker.read_bytes(),selected)
+ def test_companion_size_bound_refuses_before_hashing(self):
+  from codex_host import native_companion_snapshot,PipelineError
+  from backend_state import file_identity
+  import codex_host
+  main,helper,sha=self.bind_pair();actual=helper.lstat()
+  for size in (3,512*1024**2+1):
+   from types import SimpleNamespace
+   oversized=SimpleNamespace(**{name:getattr(actual,name) for name in ('st_dev','st_ino','st_uid','st_mode','st_mtime_ns','st_ctime_ns')},st_size=size)
+   descriptor={'binary':str(helper),'binary_sha256':sha,'binary_identity':file_identity(oversized)}
+   with self.subTest(size=size),patch.object(Path,'lstat',return_value=oversized),patch.object(codex_host,'binary_snapshot') as hashed:
+    with self.assertRaisesRegex(PipelineError,'NATIVE_COMPANION_SIZE_EXCEEDED'):native_companion_snapshot(str(main),descriptor)
+    hashed.assert_not_called()
+
  def test_pair_binding_missing_or_replaced_helper_refuses_before_transport(self):
   from codex_host import executor_snapshot,PipelineError
   main,helper,sha=self.bind_pair();original=helper.read_bytes();helper.unlink()
