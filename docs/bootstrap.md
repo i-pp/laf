@@ -408,19 +408,17 @@ interpreter/tool presence. SDK version, account availability, Linux namespace/
 cgroup admission and service readiness remain unprobed. `execution_ready=false`
 is intentional, not an assertion that the services have failed.
 
-The initial operator file `unconfigured-backends.json` explicitly denies the
-ordinary orchestrator, local helper, mailbox, mailbox grants, Codex pipeline,
-experiments and Router. This avoids invented mailbox slots, finite grants,
-helper implementations, evidence or model selections just to make startup pass.
-A missing optional configuration is not treated as an implicit fallback.
+The initial operator file `unconfigured-backends.json` leaves the ordinary
+orchestrator, mailbox, mailbox grants, Codex pipeline, experiments and Router
+unconfigured. Configure each backend through its supported operator setup.
+Missing optional configuration keeps the corresponding backend disabled.
 
-The binding commands above connect configuration, not service acceptance. Do not
-infer working backend execution from catalog discovery or a metadata check,
-translate legacy model prepare into Router load/job requests, or assume native
-aliases/effort tokens. Core/Router and the OpenAI account remain separate
-prerequisites. The existing daemon, owner, resource and uncertainty rules still
-govern execution. The offline tests use fake native bytes and peers, not a real
-daemon start, account, model or clean-host backend provisioning. Existing
+The binding commands above record operator configuration. Verify backend
+execution separately from catalog discovery or a metadata check, and confirm
+native aliases and effort tokens through discovery. Core/Router and the OpenAI
+account remain separate prerequisites. The daemon, owner, resource and
+uncertainty rules still govern execution. The offline tests use fake native
+bytes and peers, with no daemon start, account, model or clean-host provisioning. Existing
 empirical loader/model evidence belongs to its recorded source cohort; it is
 not silently generalized to this new bootstrap.
 
