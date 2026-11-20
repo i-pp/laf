@@ -120,8 +120,8 @@ class SystemdCredentialKeyProvider:
 class AesGcmSecretCipher:
     """AES-256-GCM cipher using an existing OS-provided key; never provisions it."""
 
-    MAGIC = b'ACEIS-AESGCM-v1\x00'
-    AAD = b'aceis-mcp-events-secret:v1'
+    MAGIC = b'LAF-AESGCM-v1\x00'
+    AAD = b'laf-mcp-events-secret:v1'
     NONCE_BYTES = 12
     TAG_BYTES = 16
     MAX_PLAINTEXT_BYTES = 65_536

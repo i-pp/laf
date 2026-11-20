@@ -75,8 +75,8 @@ def check_configuration(config, binding, pins):
 def check_catalog(found, expected, version, cursor=None):
     def comparable(tool):
         return {k: tool[k] for k in ('name', 'description', 'inputSchema', 'annotations')}
-    if (version != '0.1.0' or cursor is not None or len(found) != 33
-            or len({t['name'] for t in found}) != 33 or
+    if (version != '0.1.0' or cursor is not None or len(found) != 29
+            or len({t['name'] for t in found}) != 29 or
             {t['name']: comparable(t) for t in found} !=
             {t['name']: comparable(t) for t in expected}):
         raise Refused('installed_catalog_mismatch')
@@ -445,7 +445,7 @@ async def exercise(args):
     from types import SimpleNamespace
     from legacy_tool_adapter import SERVER_INFO
     expected = CompositeSharedTools(SimpleNamespace(
-        tools=tool_definitions(local_llm=True, local_models=True, chat_mailbox=True,
+        tools=tool_definitions(chat_mailbox=True,
                                codex_pipeline=True, experiments=True),
         call_tool=lambda *a: None, audit=None), SimpleNamespace(call=lambda *a: None),
         server_info=SERVER_INFO).tools

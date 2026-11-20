@@ -50,8 +50,6 @@ def main(argv=None):
  parser.add_argument('--runtime-project-root',type=Path,help='Explicit owner-controlled original runtime anchor; no guard bypass')
  for flag,help in (
   ('writes','Existing fixed-policy legacy write tools; default off'),
-  ('local-llm','Existing bounded local helper; not silently repaired or translated'),
-  ('local-models','Existing fixed-profile helper tools; not Router lifecycle authority'),
   ('chat-mailbox','Existing non-secret fixed-slot mailbox'),
   ('mailbox-grants','Existing finite mailbox grant; requires mailbox'),
   ('codex-pipeline','Existing daemon Codex pipeline; never start a daemon/account'),
@@ -101,7 +99,7 @@ def main(argv=None):
   # Ownership transfers to the reviewed constructor, including its failure
   # cleanup; lifecycle owns later draining. Never perform a second12s drain or
   # close receipt handles behind an admitted worker after lifecycle returns.
-  adapter=parts.adapter(runtime,router_app=app,allow_writes=args.allow_writes,allow_local_llm=args.allow_local_llm,allow_local_models=args.allow_local_models,allow_chat_mailbox=args.allow_chat_mailbox,allow_mailbox_grants=args.allow_mailbox_grants,allow_codex_pipeline=args.allow_codex_pipeline,pipeline=pipeline,allow_experiments=args.allow_experiments,runtime_project_root=anchor,**binding_options)
+  adapter=parts.adapter(runtime,router_app=app,allow_writes=args.allow_writes,allow_chat_mailbox=args.allow_chat_mailbox,allow_mailbox_grants=args.allow_mailbox_grants,allow_codex_pipeline=args.allow_codex_pipeline,pipeline=pipeline,allow_experiments=args.allow_experiments,runtime_project_root=anchor,**binding_options)
   return parts.serve(adapter)
  except BaseException:
   print('LAF stdio startup/lifecycle unavailable; reconcile known attempts before retry. No provider lifecycle repair was attempted.',file=sys.stderr);return 1

@@ -36,6 +36,10 @@ class Source(unittest.TestCase):
   with tempfile.TemporaryDirectory(dir=Path.home()) as d:
    root=self.fixture(d);out=Path(d)/'out.zip';b.build(root,out)
    with zipfile.ZipFile(out) as z:self.assertEqual(z.read('launcher.py'),b'synthetic');self.assertEqual(z.getinfo('laf').external_attr>>16,0o100755);self.assertEqual(z.getinfo('launcher.py').external_attr>>16,0o100600)
+   (root/'launcher.py').write_text('# retired '+('ACE'+'IS'))
+   blocked=Path(d)/'blocked.zip'
+   with self.assertRaisesRegex(ValueError,'Retired identifier'):b.build(root,blocked)
+   self.assertFalse(blocked.exists())
  def test_parent_traversal_cannot_create_output_inside_source(self):
   with tempfile.TemporaryDirectory(dir=Path.home()) as d:
    root=self.fixture(d);other=Path(d)/'other';other.mkdir()

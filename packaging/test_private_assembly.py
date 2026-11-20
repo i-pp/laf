@@ -59,6 +59,9 @@ class Assembly(unittest.TestCase):
    with zipfile.ZipFile(out) as z:
     for name in names:
      self.assertEqual(z.getinfo(name).external_attr>>16,p.archive_mode(name));self.assertEqual(z.read(name),b'synthetic');self.assertEqual((stage/name).stat().st_mode & 0o777,0o600)
+   (stage/'launcher.py').write_text('# retired '+('ACE'+'IS'))
+   with self.assertRaisesRegex(p.PackageError,'Retired identifier'):p.archive_private_candidate(stage,root/'blocked.zip')
+   self.assertFalse((root/'blocked.zip').exists())
  def fixture(self,folder,extra=None,missing=None):
   z=folder/'source.zip'
   with zipfile.ZipFile(z,'w') as f:

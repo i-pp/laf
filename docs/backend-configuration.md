@@ -34,7 +34,6 @@ before daemon, database or receipt use. Existing bindings are immutable.
 | Router | Local model jobs | Explicit owner socket and exact model allowlist; local Core/Router requires no OpenAI account. |
 | Codex pipeline | Optional account-backed tasks | Protected existing native, explicit canary scope or hash-pinned operator schema2 policy, and normal authorized account path; fresh model/effort advertisements precede new work. |
 | Orchestrator | Ordinary-daemon observability | Explicit configure-orchestrator binding enables the portable profile's status/list/get metadata tools. No task-write policy is created. |
-| Local helper | Four legacy model operations | Requires a separate compatible backend. Current Router jobs cannot enforce the original fixed-profile, atomic loaded-only/no-autoload and 32768-context contract. Keep denied; do not substitute Flash. |
 | Mailbox | Non-secret questions and answers | Requires a real operator-approved task/request/hash slot. It does not activate ChatGPT or prove Chat identity. Do not invent slots just to enable startup. |
 | Mailbox grants | Bounded mailbox workstreams | Requires mailbox plus a separately authorized finite grant, disjoint task namespace, purpose, expiry, request and retention limits. No automatic grant is created. |
 | Experiments | Optional benchmark evidence reader | Requires a selected owner-controlled manifest and SHA256, pinned sources and individually approved release projections. No benchmark execution or general accuracy claim follows. |
@@ -74,7 +73,7 @@ For daemon metadata, use the [bootstrap commands](bootstrap.md) and review the
 printed daemon-command. The ordinary metadata mode requires neither an enabled
 Codex pipeline nor a native/account probe. Start it only through the supported
 normal operator-host path; ownership, resource and uncertainty guards remain.
-The portable integrated profile still advertises 33 tools, including only the
+The portable integrated profile advertises 29 tools, including only the
 three read-only orchestrator tools. Independently enabling task writes requires
 the separate existing operator-fixed flags and task policy; this binding does
 not provide those permissions.
@@ -113,7 +112,7 @@ HTTP entrypoint with this frontend invocation shape:
 This binds the existing loopback HTTP transport; it is not a complete remote
 Quick Start. Start the owner daemon through the supported bootstrap
 daemon-command and existing namespace/cgroup/resource admission. With both its
-Codex pipeline opt-in and `ACEIS_MCP_EVENTS_ENABLED=1`, the foreground controller
+Codex pipeline opt-in and `LAF_MCP_EVENTS_ENABLED=1`, the foreground controller
 now retains only the existing OAuth issuer, audience, JWKS path, subject
 selection, scopes and `CREDENTIALS_DIRECTORY` references for its child.
 Defaults remain minimal. Invalid Events flags reach the existing validator
@@ -123,7 +122,7 @@ environment inheritance or internal daemon entrypoint is needed.
 The frontend separately retains its existing OAuth resource URL. Do not print
 or copy configuration/credential values into the package or a new prefix.
 The Events opt-in is
-`ACEIS_MCP_EVENTS_ENABLED=1`; the providers require the existing systemd
+`LAF_MCP_EVENTS_ENABLED=1`; the providers require the existing systemd
 `mcp-events-aes-key` and `mcp-events-owner-hmac-key` credentials. The command above
 alone does not supply them. Do not add `--runtime-project-root` or select local
 single-user HTTP mode to make a remote OAuth failure pass.
@@ -138,7 +137,7 @@ changes. A denied Router remains visible but opens no endpoint or receipt store.
 Do not combine this mode with raw Router socket/state/model arguments. Raw mode
 is retained only for existing runtimes without a bootstrap state marker.
 Existing shared-tool HTTP authorization still requires exactly one configured
-OAuth principal. Keep that scope and the legacy model-helper contracts unchanged.
+OAuth principal. Keep that scope when updating the frontend.
 
 An existing stdio Tunnel response or an older local HTTP adapter's discovery
 response does not establish this candidate's OAuth or Events delivery. Verify

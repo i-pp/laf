@@ -73,6 +73,11 @@ jobs:
           PYCODE
       - name: Enforce English and ASCII source with explicit Unicode test data
         run: python3 -B scripts/check_english_source.py
+      - name: Enforce LAF-only release names
+        run: |
+          python3 -I -B scripts/check_release_names.py --checkout .
+          python3 -B scripts/build-integrated-source.py --output "$RUNNER_TEMP/laf-release-check.zip"
+          python3 -I -B scripts/check_release_names.py "$RUNNER_TEMP/laf-release-check.zip"
       - name: Install hosted source-test isolation prerequisite
         shell: bash
         run: |
@@ -200,7 +205,7 @@ jobs:
       - name: Check explicit production policy import offline
         run: python3 -B scripts/source_test_isolation.py --suite focused --module test_bootstrap_production_policy --expected-tests 36
       - name: Check fresh-prefix notification activation offline
-        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_notification_fresh_prefix --expected-tests 30
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_notification_fresh_prefix --expected-tests 31
       - name: Check narrow daemon notification-reference handoff offline
         run: python3 -B scripts/source_test_isolation.py --suite focused --module test_daemon_notification_environment --expected-tests 11
       - name: Check HTTP bootstrap binding and denial parity offline

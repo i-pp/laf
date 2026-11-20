@@ -30,10 +30,11 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Local AI Fabric integrated plugin (experimental source)
 
-The root plugin selects the existing 27 legacy/Codex tools, one new Codex catalog read and five Router tools,
-with six explicit operator opt-ins. Local Core/Router inference needs no OpenAI
-account; Codex is an optional separately authorized integration. HTTP-compatible
-source is retained; the portable manifest itself launches stdio, not an HTTP endpoint.
+With four explicit operator opt-ins, the root plugin exposes 29 tools,
+including `codex_models_list` and five owner-scoped Router tools. Local
+Core/Router inference needs no OpenAI account. Codex is an optional separately
+authorized integration. The portable manifest launches stdio, and the source
+retains the HTTP frontend.
 
 See [existing-owner-host setup](docs/integrated-plugin-install.md). This is not a
 complete clean-host Quick Start. Model/SDK/vendor assets and private account,
@@ -82,7 +83,7 @@ mirrored in top-level and bundled inference source.
 The standalone five-tool `mcp/` is retained as an optional component, not the root
 plugin. Changes to root source do not silently change the pinned runtime subset.
 The previous public component guide is preserved at [component source guide](docs/public-source-component-guide.md). See [origin and changes](SOURCE_ORIGIN.md). Future consolidation must preserve
-33-tool schemas and runtime guards.
+the supported tool schemas and runtime guards.
 
 Build source-only from this checkout without a private input ZIP:
 
@@ -94,17 +95,11 @@ This creates a new archive only; it installs or starts nothing. Release-time rig
 secret and dependency review is required before distribution. Portal listing
 metadata is a later submission concern, not a prerequisite to reviewing this source.
 
-## Legacy helper compatibility boundary
+## LAF 0.1.0 release naming
 
-The integrated 33-tool catalog and startup/read checks do not establish that all
-33 tools work against the modern Router. Prefer the five `laf_router_*` tools for
-the modern owner-scoped Router interface. Optional legacy operations additionally
-require their separately configured helper, mailbox or grant prerequisites.
-The compatibility tools `aceis_local_llm_generate`,
-`aceis_local_model_status`, `aceis_local_model_generate` and
-`aceis_local_model_prepare` depend on their separate legacy backend. That helper
-route currently has an unresolved transport failure; its functionality is not
-accepted by the modern Router checks. Do not silently translate helper calls to
-Router load/unload operations, fabricate helper configuration, or weaken guards.
-This known limitation does not prevent source Alpha review, but this is neither
-an all-33-functional claim nor a complete clean-host setup.
+Use the five `laf_router_*` tools for owner-scoped local inference. The fully
+opted-in integrated profile exposes 29 tools. The former four local helper
+operations and their configuration switches have been removed.
+
+The [LAF-only naming gate](docs/laf-release-names.md) is mandatory for the
+0.1.0 release alongside the existing functional and hardware acceptance.

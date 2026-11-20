@@ -30,7 +30,11 @@ from pathlib import Path,PurePosixPath
 import re
 import shutil
 import stat
+import sys
 import zipfile
+
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
+from check_release_names import NamingError, check_member, check_name, check_tree
 
 INTEGRATION=frozenset(('laf_shared_tools.py','laf_stdio_adapter.py','laf_stdio_cli.py','laf_stdio_lifecycle.py','laf_stdio_transport.py','launch.py'))
 TOP_CONFIG=frozenset(('scheduler-config.json','resource-limits.json','verification-commands.json'))
@@ -73,7 +77,11 @@ def source_members(bundle,expected):
    if mode not in (0,stat.S_IFREG,stat.S_IFDIR):raise PackageError('Non-regular archive member')
    if i.is_dir() or not i.filename.startswith('stdio/'):continue
    name=i.filename[len('stdio/'):]
-   if selected(name):result[name]=z.read(i)
+   if selected(name):
+    data=z.read(i)
+    try:check_member('runtime/'+name,data)
+    except NamingError as error:raise PackageError(str(error)) from None
+    result[name]=data
  if not REQUIRED<=set(result):raise PackageError('Reviewed integrated stdio/HTTP source is incomplete')
  if 'integration/laf_bootstrap.py' in result:
   bootstrap={'private_codex/src/backend_state.py','private_codex/src/bundled_policy.py'}|{'private_codex/policy-snapshot/'+x for x in ('manifest.json','docs/ai/orchestration.md','docs/ai/policies.md','agents/README.md','LICENSE','NOTICE')}
@@ -87,6 +95,10 @@ def archive_mode(name):
 
 def archive_private_candidate(directory,archive):
  directory=Path(directory)
+ try:
+  check_name(Path(archive).name)
+  check_tree(directory)
+ except NamingError as error:raise PackageError(str(error)) from None
  with zipfile.ZipFile(archive,'x',zipfile.ZIP_DEFLATED) as z:
   for path in sorted(directory.rglob('*')):
    if path.is_symlink():raise PackageError('Symlink in candidate')
@@ -95,7 +107,9 @@ def archive_private_candidate(directory,archive):
    info=zipfile.ZipInfo(name);info.create_system=3
    info.external_attr=archive_mode(name)<<16
    info.compress_type=zipfile.ZIP_DEFLATED
-   z.writestr(info,path.read_bytes())
+   data=path.read_bytes()
+   check_member(name,data)
+   z.writestr(info,data)
 
 def manifest():
  return {'$schema':'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json','name':'laf','version':'0.1.0','description':'Local AI Fabric integrated Codex/orchestration and owner-scoped Router tools. Private review candidate.','author':{'name':'I-plusplus Inc.'},'extensions':{'com.openai':{'interface':{'displayName':'Local AI Fabric','shortDescription':'Local models and Codex tools','category':'Developer Tools'}}}}
@@ -105,6 +119,8 @@ def mcp_manifest():
 
 def assemble(bundle,expected,output,templates):
  output=Path(output)
+ try:check_name(output.name)
+ except NamingError as error:raise PackageError(str(error)) from None
  if not output.is_absolute() or output.exists() or output.is_symlink():raise PackageError('New absolute private output directory required')
  for parent in output.parents:
   marker=parent/'.git'
@@ -126,6 +142,8 @@ def assemble(bundle,expected,output,templates):
    with (output/name).open('x') as f:json.dump(value,f,indent=2);f.write('\n')
   with (output/'LICENSE').open('xb') as f:f.write(payload['public_laf/LICENSE'])
   with (output/'NOTICE').open('xb') as f:f.write(payload['public_laf/NOTICE']+b'\nIntegrated package scope: the public_laf/mcp stdio-only notice applies only to that original component. This assembled source also retains integrated HTTP transport, Core/Router and CLI source. See SOURCE_ORIGIN.md and notices/agent-orchestrator for attribution and pending local-modification rights.\n')
+  try:check_tree(output)
+  except NamingError as error:raise PackageError(str(error)) from None
  except BaseException:
   # Retain partial output for inspection; never reuse it automatically.
   raise

@@ -39,8 +39,8 @@ import uuid
 
 RUNTIME=Path(__file__).resolve().parents[1]
 PACKAGE=RUNTIME.parent
-CAPABILITIES=('local-llm','local-models','chat-mailbox','mailbox-grants','codex-pipeline','experiments')
-BACKENDS=('orchestrator','local_helper','mailbox','mailbox_grants','codex_pipeline','experiments','router')
+CAPABILITIES=('chat-mailbox','mailbox-grants','codex-pipeline','experiments')
+BACKENDS=('orchestrator','mailbox','mailbox_grants','codex_pipeline','experiments','router')
 POLICY_COMMIT='ddcaf63e50bed722d558d418deeef791f3029a6f'
 POLICY_SHA256='beccfd5c9aeb63d6a06f33ef39732e832e7f4e79b0a7915829ca993b55347236'
 TOP_CONFIG=('resource-limits.json','scheduler-config.json','verification-commands.json')

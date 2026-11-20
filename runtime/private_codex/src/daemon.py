@@ -571,13 +571,13 @@ def _daemon_child_environment(binary, *, allow_codex_pipeline=False):
     environment = {"PATH": str(Path(binary).parent) + ":" + os.environ.get("PATH", "/usr/bin:/bin"),
                    "LANG": "C.UTF-8", "HOME": str(Path.home())}
     if allow_codex_pipeline:
-        enabled = os.environ.get('ACEIS_MCP_EVENTS_ENABLED')
+        enabled = os.environ.get('LAF_MCP_EVENTS_ENABLED')
         if enabled is not None:
-            environment['ACEIS_MCP_EVENTS_ENABLED'] = enabled
+            environment['LAF_MCP_EVENTS_ENABLED'] = enabled
         if enabled == '1':
-            for name in ('ACEIS_OAUTH_ISSUER', 'ACEIS_OAUTH_AUDIENCE',
-                         'ACEIS_OAUTH_JWKS_FILE', 'ACEIS_OAUTH_ALLOWED_SUBJECT',
-                         'ACEIS_OAUTH_ALLOWED_SUBJECTS_JSON', 'ACEIS_OAUTH_REQUIRED_SCOPES',
+            for name in ('LAF_OAUTH_ISSUER', 'LAF_OAUTH_AUDIENCE',
+                         'LAF_OAUTH_JWKS_FILE', 'LAF_OAUTH_ALLOWED_SUBJECT',
+                         'LAF_OAUTH_ALLOWED_SUBJECTS_JSON', 'LAF_OAUTH_REQUIRED_SCOPES',
                          'CREDENTIALS_DIRECTORY'):
                 if name in os.environ:
                     environment[name] = os.environ[name]

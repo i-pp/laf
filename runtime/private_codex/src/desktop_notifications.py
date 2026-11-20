@@ -39,11 +39,11 @@ class FreedesktopSender:
         if ready.returncode:
             return {'status': 'RETRY', 'code': 'DESKTOP_UNAVAILABLE'}
         data = payload['data']
-        summary = 'AceIS Codex: ' + data['state']
+        summary = 'LAF Codex: ' + data['state']
         body = 'Task: ' + data['task_id'] + '\nUTC: ' + payload['timestamp']
         try:
             result = self.run(base + ['org.freedesktop.Notifications.Notify',
-                'AceIS Codex', '0', '', summary, body, '[]', '{}', '10000'],
+                'LAF Codex', '0', '', summary, body, '[]', '{}', '10000'],
                 capture_output=True, text=True, timeout=self.timeout, check=False)
         except (OSError, subprocess.TimeoutExpired):
             return {'status': 'UNKNOWN', 'code': 'DESKTOP_RESULT_UNKNOWN'}

@@ -22,8 +22,9 @@
 # Added 2026-11-12: integrated source-tree archive preparation.
 
 """Pure metadata contracts for Codex packaging; never installs or connects."""
-import ast,json,unittest
+import ast,json,tempfile,unittest,zipfile
 from pathlib import Path
+import check_release_names as names
 ROOT=Path(__file__).resolve().parents[1]
 def read(name):return json.loads((ROOT/name).read_text())
 class CodexPackage(unittest.TestCase):
@@ -49,4 +50,43 @@ class CodexPackage(unittest.TestCase):
   self.assertEqual(market['plugins'][0],{'name':'laf','source':{'source':'local','path':'.'},'policy':{'installation':'AVAILABLE','authentication':'ON_USE'},'category':'Developer Tools'})
   names=[p for rule in read('.github/license-policy.json')['rules'] for p in rule['paths']]
   for p in ('.codex-plugin/plugin.json','.mcp.json','.agents/plugins/marketplace.json','docs/codex-install.md','scripts/test_codex_package.py'):self.assertIn(p,names)
+ def test_release_gate_rejects_retired_visible_path_and_content(self):
+  retired='aCe'+'Is'
+  for path,payload in (
+      (retired+'-inference.service',b'[Unit]'),
+      ('.mcp.json',json.dumps({'tools':[retired+'_local_model_prepare']}).encode()),
+      ('plugin.json',json.dumps({'displayName':retired}).encode()),
+      ('laf.env',(retired.upper()+'_OAUTH_ISSUER=value').encode()),
+      ('README.md',f'Running {retired} by default'.encode())):
+   with self.subTest(path=path),self.assertRaises(names.NamingError):
+    names.check_member(path,payload)
+ def test_zip_requires_exact_attribution_and_laf_artifact_name(self):
+  preserved=(ROOT/'NOTICE').read_bytes()
+  retired='aCe'+'Is'
+  with tempfile.TemporaryDirectory() as tmp:
+   directory=Path(tmp)
+   for number,(basename,notice,comment) in enumerate((
+       ('laf-source.zip',preserved,b''),
+       ('laf-changed.zip',preserved+b'changed',b''),
+       (retired+'.zip',preserved,b''),
+       ('laf-comment.zip',preserved,retired.encode()))):
+    target=directory/basename
+    with zipfile.ZipFile(target,'w') as archive:
+     archive.comment=comment
+     archive.writestr('NOTICE',notice)
+     archive.writestr('launcher.py','pass')
+    if number==0:self.assertEqual(names.check_zip(target),2)
+    else:
+     with self.assertRaises(names.NamingError):names.check_zip(target)
+ def test_fresh_install_checks_names_and_symlink_targets(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   prefix=Path(tmp)
+   binary=prefix/'laf-server'
+   binary.touch()
+   unit=prefix/'laf-inference.service'
+   unit.symlink_to(binary.name)
+   self.assertEqual(names.check_tree(prefix,names_only=True),2)
+   unit.unlink()
+   unit.symlink_to('AcE'+'iS-inference.service')
+   with self.assertRaises(names.NamingError):names.check_tree(prefix,names_only=True)
 if __name__=='__main__':unittest.main(verbosity=2)

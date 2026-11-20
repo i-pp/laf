@@ -40,7 +40,8 @@ import time
 import tempfile
 import zipfile
 
-FLAGS = ("local_llm", "local_models", "chat_mailbox", "mailbox_grants", "codex_pipeline", "experiments")
+FRONTEND_FLAGS = ("chat_mailbox", "mailbox_grants", "codex_pipeline", "experiments")
+RECIPE_FLAGS = ("local_llm", "local_models", *FRONTEND_FLAGS)
 PROPS = ("Id", "LoadState", "ActiveState", "SubState", "Transient", "Description", "InvocationID", "MainPID", "KillMode", "KillSignal", "TimeoutStopUSec", "Restart", "MemoryMax", "MemorySwapMax", "TasksMax", "CPUQuotaPerSecUSec", "CPUQuotaPeriodUSec", "UMask", "LimitCORE", "LimitFSIZE", "BindsTo", "After", "PartOf", "DropInPaths", "NeedDaemonReload", "ExecStart")
 
 class Refused(RuntimeError): pass
@@ -149,7 +150,8 @@ def load_service(plan):
     state_path=Path(plan["runtime"])/module.STATE
     module.private_file(state_path)
     saved=json.loads(state_path.read_bytes())
-    kwargs={"allow_"+key:saved.get(key+"_enabled",False) for key in FLAGS}
+    # Reconstruct the original recipe exactly for its ownership checks and rollback.
+    kwargs={"allow_"+key:saved.get(key+"_enabled",False) for key in RECIPE_FLAGS}
     svc=NativeServices(plan["runtime"],saved["codex_file_reference"],saved["credential_file_reference"],**kwargs)
     return svc,module
 
@@ -157,7 +159,7 @@ def new_command(service, plan):
     old=service.commands()["tunnel"]
     if sum(a.startswith("--mcp.command=channel=main,command=") for a in old)!=1: raise Refused("Exactly one existing stdio channel required")
     argv=["/usr/bin/env","-u","CONTROL_PLANE_API_KEY","-u","OPENAI_API_KEY","-u","OPENAI_ADMIN_KEY",plan["python"],"-B",str(Path(plan["candidate_root"])/"integration/laf_stdio_cli.py"),"--runtime",str(service.root),"--runtime-project-root",str(service.root.parent.parent)]
-    for flag in FLAGS:
+    for flag in FRONTEND_FLAGS:
         if getattr(service,"allow_"+flag,False): argv.append("--allow-"+flag.replace("_","-"))
     argv.extend(["--allow-laf-router","--laf-router-socket",plan["router_socket"],"--laf-router-state",plan["router_state"]])
     models=plan["models"]

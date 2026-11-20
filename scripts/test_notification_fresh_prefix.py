@@ -21,7 +21,9 @@
 
 # Added 2026-11-15: synthetic first-ledger Events activation regressions.
 """Real temporary SQLite with fake providers; no native, thread or callback."""
+from contextlib import closing
 import os
+import sqlite3
 import stat
 import sys
 from pathlib import Path
@@ -84,7 +86,7 @@ class FreshPrefixEvents(unittest.TestCase):
         return dict(self.providers)
 
     def components(self, **kwargs):
-        options = {'events_transport': True, 'environ': {'ACEIS_MCP_EVENTS_ENABLED': '1'},
+        options = {'events_transport': True, 'environ': {'LAF_MCP_EVENTS_ENABLED': '1'},
                    'authenticated_principals': (self.principal,), 'provider_loader': self.loader}
         options.update(kwargs)
         return build_systemd_notification_runtime(self.runtime, **options)
@@ -414,6 +416,34 @@ class FreshPrefixEvents(unittest.TestCase):
         self.assertEqual(components.disabled_reason, 'NOTIFICATION_STORAGE_UNAVAILABLE')
         self.assertFalse(gateway.allow_external_notifications)
         self.assertEqual(target.read_bytes(), b'preserve private data')
+
+    def test_retained_and_unmarked_notification_state_stays_untouched(self):
+        gateway = self.gateway(self.components(events_transport=False))
+        names = ('mcp-events.sqlite3', 'mcp-events.sqlite3-wal', 'laf-mcp-events.sqlite3')
+        for name in names:
+            with self.subTest(name=name):
+                saved = self.runtime / name
+                with closing(sqlite3.connect(saved)) as conn:
+                    conn.execute('CREATE TABLE saved_notification_state (id INTEGER)')
+                    conn.commit()
+                saved.chmod(0o600)
+                old_bytes = saved.read_bytes()
+                components = self.components()
+                self.assertFalse(components.activate_after_pipeline(gateway.pipeline))
+                self.assertFalse(components.enabled)
+                self.assertEqual(saved.read_bytes(), old_bytes)
+                if name != components.OUTBOX_NAME:
+                    self.assertFalse(components.outbox_path.exists())
+                    self.assertEqual(components.disabled_reason, 'NOTIFICATION_RETAINED_STATE_REQUIRES_NEW_PREFIX')
+                else:
+                    self.assertEqual(components.disabled_reason, 'NOTIFICATION_STORAGE_UNAVAILABLE')
+                saved.unlink()
+        components = self.components()
+        self.assertTrue(components.enabled)
+        with closing(sqlite3.connect(components.outbox_path)) as conn:
+            self.assertEqual(conn.execute('PRAGMA application_id').fetchone()[0],
+                             composition.NotificationOutbox.APPLICATION_ID)
+        self.assertTrue(self.components().enabled)
 
     def test_interrupted_storage_consumes_deferral_and_cannot_be_silently_retried(self):
         components = self.components()

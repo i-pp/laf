@@ -58,7 +58,7 @@ manager command as a fallback.
 
 After an authorized owner switch, check the same Tunnel's readiness and fresh
 control-plane poll without reading its key. Then refresh the same connected
-client and fetch the actual catalog: version 0.1.0, all 33 exact contracts and no
+client and fetch the actual catalog: version 0.1.0, all 29 exact contracts and no
 tools error, including `codex_models_list`. A cached 32-tool client inventory or
 transport-ready response does not establish that the new candidate is served.
 Private owner evidence must also bind the running source/prefix to its archive.
@@ -86,11 +86,11 @@ with a new isolated HOME/CODEX_HOME and plugin cache. Activate the new private
 HOME/.config/laf/plugin.json there. Preserve global configuration and existing
 runtime state. Record the installed cache path, archive hash and native version.
 Check the actual loader's plugin/installed and mcpServerStatus/list results.
-Installation or 33 schemas alone is not backend acceptance.
+Installation or 29 schemas alone is not backend acceptance.
 
 The runner below uses the installed .mcp.json command through an actual MCP
 SDK client. It checks all archive/cache bytes, copied runtime source, version
-0.1.0 and all 33 input schemas/annotations before calling a tool. This SDK
+0.1.0 and all 29 input schemas/annotations before calling a tool. This SDK
 client test is separate from the Codex loader check; it is not a model-driven
 outer Codex turn. Keep both pieces of evidence.
 
@@ -171,8 +171,8 @@ successful acceptance claim.
 Offline CI uses synthetic peers and temporary files to test this logic. Those
 tests do not prove installation, native loading, an account or a model. Keep
 source/offline, actual loader, real-account and real-model results distinct.
-The four legacy tools retain their separate compatibility boundary; a Router
-canary does not establish that all 33 tools work.
+The Router canary verifies only the configured local inference path.
+Use the exact supported inventory during the fresh-install check.
 
 Modification notice (2026-11-15): a correlated native thread/read rejection is
 distinct from a lost or mismatched acknowledgment. A notification can advance

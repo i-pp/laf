@@ -59,7 +59,7 @@ class OrchestratorBinding(unittest.TestCase):
   from legacy_tool_adapter import Adapter
   class Proxy:
    def dispatch(*args):raise AssertionError('No Codex dispatch')
-  value=Adapter(self.runtime,allow_local_llm=True,allow_local_models=True,allow_chat_mailbox=True,
+  value=Adapter(self.runtime,allow_chat_mailbox=True,
       allow_mailbox_grants=True,allow_codex_pipeline=True,pipeline=Proxy(),allow_experiments=True,
       runtime_project_root=self.project)
   self.addCleanup(value.audit.close);return value
@@ -77,6 +77,17 @@ class OrchestratorBinding(unittest.TestCase):
   self.assertEqual(self.configure(dry_run=True)['status'],'planned')
   self.assertEqual(before,self.marker.read_bytes());self.assertEqual(anchor,(self.prefix/'plugin.json').read_bytes())
  def test_old_schema2_without_optional_field_is_unchanged(self):
+  previous_names=['orchestrator','local_helper','mailbox','mailbox_grants','codex_pipeline','experiments','router']
+  for value in ({'schema':1,'unconfigured':previous_names},
+                {'schema':2,'unconfigured':previous_names,'router':None,'codex':None}):
+   with self.subTest(schema=value['schema']):
+    raw=(json.dumps(value,indent=2)+'\n').encode()
+    self.marker.write_bytes(raw)
+    self.assertEqual(load_state(self.runtime),(value,raw))
+    self.assertEqual(self.marker.read_bytes(),raw)
+  invalid={'schema':2,'unconfigured':previous_names[1:]+[previous_names[0]],'router':None,'codex':None}
+  with self.assertRaisesRegex(ValueError,'Backend state and binding disagree'):
+   validate_state(invalid,self.runtime,len(json.dumps(invalid).encode()))
   value={'schema':2,'unconfigured':list(BACKENDS),'router':None,'codex':None}
   self.marker.write_text(json.dumps(value))
   self.assertEqual(self.state(),value)
@@ -84,8 +95,7 @@ class OrchestratorBinding(unittest.TestCase):
   self.configure();self.assertNotIn('orchestrator',load_unconfigured(self.runtime))
  def test_binding_does_not_implicitly_enable_other_backends(self):
   self.configure();adapter=self.adapter()
-  for name,args in [('codex_capabilities',{}),('experiment_list',{}),
-                    ('aceis_local_model_status',{'profile':'qwen-coder-30b'})]:
+  for name,args in [('codex_capabilities',{}),('experiment_list',{})]:
    r=adapter.call_tool(name,args,1)
    self.assertTrue(r['isError']);self.assertEqual(r['structuredContent']['data']['code'],'BACKEND_UNCONFIGURED')
  def test_invalid_transport_and_extra_fields_refuse(self):

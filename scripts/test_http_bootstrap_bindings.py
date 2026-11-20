@@ -112,7 +112,7 @@ class HttpBootstrapBindings(unittest.TestCase):
             # runtime_path and bootstrap_paths retain their real scope guards.
             stack.enter_context(patch.object(facade, 'resolve_project_root', return_value=self.project))
             stack.enter_context(patch.object(oauth_auth.OAuthJWTVerifier, 'from_environment', return_value=verifier))
-            stack.enter_context(patch.dict(os.environ, {'ACEIS_OAUTH_RESOURCE_URL': 'https://resource.example.invalid/mcp'}))
+            stack.enter_context(patch.dict(os.environ, {'LAF_OAUTH_RESOURCE_URL': 'https://resource.example.invalid/mcp'}))
             self.provider = stack.enter_context(patch.object(notification_runtime,
                 'build_systemd_notification_runtime', return_value=notifications or self.notifications))
             self.proxy = stack.enter_context(patch.object(codex_host, 'DaemonPipelineProxy', return_value=self.pipeline))

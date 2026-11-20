@@ -31,7 +31,7 @@ import re
 import stat
 import sys
 
-CAPABILITIES=('local-llm','local-models','chat-mailbox','mailbox-grants','codex-pipeline','experiments')
+CAPABILITIES=('chat-mailbox','mailbox-grants','codex-pipeline','experiments')
 KEYS={'schema','profile','sdk_python','runtime','runtime_project_root','router_socket','receipt_directory','models','capabilities'}
 PATH_KEYS=('sdk_python','runtime','runtime_project_root','router_socket','receipt_directory')
 BOOTSTRAP_KEYS=KEYS|{'runtime_source_root'}
@@ -74,7 +74,7 @@ def arguments(value,root):
   if bootstrap and key=='router_socket' and text is None:continue
   if not isinstance(text,str) or not text.startswith('/') or '\0' in text or len(text)>4096 or any(x in ('','..','.') for x in text.split('/')[1:]):raise ConfigError('Invalid absolute operator path')
  flags=value['capabilities']
- if not isinstance(flags,list) or len(flags)!=len(CAPABILITIES) or any(not isinstance(x,str) for x in flags) or set(flags)!=set(CAPABILITIES):raise ConfigError('All six existing capabilities must be explicitly selected; no fallback')
+ if not isinstance(flags,list) or len(flags)!=len(CAPABILITIES) or any(not isinstance(x,str) for x in flags) or set(flags)!=set(CAPABILITIES):raise ConfigError('All four supported capabilities must be explicitly selected; no fallback')
  models=value['models']
  unconfigured_router=bootstrap and value['router_socket'] is None and models==[]
  if not isinstance(models,list) or not (0 if unconfigured_router else 1)<=len(models)<=16 or any(not isinstance(x,str) or not re.fullmatch('[a-z][a-z0-9-]{0,63}',x) for x in models) or len(models)!=len(set(models)):raise ConfigError('Explicit unique model allowlist required')

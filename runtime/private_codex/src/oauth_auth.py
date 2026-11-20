@@ -162,28 +162,28 @@ class OAuthJWTVerifier:
     @classmethod
     def from_environment(cls, environ=None):
         environment = os.environ if environ is None else environ
-        required = ('ACEIS_OAUTH_ISSUER', 'ACEIS_OAUTH_AUDIENCE',
-                    'ACEIS_OAUTH_JWKS_FILE')
+        required = ('LAF_OAUTH_ISSUER', 'LAF_OAUTH_AUDIENCE',
+                    'LAF_OAUTH_JWKS_FILE')
         if any(not isinstance(environment.get(name), str) or not environment[name]
                for name in required):
             raise ValueError('OAuth configuration incomplete')
-        if environment.get('ACEIS_OAUTH_ALLOWED_SUBJECTS_JSON'):
+        if environment.get('LAF_OAUTH_ALLOWED_SUBJECTS_JSON'):
             try:
-                subjects = json.loads(environment['ACEIS_OAUTH_ALLOWED_SUBJECTS_JSON'],
+                subjects = json.loads(environment['LAF_OAUTH_ALLOWED_SUBJECTS_JSON'],
                                       object_pairs_hook=_pairs)
             except (ValueError, json.JSONDecodeError):
                 raise ValueError('OAuth subject allowlist is invalid') from None
         else:
-            subjects = environment.get('ACEIS_OAUTH_ALLOWED_SUBJECT')
+            subjects = environment.get('LAF_OAUTH_ALLOWED_SUBJECT')
         if not subjects:
             raise ValueError('OAuth subject allowlist is required')
-        path = Path(environment['ACEIS_OAUTH_JWKS_FILE'])
+        path = Path(environment['LAF_OAUTH_JWKS_FILE'])
         if not path.is_absolute() or any(parent.is_symlink() for parent in [path, *path.parents]):
             raise ValueError('Unsafe JWKS path')
         jwks = _load_jwks(path)
-        scopes = environment.get('ACEIS_OAUTH_REQUIRED_SCOPES', 'mcp:access').split()
-        return cls(issuer=environment['ACEIS_OAUTH_ISSUER'],
-                   audience=environment['ACEIS_OAUTH_AUDIENCE'],
+        scopes = environment.get('LAF_OAUTH_REQUIRED_SCOPES', 'mcp:access').split()
+        return cls(issuer=environment['LAF_OAUTH_ISSUER'],
+                   audience=environment['LAF_OAUTH_AUDIENCE'],
                    allowed_subjects=subjects,
                    jwks=jwks, required_scopes=scopes)
 

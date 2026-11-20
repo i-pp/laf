@@ -190,7 +190,7 @@ class Fixtures(unittest.TestCase):
 
     def test_exact_catalog_gate_rejects_count_duplicate_schema_version_and_cursor(self):
         expected = [{'name': 'tool-' + str(i), 'description': 'synthetic',
-                     'inputSchema': {'type': 'object'}, 'annotations': {}} for i in range(33)]
+                     'inputSchema': {'type': 'object'}, 'annotations': {}} for i in range(29)]
         a.check_catalog(copy.deepcopy(expected), expected, '0.1.0')
         changed = copy.deepcopy(expected)
         changed[0]['inputSchema'] = {'type': 'string'}
@@ -666,7 +666,7 @@ class Fixtures(unittest.TestCase):
         from legacy_tool_adapter import tool_definitions, SERVER_INFO
         from laf_shared_tools import CompositeSharedTools
         expected = CompositeSharedTools(SimpleNamespace(
-            tools=tool_definitions(local_llm=True, local_models=True, chat_mailbox=True,
+            tools=tool_definitions(chat_mailbox=True,
                 codex_pipeline=True, experiments=True), call_tool=lambda *args: None, audit=None),
             SimpleNamespace(call=lambda *args: None), server_info=SERVER_INFO).tools
         home = self.base / 'sdk-home'

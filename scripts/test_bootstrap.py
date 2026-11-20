@@ -76,6 +76,8 @@ class BootstrapTests(unittest.TestCase):
   self.assertEqual(stat.S_IMODE((self.prefix/'plugin.json').stat().st_mode),0o600)
   self.assertFalse(any(p.name in ('auth.json','AGENTS.md') or p.suffix in ('.sqlite','.sqlite3') for p in self.prefix.rglob('*')))
   self.assertFalse(result['execution_ready']);self.assertEqual(result['unconfigured_backends'],list(bootstrap.BACKENDS))
+  from check_release_names import check_tree
+  self.assertGreater(check_tree(self.prefix),0)
  def test_existing_prefix_is_never_reused_or_changed(self):
   self.prefix.mkdir();sentinel=self.prefix/'keep';sentinel.write_bytes(b'preserve')
   with self.assertRaises(bootstrap.BootstrapError):self.prepare()
@@ -128,23 +130,26 @@ class BootstrapTests(unittest.TestCase):
   adapter=StdioRouterAdapter(runtime,router_app=UnconfiguredRouterApplication(),runtime_project_root=project,
       pipeline=DaemonPipelineProxy(runtime),**opts)
   try:
-   self.assertEqual(len(adapter.tools),33);self.assertEqual(len({t['name'] for t in adapter.tools}),33)
-   from legacy_tool_adapter import tool_definitions
+   self.assertEqual(len(adapter.tools),29);self.assertEqual(len({t['name'] for t in adapter.tools}),29)
+   from legacy_tool_adapter import Invalid, tool_definitions
    from laf_mcp.server import TOOLS
-   expected=tool_definitions(local_llm=True,local_models=True,chat_mailbox=True,codex_pipeline=True,experiments=True)
+   expected=tool_definitions(chat_mailbox=True,codex_pipeline=True,experiments=True)
    for name,(description,properties,required) in TOOLS.items():
     write=name in ('laf_router_submit_job','laf_router_cancel_job')
     expected.append({'name':name,'description':description,'inputSchema':{'type':'object','properties':copy.deepcopy(properties),'required':list(required),'additionalProperties':False},
        'annotations':{'readOnlyHint':not write,'destructiveHint':name=='laf_router_cancel_job','idempotentHint':not write,'openWorldHint':False}})
    self.assertEqual(adapter.tools,expected)
-   self.assertIsNone(adapter.mailbox);self.assertIsNone(adapter.grant);self.assertIsNone(adapter.helper_root)
+   self.assertIsNone(adapter.mailbox);self.assertIsNone(adapter.grant)
    self.assertIsNone(adapter.experiments)
    for name,args in [('codex_models_list',{}),('orchestrator_status',{}),('experiment_list',{}),
-      ('aceis_local_model_prepare',{'profile':'qwen-coder-30b'}),('laf_router_status',{}),
+      ('laf_router_status',{}),
       ('chat_mailbox_register_request',{'task_id':'00000000-0000-4000-8000-000000000001','request_id':'00000000-0000-4000-8000-000000000002','request':'Synthetic non-secret question.','request_sha256':hashlib.sha256(b'Synthetic non-secret question.').hexdigest()})]:
     result=adapter.call_tool(name,args,1);self.assertTrue(result['isError'])
     data=result['structuredContent'];data=data.get('data',data)
     self.assertEqual(data['code'],'BACKEND_UNCONFIGURED');self.assertFalse(data['dispatch_started'])
+   for suffix in ('llm_generate','model_status','model_generate','model_prepare'):
+    with self.assertRaisesRegex(Invalid, 'Tool is not enabled'):
+     adapter.call_tool('ace' + 'is_local_' + suffix, {}, 1)
   finally:self.assertTrue(adapter.close(timeout=0))
   self.assertFalse(any(p.suffix in ('.sqlite','.sqlite3') for p in runtime.iterdir()))
  def test_new_default_config_lookup_is_exclusive_and_points_outside_cache(self):
@@ -205,7 +210,7 @@ class BootstrapTests(unittest.TestCase):
   self.assertEqual(load_project_policy(project).text,body.decode())
   (runtime/'unconfigured-backends.json').unlink()
   from legacy_tool_adapter import Adapter
-  with self.assertRaises(FileNotFoundError):Adapter(runtime,allow_local_llm=True,runtime_project_root=project)
+  with self.assertRaises(TypeError):Adapter(runtime,allow_local_llm=True,runtime_project_root=project)
   from chat_mailbox import Mailbox,MailboxError
   path=runtime/'chat-mailbox-policy.json';path.write_text(json.dumps({'schema':1,'allowed':[]}));path.chmod(0o600)
   with self.assertRaises(MailboxError):Mailbox.policy_snapshot(runtime)

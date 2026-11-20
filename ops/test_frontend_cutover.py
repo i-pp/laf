@@ -25,6 +25,7 @@ from contextlib import nullcontext
 import importlib.util
 import json
 from pathlib import Path
+import shlex
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -38,7 +39,8 @@ class Service:
   self.units={'daemon':'d.service','tunnel':'t.service'}
   self.client=Path('/known/client');self.state={'phase':'READY','invocations':{'daemon':'d1','tunnel':'t1'},'credential_file_reference':'/private/key','schema':1}
   self.ops=[];self.props={role:{'LoadState':'loaded','ActiveState':'active','InvocationID':inv,'role':role} for role,inv in self.state['invocations'].items()}
-  for x in c.FLAGS:setattr(self,'allow_'+x,True)
+  for flag in ('local_llm','local_models','chat_mailbox','mailbox_grants','codex_pipeline','experiments'):
+   setattr(self,'allow_'+flag,True)
   self.write_state(self.state)
  def read_state(self):return copy.deepcopy(self.state)
  def write_state(self,state):self.state=copy.deepcopy(state);(self.root/'poc-services-state.json').write_text(json.dumps(state))
@@ -49,7 +51,7 @@ class Service:
  def locked(self):return nullcontext()
  def preflight(self,key):self.ops.append(('preflight',key))
  def require_idle_database(self):self.ops.append(('idle',))
- def commands(self):return {'daemon':['never-start-daemon'],'tunnel':['client','run','--control-plane.api-key=file:/private/key','--mcp.command=channel=main,command=old']}
+ def commands(self):return {'daemon':['never-start-daemon'],'tunnel':['client','run','--control-plane.api-key=file:/private/key','--mcp.command=channel=main,command=old --allow-local-llm --allow-local-models']}
  def call(self,argv,timeout=10):
   if argv[0].endswith('systemctl') and argv[2]=='show':
    role='tunnel' if argv[3]=='t.service' else 'daemon'
@@ -77,10 +79,14 @@ class TestCutover(unittest.TestCase):
  def stops(self):return [x for x in self.s.ops if x[0]=='call']
  def test_success_tunnel_only_state_and_evidence(self):
   result=self.apply();self.assertEqual(result['status'],'transport_ready_client_acceptance_pending');self.assertEqual(self.s.state['phase'],'READY');self.assertEqual(self.s.state['invocations'],{'daemon':'d1','tunnel':'t2'});self.assertEqual(len(self.stops()),1);self.assertEqual((self.j/'old-health-url').read_text(),'old health');self.assertEqual(c.read_json(self.j/'before-state.json')['invocations']['tunnel'],'t1')
- def test_command_preserves_all_outer_arguments_and_flags(self):
-  out=c.new_command(self.s,self.plan);self.assertEqual(out[:3],self.s.commands()['tunnel'][:3]);value=out[3]
-  for flag in c.FLAGS:self.assertIn('--allow-'+flag.replace('_','-'),value)
-  self.assertNotIn('--allow-writes',value);self.assertIn('--allow-laf-router',value);self.assertIn('--runtime-project-root',value)
+ def test_command_preserves_outer_arguments_and_only_supported_flags(self):
+  out=c.new_command(self.s,self.plan)
+  self.assertEqual(out[:3],self.s.commands()['tunnel'][:3])
+  self.assertTrue(out[3].startswith('--mcp.command=channel=main,command='))
+  argv=shlex.split(out[3].removeprefix('--mcp.command=channel=main,command='))
+  self.assertEqual({flag for flag in argv if flag.startswith('--allow-')},
+                   {'--allow-chat-mailbox','--allow-mailbox-grants','--allow-codex-pipeline','--allow-experiments','--allow-laf-router'})
+  self.assertIn('--runtime-project-root',argv)
  def test_changed_invocation_stops_nothing(self):
   self.s.props['tunnel']['InvocationID']='foreign'
   with self.assertRaises(c.Refused):self.apply()

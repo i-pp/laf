@@ -24,9 +24,9 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # LAF integrated plugin: experimental source
 
-This package preserves the existing 27 Codex/orchestration/legacy tools, adds
-`codex_models_list`, and retains five owner-scoped Router tools. The owner has authorized publication of the
-project-authored source changes under KOL-v1, with third-party terms preserved.
+The integrated catalog contains 29 tools, including `codex_models_list` and five
+owner-scoped Router tools. The package retains the license, source origin, and
+applicable third-party terms.
 This is an experimental source proposal, not a complete clean-host Quick Start,
 a directory publication approval, or a safety-critical product certification.
 Private assembly status, credentials and operational evidence are not distributed.
@@ -34,7 +34,7 @@ Private assembly status, credentials and operational evidence are not distribute
 ## What is included
 
 - Portable `plugin.json` and `mcp.json`, without a private App binding or endpoint.
-- A stdio launcher for the existing integrated production CLI. All six legacy
+- A stdio launcher for the existing integrated production CLI. All four supported
   capability opt-ins are explicit in the operator config. There is no silent
   five-tool fallback, no task-write flag, and no automatic model fallback.
 - The reviewed stdio runtime and HTTP compatibility entrypoint at
@@ -78,18 +78,18 @@ following exact fields using the actual existing local paths and model IDs:
   "receipt_directory": "/operator/private-state/receipts",
   "models": ["flash"],
   "capabilities": [
-    "local-llm", "local-models", "chat-mailbox", "mailbox-grants",
+    "chat-mailbox", "mailbox-grants",
     "codex-pipeline", "experiments"
   ]
 }
 ```
 
 The profile name `integrated-32` is retained for configuration compatibility;
-with Codex catalog discovery enabled, its current complete inventory is 33 tools.
+with Codex catalog discovery enabled, its current complete inventory is 29 tools.
 See [Codex model selection](../docs/codex-model-selection.md).
 
 Those paths are schema illustrations, **not runnable defaults**. Selecting the
-six opt-ins acknowledges their existing configured scope, not a grant of new
+four opt-ins acknowledges their existing configured scope, not a grant of new
 workspace/identity/network permissions. Do not use this profile when those
 capabilities have not been configured and approved. `flash` is an example model
 ID, not an installation instruction or a requirement that Flash be present.
@@ -104,7 +104,7 @@ This checks configuration and entrypoint/interpreter metadata only. It does not
 prove SDK version, daemon availability, policy acceptance, actual tool discovery,
 model execution or authentication. It starts no child. Install/reload the local
 plugin only through the target host's supported, separately authorized flow.
-Then verify real startup, all 33 expected tools, one harmless status read and the
+Then verify real startup, all 29 expected tools, one harmless status read and the
 retained Codex read paths. A local process plugin does not by itself make the
 server accessible from ChatGPT web/mobile.
 
@@ -144,9 +144,13 @@ verify provider effort or broaden this loader/archive evidence.
 
 ## Remaining product acceptance and directory-release gates
 
+For 0.1.0, check the shipping archive and the names used by a fresh
+installation against the LAF-only release requirement. Use the repository
+guide `docs/laf-release-names.md` for the gate and migration sequence.
+
 - Recheck source origin, secret exclusion and modification notices for later changes.
   The present owner-authorized source scope does not authorize a directory submission.
-- Recheck the actual target-host loader and 33-tool catalog after launcher,
+- Recheck the actual target-host loader and 29-tool catalog after launcher,
   runtime, manifest or target configuration changes. The historical check above
   does not accept later packages, real backends or ChatGPT client discovery.
 - Provide and test a clean-host daemon/policy/isolation/setup flow. Existing-host
