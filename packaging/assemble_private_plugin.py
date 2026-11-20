@@ -112,7 +112,7 @@ def archive_private_candidate(directory,archive):
    z.writestr(info,data)
 
 def manifest():
- return {'$schema':'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json','name':'laf','version':'0.1.0','description':'Local AI Fabric integrated Codex/orchestration and owner-scoped Router tools. Private review candidate.','author':{'name':'I-plusplus Inc.'},'extensions':{'com.openai':{'interface':{'displayName':'Local AI Fabric','shortDescription':'Local models and Codex tools','category':'Developer Tools'}}}}
+ return {'$schema':'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json','name':'laf','version':'0.1.0','description':'Local AI Fabric integrated Codex/orchestration and owner-scoped Router tools. Private review candidate.','author':{'name':'I-plusplus Inc.'},'extensions':{'com.openai':{'interface':{'displayName':'Local AI Fabric','shortDescription':'Local models and Codex tools','developerName':'I-plusplus Inc.','category':'Developer Tools'}}}}
 
 def mcp_manifest():
  return {'$schema':'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json','mcpServers':{'laf':{'type':'stdio','command':'python3','args':['-B','${PLUGIN_ROOT}/launcher.py'],'cwd':'${PLUGIN_ROOT}'}}}

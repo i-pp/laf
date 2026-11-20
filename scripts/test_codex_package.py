@@ -38,6 +38,8 @@ class CodexPackage(unittest.TestCase):
   portable=read('plugin.json');compat=read('.codex-plugin/plugin.json')
   for key in ('name','version','description','author'):self.assertEqual(compat[key],portable[key])
   self.assertEqual(compat['interface'],portable['extensions']['com.openai']['interface'])
+  self.assertEqual(portable['author']['name'],'I-plusplus Inc.')
+  self.assertEqual(compat['interface']['developerName'],portable['author']['name'])
   self.assertEqual(compat['mcpServers'],'./.mcp.json');self.assertEqual(compat['skills'],'./skills')
   self.assertNotIn('apps',compat)
  def test_codex_mcp_is_local_stdio_without_auth_or_auto_install(self):

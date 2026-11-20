@@ -136,10 +136,12 @@ line/paragraph separator characters rejected.
 Thread echo may be absent or null. That is recorded as not reported, not matched.
 A different echo prevents dispatch/adoption. Acknowledged transport and even a
 matching echo do not prove actual model execution; execution and billing
-verification remain false. The inspected stable subset includes Codex 0.167.0
-alongside the existing 0.165.0 and 0.164.0-alpha.11.1 gates. The versioned fixture
-records field names and schema digests, not bundled upstream schema source.
-No CLI/schema generation or real provider operation is performed by these tests.
+verification remain false. The inspected stable subset includes exact Codex
+0.171.0 and 0.167.0, alongside the existing 0.165.0 and 0.164.0-alpha.11.1 gates.
+The generated 0.171.0 schemas preserve the fields LAF sends and consumes.
+New optional catalog and thread filters and the item completion token count
+are outside LAF's contract. The offline regression checks the version boundary
+and selected fields without contacting a provider.
 
 OAuth ownership, shared-tool ACLs, policy pins, ordinary-session limits and
 Router lifecycle remain separate and unchanged. Owner-filtered listings scan a

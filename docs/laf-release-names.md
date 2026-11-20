@@ -31,10 +31,15 @@ archives and fresh installation. Inspect MCP tool names and descriptions,
 package and UI labels, file and socket paths, configuration keys, environment
 variables, and enabled systemd units. The check is case-insensitive. A hidden
 tool, compatibility alias, or old active registration still fails the gate.
-The existing functional, resource, persistence, and Tunnel acceptance gates
-also apply. Keep legally required notices and archived history. The scanner
+Keep legally required notices and archived history. The scanner
 allows only the exact preserved notice and history bytes to carry the retired
 name in the candidate.
+
+Verify startup, installed tool discovery, state readback and a bounded call
+through the deployed plugin and existing Tunnel. Existing resource guards and
+UNKNOWN reservations continue to apply. Allocation-level
+[GPU release verification](https://github.com/i-pp/laf/issues/22) and coordinated
+[swap policy management](https://github.com/i-pp/laf/issues/13) are follow-up work.
 
 ## Check the deliverables
 

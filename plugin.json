@@ -11,6 +11,7 @@
       "interface": {
         "displayName": "Local AI Fabric",
         "shortDescription": "Local models and Codex tools",
+        "developerName": "I-plusplus Inc.",
         "category": "Developer Tools"
       }
     }

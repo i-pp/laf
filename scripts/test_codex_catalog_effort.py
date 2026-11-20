@@ -929,7 +929,11 @@ CONTRACT = json.loads((SOURCE / 'scripts/fixtures/codex-0.167-contract.json').re
 class Codex0167ContractTests(unittest.TestCase):
     def test_exact_version_admission_not_future_release(self):
         self.assertTrue(schema_version_supported('codex_work_desktop/0.167.0 (Linux)'))
-        for value in ('codex/0.167.0-dev', 'codex/0.167.1', 'codex/0.168.0', 'codex/10.167.0'):
+        self.assertTrue(schema_version_supported('codex-cli 0.165.0'))
+        self.assertTrue(schema_version_supported('codex_work_desktop/0.171.0 (Linux)'))
+        for value in ('codex/0.167.0-dev', 'codex/0.167.1', 'codex/0.168.0', 'codex/10.167.0',
+                      'codex/0.171.0-alpha.1', 'codex/0.171.0+unknown',
+                      'codex/0.171.1 (Linux 0.171.0)', 'codex/0.172.0'):
             self.assertFalse(schema_version_supported(value))
 
     def test_exposed_parameter_fields_are_in_generated_stable_schema(self):

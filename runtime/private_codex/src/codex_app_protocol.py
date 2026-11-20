@@ -25,13 +25,17 @@ SCHEMA_VERSION = "codex-cli 0.165.0"
 # Installed service binary was also inspected with generate-json-schema only.
 # Across 26 relevant schemas, differences are confined to CodexErrorInfo
 # variants, which this boundary does not interpret or export.
-# Stable 0.167 subset was separately inspected; see scripts/fixtures/codex-0.167-contract.json.
-COMPATIBLE_SCHEMA_VERSIONS = ('0.165.0', '0.164.0-alpha.11.1', '0.167.0')
+# Stable 0.167 and 0.171 app-server subsets were separately inspected.
+COMPATIBLE_SCHEMA_VERSIONS = ('0.165.0', '0.164.0-alpha.11.1', '0.167.0', '0.171.0')
 
 
 def schema_version_supported(user_agent):
-    return isinstance(user_agent, str) and any(re.search(r'(?<![A-Za-z0-9])' + re.escape(v)
-        + r'(?![A-Za-z0-9.\-])', user_agent) for v in COMPATIBLE_SCHEMA_VERSIONS)
+    if not isinstance(user_agent, str):
+        return False
+    # Match the leading product version, without admitting versions mentioned
+    # later in the OS or client description.
+    version = re.match(r'^(?:[A-Za-z0-9_.-]+[/ ])?([^\s]+)', user_agent)
+    return version is not None and version[1] in COMPATIBLE_SCHEMA_VERSIONS
 # SHA-256 of generated artifacts inspected locally, not a runtime dependency.
 SCHEMA_SHA256 = {
     "ClientRequest.json": "9b89e2459362d20cec67a429ef9430fe6b0e9fb8bd87d445d4c9a6acccd87450",

@@ -53,6 +53,13 @@ for the selected package. Raw account, process and receipt evidence stays privat
 
 For Codex registration and the local marketplace option, see [Codex install](docs/codex-install.md).
 
+Choose a model from the Router's [configured catalog](docs/laf-configured-models.md).
+Keep its weights in persistent operator-managed storage outside the installed
+plugin. Point the Router at an existing model, or explicitly install the
+selected artifact using its [model-management procedure](docs/laf-model-management.md)
+after reviewing its source and terms. Plugin installation and updates do not
+fetch, install or replace model weights.
+
 The optional [provider-feedback contract](docs/provider-feedback-admission.md)
 supports resource-admission schema3 for bounded Codex pipeline and ordinary
 Runner execution without inferring a provider concurrency limit. Local resources,
@@ -101,5 +108,7 @@ Use the five `laf_router_*` tools for owner-scoped local inference. The fully
 opted-in integrated profile exposes 29 tools. The former four local helper
 operations and their configuration switches have been removed.
 
-The [LAF-only naming gate](docs/laf-release-names.md) is mandatory for the
-0.1.0 release alongside the existing functional and hardware acceptance.
+The [LAF-only naming gate](docs/laf-release-names.md) is mandatory for 0.1.0.
+Existing resource guards still apply. Allocation-level
+[GPU release verification](https://github.com/i-pp/laf/issues/22) and coordinated
+[swap policy management](https://github.com/i-pp/laf/issues/13) are follow-up work.

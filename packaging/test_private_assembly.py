@@ -31,6 +31,8 @@ class Assembly(unittest.TestCase):
   m=p.mcp_manifest()['mcpServers']['laf'];self.assertEqual(m['type'],'stdio');self.assertEqual(m['args'],['-B','${PLUGIN_ROOT}/launcher.py']);self.assertNotIn('url',m)
  def test_no_private_app_binding(self):
   m=p.manifest();self.assertNotIn('apps',m);self.assertNotIn('com.openai.apps',m['extensions'])
+  self.assertEqual(m['author']['name'],'I-plusplus Inc.')
+  self.assertEqual(m['extensions']['com.openai']['interface']['developerName'],m['author']['name'])
  def test_complete_both_entrypoints_required(self):
   self.assertIn('integration/launch.py',p.REQUIRED);self.assertIn('integration/laf_stdio_cli.py',p.REQUIRED)
  def test_runtime_and_evidence_excluded(self):
