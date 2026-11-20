@@ -77,6 +77,17 @@ class OrchestratorBinding(unittest.TestCase):
   self.assertEqual(self.configure(dry_run=True)['status'],'planned')
   self.assertEqual(before,self.marker.read_bytes());self.assertEqual(anchor,(self.prefix/'plugin.json').read_bytes())
  def test_old_schema2_without_optional_field_is_unchanged(self):
+  previous_names=['orchestrator','local_helper','mailbox','mailbox_grants','codex_pipeline','experiments','router']
+  for value in ({'schema':1,'unconfigured':previous_names},
+                {'schema':2,'unconfigured':previous_names,'router':None,'codex':None}):
+   with self.subTest(schema=value['schema']):
+    raw=(json.dumps(value,indent=2)+'\n').encode()
+    self.marker.write_bytes(raw)
+    self.assertEqual(load_state(self.runtime),(value,raw))
+    self.assertEqual(self.marker.read_bytes(),raw)
+  invalid={'schema':2,'unconfigured':previous_names[1:]+[previous_names[0]],'router':None,'codex':None}
+  with self.assertRaisesRegex(ValueError,'Backend state and binding disagree'):
+   validate_state(invalid,self.runtime,len(json.dumps(invalid).encode()))
   value={'schema':2,'unconfigured':list(BACKENDS),'router':None,'codex':None}
   self.marker.write_text(json.dumps(value))
   self.assertEqual(self.state(),value)

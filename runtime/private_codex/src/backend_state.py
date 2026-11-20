@@ -32,6 +32,8 @@ import stat
 from chat_mailbox import _json
 
 BACKENDS=('orchestrator','mailbox','mailbox_grants','codex_pipeline','experiments','router')
+# Retain read compatibility with a pinned snapshot's former deny marker.
+_RETAINED_BACKEND_ORDER=(BACKENDS[0],'local_helper',*BACKENDS[1:])
 FILE='unconfigured-backends.json'
 LIMIT=16384
 
@@ -76,7 +78,7 @@ def scheduler_binding_policy(binding):
 
 def validate_state(value,runtime,raw_size):
  if (type(value) is not dict or type(value.get('schema')) is not int or type(value.get('unconfigured')) is not list
-     or any(type(x) is not str or x not in BACKENDS for x in value['unconfigured'])
+     or any(type(x) is not str or x not in _RETAINED_BACKEND_ORDER for x in value['unconfigured'])
      or len(set(value['unconfigured']))!=len(value['unconfigured'])):
   raise ValueError('Invalid explicit backend configuration')
  if value['schema']==1:
@@ -146,7 +148,9 @@ def validate_state(value,runtime,raw_size):
        or stat.S_IMODE(source['identity'][3])!=0o600 or not 0<source['identity'][4]<=16384):
     raise ValueError('Invalid operator policy provenance')
   enabled.add('codex_pipeline')
- if value['unconfigured']!=[x for x in BACKENDS if x not in enabled]:raise ValueError('Backend state and binding disagree')
+ expected=[name for name in BACKENDS if name not in enabled]
+ retained=[name for name in _RETAINED_BACKEND_ORDER if name not in enabled]
+ if value['unconfigured'] not in (expected,retained):raise ValueError('Backend state and binding disagree')
  return value
 
 def load_state(runtime,*,dir_fd=None):

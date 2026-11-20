@@ -56,7 +56,10 @@ replace bus environment variables or retry through an undocumented route.
 
 `apply` backs up the ownership state and properties, stops only the recorded
 owned tunnel, launches the replacement with the old recipe's unchanged limits,
-and updates only its invocation in the existing state. The daemon and inference
+and updates only its invocation in the existing state. The replacement receives
+the supported frontend flags. The original command retains the retired helper
+flags wherever the old recipe used them, so rollback can restore it verbatim.
+The daemon and inference
 providers are not stopped, and jobs are never replayed. A missing fresh health
 locator is a bounded startup condition; permission failures are not retried.
 The 20-second stop plus 75-second readiness decision budget is not an outage SLA
