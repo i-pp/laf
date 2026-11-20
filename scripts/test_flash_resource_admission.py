@@ -21,6 +21,7 @@
 
 # Added 2026-11-15: Flash artifact/loading/terminal resource boundaries.
 # Modified 2026-11-20: terminal preload-wait residency reconciliation.
+# Modified 2026-11-20: exercise canonical KFD refusal on the preload cleanup path.
 
 """Synthetic files, native pipes and host lifecycle; never load a model/device."""
 from contextlib import closing
@@ -347,6 +348,23 @@ class FlashBoundary(unittest.TestCase):
         self.assertTrue(self.fixture.client.uncertain)
         self.create.assert_not_called()
 
+    def test_cold_cancel_with_canonical_kfd_fd_never_releases_residency(self):
+        self.guard.stop()
+        kernel = local.GpuDescriptorEvidence()
+        kernel.setUp()
+        self.addCleanup(kernel.doCleanups)
+        kernel.descriptor = (local.stat.S_IFCHR | 0o600, 1, 2, kernel.kfd_number)
+        kernel.file.write_text('pos: 0\n')
+        with patch.object(local.host, 'device_sample', return_value={'idle': True}), \
+                patch.object(local.host, '_scope_path', return_value=kernel.scope):
+            queued = self.run_waiting_flash(lambda job: job.cancel.set())
+
+        self.assertIn('model_residency', self.kinds())
+        self.assertIn('flash', self.backend.resource_instances)
+        self.assertEqual(queued.error, 'unused Flash residency release unconfirmed')
+        self.assertTrue(self.fixture.client.uncertain)
+        self.create.assert_not_called()
+
     def test_cold_cancel_retains_residency_when_host_owner_mismatches(self):
         def change_owner_and_cancel(queued):
             self.fixture.authority.owner = local.ident(190)
@@ -470,7 +488,7 @@ class FlashBoundary(unittest.TestCase):
         before={row['token'] for row in self.fixture.held()};self.guard.stop()
         kernel=local.GpuDescriptorEvidence();kernel.setUp();self.addCleanup(kernel.doCleanups)
         kernel.file.write_text('pos: 0\nflags: 0100002\nmnt_id: 41\nino: 928\n')
-        if kfd:kernel.descriptor=(local.stat.S_IFCHR|0o600,1,2,os.makedev(235,0))
+        if kfd:kernel.descriptor=(local.stat.S_IFCHR|0o600,1,2,kernel.kfd_number)
         with patch.object(local.host,'device_sample',return_value={'idle':True,'used':8192}),\
                 patch.object(local.host,'_scope_path',return_value=kernel.scope):
             with self.assertRaises(LifecycleFault):self.fixture.client.resource_call('core_models_stopped')

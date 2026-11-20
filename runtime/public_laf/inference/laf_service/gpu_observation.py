@@ -20,6 +20,8 @@
 
 
 # Added 2026-11-15: pinned host GPU evidence for local resource admission.
+# Modified 2026-11-16: canonical KFD class and coherent device-node metadata.
+# Modified 2026-11-16: retain procfs enumeration descriptors during bounded scans.
 
 """Read-only pinned AMD device evidence; no discovery fallback or GPU control."""
 from itertools import islice
@@ -34,7 +36,8 @@ from .resource_admission_core import AdmissionWait, _scope_path, linux_observati
 PCI = Path('/sys/bus/pci/devices')
 PROC = Path('/proc')
 DRM = Path('/sys/class/drm')
-KFD = Path('/sys/class/misc/kfd')
+KFD = Path('/sys/class/kfd/kfd')
+KFD_DEVICE = Path('/dev/kfd')
 
 
 def _uint(text):
@@ -137,6 +140,14 @@ def _device_nodes(device, check):
         if len(fields)!=2:raise AdmissionWait('resource_gpu_topology_unknown')
         kfd=os.makedev(*(_uint(field) for field in fields))
         if kfd in nodes:raise AdmissionWait('resource_gpu_topology_unknown')
+    try:device_info=KFD_DEVICE.stat()
+    except FileNotFoundError:device_info=None
+    if (kfd_info is None)!=(device_info is None):
+        raise AdmissionWait('resource_gpu_topology_unknown')
+    if device_info is not None:
+        if (not stat.S_ISCHR(device_info.st_mode) or kfd is None
+                or device_info.st_rdev!=kfd):
+            raise AdmissionWait('resource_gpu_topology_unknown')
     check();return nodes,kfd
 
 
@@ -168,22 +179,28 @@ def scope_clients(scope, device, *, private=True, deadline=None, budget=None):
     for pid in before:
         bounded_work()
         start=_pid_snapshot(pid,scope)
-        for entry in _bounded((PROC/str(pid)/'fdinfo').iterdir(),4096):
-            bounded_work()
-            first_fd=_fd(entry)
-            raw=entry.read_text()
-            if _fd(entry)!=first_fd:raise AdmissionWait('resource_usage_unknown')
-            character=stat.S_ISCHR(first_fd[0])
-            # KFD can allocate on the pinned GPU without per-device DRM fdinfo.
-            # No positive attribution/release contract is implemented for KFD.
-            if character and first_fd[3]==kfd:raise AdmissionWait('resource_gpu_ownership_unknown')
-            record=client_vram(raw,device,private=private)
-            matched=character and first_fd[3] in nodes
-            if matched and record is None:raise AdmissionWait('resource_gpu_counters_unknown')
-            if record is not None and not matched:raise AdmissionWait('resource_usage_unknown')
-            if record is not None:
-                client,used=record
-                result[client]=(min if private else max)(result.get(client,used),used)
+        # Keep the enumeration FD alive while inspecting each entry. Eager
+        # Path.iterdir() includes this reader's directory FD, then closes it
+        # before _fd() can inspect it when this process belongs to the scope.
+        with os.scandir(PROC/str(pid)/'fdinfo') as entries:
+            for index,item in enumerate(entries):
+                if index>=4096:raise AdmissionWait('resource_usage_unknown')
+                entry=Path(item.path)
+                bounded_work()
+                first_fd=_fd(entry)
+                raw=entry.read_text()
+                if _fd(entry)!=first_fd:raise AdmissionWait('resource_usage_unknown')
+                character=stat.S_ISCHR(first_fd[0])
+                # KFD can allocate on the pinned GPU without per-device DRM fdinfo.
+                # No positive attribution/release contract is implemented for KFD.
+                if character and first_fd[3]==kfd:raise AdmissionWait('resource_gpu_ownership_unknown')
+                record=client_vram(raw,device,private=private)
+                matched=character and first_fd[3] in nodes
+                if matched and record is None:raise AdmissionWait('resource_gpu_counters_unknown')
+                if record is not None and not matched:raise AdmissionWait('resource_usage_unknown')
+                if record is not None:
+                    client,used=record
+                    result[client]=(min if private else max)(result.get(client,used),used)
         if _pid_snapshot(pid,scope)!=start:raise AdmissionWait('resource_usage_unknown')
     if before!=pids():raise AdmissionWait('resource_usage_unknown')
     if _device_nodes(device,bounded_work)!=(nodes,kfd):raise AdmissionWait('resource_gpu_topology_unknown')

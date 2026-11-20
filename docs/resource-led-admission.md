@@ -25,6 +25,7 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 <!-- Modified 2026-11-15: versioned resource-only cloud and pipeline admission. -->
 <!-- Modified 2026-11-20: on-demand Flash startup and bounded pre-load queue waits. -->
 <!-- Modified 2026-11-20: reconcile unused Flash residency when pre-load waiting ends. -->
+<!-- Modified 2026-11-20: document the canonical KFD ownership guard. -->
 
 # Resource-led queued admission
 
@@ -245,6 +246,15 @@ readings with zero owned GPU residency. Only a confirmed release clears Core's
 instance record. Missing physical proof leaves the grant held. An uncertain reply
 requires reconciliation through the existing lifecycle fence. If a later attempt
 has already loaded Flash, the job's cancellation leaves that residency in place.
+
+The host matches the canonical AMD KFD class at `/sys/class/kfd/kfd` to the
+character device `/dev/kfd` by device number. Mismatched or incomplete identity
+refuses the GPU proof. An owned KFD descriptor leaves attribution and release
+unknown because DRM counters do not account for its allocations. The observer
+keeps the procfs FD enumerator open during the bounded scan so it can also inspect
+the host observer's own scope. This check preserves the reservation when KFD
+ownership is opaque. Hardware acceptance still requires physical release
+evidence for the actual workload and separately verified controller limits.
 
 Both pre-load samples still require total device VRAM usage below 3 GiB. A game
 or another process at or above that occupancy can keep the job queued until its
