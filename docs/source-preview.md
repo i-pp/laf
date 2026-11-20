@@ -77,6 +77,10 @@ of real parallel model execution; adoption of an existing runtime is separate.
 
 ## Evidence and release boundary
 
+LAF 0.1.0 requires the [LAF-only naming gate](laf-release-names.md) for the
+candidate source, shipping archives, and a fresh installation. Complete
+this gate alongside functional, state-preservation and runtime acceptance.
+
 Historical private host reports remain outside this source draft. Their previous
 test counts and binary hashes are not acceptance of this tree. The Python runner
 reports the selected tests, failures and unexecuted groups. Preserve failed and

@@ -33,7 +33,7 @@ operator-approved model order and adds fresh provider model/effort metadata.
 `codex_models_list` is the new read-only catalog tool. The integrated profile
 retains every existing legacy/Codex tool and Router5, adding only this catalog
 read. Its configuration name remains `integrated-32` for compatibility; the
-fully opted-in catalog now has 33 tools. No approval-response APIs are added.
+fully opted-in catalog contains 29 tools. No approval-response APIs are added.
 
 Inspect and test the source without an account, SDK or running service:
 
@@ -179,6 +179,6 @@ separate gate, not evidence of provider execution.
   review matched necessary ledger fields with sanitized evidence and the source
   freeze; raw usage events were not retained.
 
-This result does not accept all models, all 33 tools, normal installation,
+This historical result does not accept all models, all advertised tools, normal installation,
 clean-host setup or live backend adoption. It does not rerun or extend the
 [historical loader archive check](codex-install.md#completed-local-loader-and-discovery-evidence).

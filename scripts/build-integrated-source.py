@@ -24,6 +24,7 @@
 """Build a new source-only ZIP from explicit license-policy paths. No installation."""
 import argparse,json,os,stat,zipfile
 from pathlib import Path,PurePosixPath
+from check_release_names import MAX_FILE, MAX_TOTAL, check_member, check_name
 ROOT=Path(__file__).resolve().parents[1]
 EXECUTABLES={'laf','inference/laf_npu_service/build.sh','runtime/public_laf/laf','runtime/public_laf/inference/laf_npu_service/build.sh'}
 REQUIRED={'plugin.json','mcp.json','launcher.py','runtime/integration/laf_stdio_cli.py','runtime/integration/launch.py','runtime/public_laf/inference/laf_service/core.py','runtime/public_laf/inference/laf_service/server.py','SOURCE_ORIGIN.md','NOTICE','LICENSE'}
@@ -54,11 +55,21 @@ def build(root,output):
  if output==root or root in output.parents:raise ValueError('Output must be outside source')
  if output.exists() or output.is_symlink():raise ValueError('Existing output preserved')
  names=source_paths(root)
+ check_name(output.name)
+ payload=[]
+ total=0
+ for name in names:
+  with (root/name).open('rb') as stream:
+   data=stream.read(min(MAX_FILE,MAX_TOTAL-total)+1)
+  total+=len(data)
+  if total>MAX_TOTAL:raise ValueError('Source archive exceeds release check limit')
+  check_member(name,data)
+  payload.append((name,data))
  # Exclusive creation. Failed output is retained; never retry/reuse automatically.
  with output.open('xb') as stream,zipfile.ZipFile(stream,'w',zipfile.ZIP_DEFLATED) as z:
-  for name in names:
+  for name,data in payload:
    info=zipfile.ZipInfo(name);info.create_system=3;info.external_attr=(stat.S_IFREG|(0o755 if name in EXECUTABLES else 0o600))<<16;info.compress_type=zipfile.ZIP_DEFLATED
-   z.writestr(info,(root/name).read_bytes())
+   z.writestr(info,data)
  return {'status':'source_archive_created','files':len(names),'installs':0,'service_changes':0,'rights_clearance':'separate release prerequisite'}
 def main():
  parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True);args=parser.parse_args();os.umask(0o077)

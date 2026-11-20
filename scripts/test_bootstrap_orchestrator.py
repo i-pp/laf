@@ -59,7 +59,7 @@ class OrchestratorBinding(unittest.TestCase):
   from legacy_tool_adapter import Adapter
   class Proxy:
    def dispatch(*args):raise AssertionError('No Codex dispatch')
-  value=Adapter(self.runtime,allow_local_llm=True,allow_local_models=True,allow_chat_mailbox=True,
+  value=Adapter(self.runtime,allow_chat_mailbox=True,
       allow_mailbox_grants=True,allow_codex_pipeline=True,pipeline=Proxy(),allow_experiments=True,
       runtime_project_root=self.project)
   self.addCleanup(value.audit.close);return value
@@ -84,8 +84,7 @@ class OrchestratorBinding(unittest.TestCase):
   self.configure();self.assertNotIn('orchestrator',load_unconfigured(self.runtime))
  def test_binding_does_not_implicitly_enable_other_backends(self):
   self.configure();adapter=self.adapter()
-  for name,args in [('codex_capabilities',{}),('experiment_list',{}),
-                    ('aceis_local_model_status',{'profile':'qwen-coder-30b'})]:
+  for name,args in [('codex_capabilities',{}),('experiment_list',{})]:
    r=adapter.call_tool(name,args,1)
    self.assertTrue(r['isError']);self.assertEqual(r['structuredContent']['data']['code'],'BACKEND_UNCONFIGURED')
  def test_invalid_transport_and_extra_fields_refuse(self):

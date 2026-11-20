@@ -19,6 +19,9 @@ from notification_outbox import (BoundedResolver, NotificationError,
 class NotificationRuntime:
     """Construct both sides over one private source ledger and durable outbox."""
 
+    OUTBOX_NAME = 'laf-mcp-events.sqlite3'
+    RETAINED_OUTBOX_NAME = 'mcp-events.sqlite3'
+
     def __init__(self, runtime, *, secret_cipher=None, owner_hash_key=None,
                  resolver=None, sender=None, callback_verifier=None,
                  authorize_task=None, owner_access_check=None,
@@ -28,7 +31,7 @@ class NotificationRuntime:
                  local_single_user=False):
         self.runtime_root = Path(runtime).expanduser().absolute()
         self.source_path = self.runtime_root / 'codex-pipeline.sqlite3'
-        self.outbox_path = self.runtime_root / 'mcp-events.sqlite3'
+        self.outbox_path = self.runtime_root / self.OUTBOX_NAME
         self.secret_cipher = secret_cipher
         self.owner_hash_key = owner_hash_key
         self.resolver = resolver
@@ -121,6 +124,14 @@ class NotificationRuntime:
         (secret_cipher, owner_hash_key, resolver, sender, callback_verifier,
          authorize_task, owner_access_check, authenticated_principals) = configuration
         try:
+            for suffix in ('', '-journal', '-wal', '-shm'):
+                old = self.runtime_root / (self.RETAINED_OUTBOX_NAME + suffix)
+                try:
+                    old.lstat()
+                except FileNotFoundError:
+                    continue
+                self.disabled_reason = 'NOTIFICATION_RETAINED_STATE_REQUIRES_NEW_PREFIX'
+                return
             outbox = NotificationOutbox(
                 self.outbox_path, source_db_path=self.source_path,
                 secret_cipher=secret_cipher, owner_hash_key=owner_hash_key,
@@ -186,7 +197,7 @@ class NotificationRuntime:
         current_identity, source_state = self._private_pipeline_state()
         if (self.runtime_root != root
                 or self.source_path != root / 'codex-pipeline.sqlite3'
-                or self.outbox_path != root / 'mcp-events.sqlite3'
+                or self.outbox_path != root / self.OUTBOX_NAME
                 or database is None or Path(database).absolute() != self.source_path
                 or current_identity != identity or source_state != 'READY'):
             return False
@@ -212,7 +223,7 @@ class NotificationRuntime:
             poll_seconds=self.poll_seconds)
 
 
-EVENTS_ENABLE_ENV = 'ACEIS_MCP_EVENTS_ENABLED'
+EVENTS_ENABLE_ENV = 'LAF_MCP_EVENTS_ENABLED'
 
 
 def build_systemd_notification_runtime(runtime, *, events_transport=False,

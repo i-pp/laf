@@ -89,7 +89,7 @@ def owner_digest(authenticated_principal, key):
         raise NotificationError('AUTHENTICATED_PRINCIPAL_REQUIRED')
     if not isinstance(key, bytes) or len(key) < 32:
         raise NotificationError('OWNER_HASH_KEY_UNAVAILABLE')
-    return hmac.new(key, ('aceis-mcp-owner:v1:' + identity).encode('utf-8'),
+    return hmac.new(key, ('laf-mcp-owner:v1:' + identity).encode('utf-8'),
                     hashlib.sha256).hexdigest()
 
 
@@ -404,7 +404,7 @@ def _event_payload(event):
         identity['operation'] = event.get('operation')
     if kind == 'task_blocked':
         identity['reason_code'] = reason_code
-    event_id = 'aceis_' + str(event['seq']) + '_' + hashlib.sha256(canonical(identity).encode('utf-8')).hexdigest()[:20]
+    event_id = 'laf_' + str(event['seq']) + '_' + hashlib.sha256(canonical(identity).encode('utf-8')).hexdigest()[:20]
     data = {'task_id': task_id, 'state': state}
     thread_id = event.get('thread_id')
     if isinstance(thread_id, str) and UUID_RE.fullmatch(thread_id):
@@ -434,6 +434,8 @@ class NotificationOutbox:
     inject an authenticated SecretCipher and an explicit mock/live sender.
     The existing pipeline ledger is read-only and remains the event source.
     """
+
+    APPLICATION_ID = 0x4C41464E  # LAFN, the LAF notification identity and cipher domains.
 
     def __init__(self, db_path, *, source_db_path, secret_cipher=None, owner_hash_key=None, clock=time.time,
                  resolver=None, base_backoff=1.0, max_backoff=60.0,
@@ -471,7 +473,7 @@ class NotificationOutbox:
         return owner_digest(authenticated_principal, self.owner_hash_key)
 
     def _callback_url_digest(self, owner_hash, callback_url):
-        message = ('aceis-mcp-callback-url:v1:' + owner_hash + ':' + callback_url).encode('utf-8')
+        message = ('laf-mcp-callback-url:v1:' + owner_hash + ':' + callback_url).encode('utf-8')
         return hmac.new(self.owner_hash_key, message, hashlib.sha256).hexdigest()
 
     def _encrypt_callback_url(self, callback_url):
@@ -506,6 +508,12 @@ class NotificationOutbox:
         if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
                 or stat.S_IMODE(info.st_mode) & 0o077):
             raise NotificationError('UNSAFE_DATABASE_FILE')
+        if info.st_size:
+            # Read the namespace before any transaction or journal-mode change.
+            with closing(sqlite3.connect(self.path.absolute().as_uri() + '?mode=ro&immutable=1',
+                                         uri=True, timeout=2)) as conn:
+                if conn.execute('PRAGMA application_id').fetchone()[0] != self.APPLICATION_ID:
+                    raise NotificationError('OUTBOX_NAMESPACE_MIGRATION_REQUIRED')
 
     @contextmanager
     def _tx(self):
@@ -524,6 +532,11 @@ class NotificationOutbox:
 
     def _init_schema(self):
         with self._tx() as conn:
+            namespace = conn.execute('PRAGMA application_id').fetchone()[0]
+            if namespace != self.APPLICATION_ID:
+                if namespace != 0 or conn.execute('SELECT 1 FROM sqlite_master LIMIT 1').fetchone():
+                    raise NotificationError('OUTBOX_NAMESPACE_MIGRATION_REQUIRED')
+                conn.execute(f'PRAGMA application_id={self.APPLICATION_ID}')
             conn.execute('''CREATE TABLE IF NOT EXISTS notification_task_origins (
                 task_id TEXT PRIMARY KEY, owner_hash TEXT NOT NULL, bound_at REAL NOT NULL)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS notification_thread_origins (

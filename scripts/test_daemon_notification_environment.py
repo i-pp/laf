@@ -49,16 +49,17 @@ class DaemonNotificationEnvironment(unittest.TestCase):
         self.addCleanup(stack.close)
         stack.enter_context(patch.dict(os.environ, {'HOME': str(self.root),
             'PATH': '/operator/bin:/usr/bin:/bin', 'OPENAI_API_KEY': 'synthetic-not-a-key',
-            'ACEIS_UNREVIEWED_OPTION': 'must-not-propagate'}, clear=True))
+            'ACE' + 'IS_MCP_EVENTS_ENABLED': '1',
+            'LAF_UNREVIEWED_OPTION': 'must-not-propagate'}, clear=True))
         for name in ('subprocess.Popen', 'socket.socket.bind', 'socket.socket.connect',
                      'threading.Thread.start'):
             stack.enter_context(patch(name, side_effect=AssertionError('Offline foreground fixture only')))
-        self.refs = {'ACEIS_OAUTH_ISSUER': 'https://issuer.example.invalid',
-                     'ACEIS_OAUTH_AUDIENCE': 'fixture-audience',
-                     'ACEIS_OAUTH_JWKS_FILE': '/fixture/public-jwks.json',
-                     'ACEIS_OAUTH_ALLOWED_SUBJECT': 'fixture-owner',
-                     'ACEIS_OAUTH_ALLOWED_SUBJECTS_JSON': '["fixture-owner", "fixture-reviewer"]',
-                     'ACEIS_OAUTH_REQUIRED_SCOPES': 'mcp:access fixture:read',
+        self.refs = {'LAF_OAUTH_ISSUER': 'https://issuer.example.invalid',
+                     'LAF_OAUTH_AUDIENCE': 'fixture-audience',
+                     'LAF_OAUTH_JWKS_FILE': '/fixture/public-jwks.json',
+                     'LAF_OAUTH_ALLOWED_SUBJECT': 'fixture-owner',
+                     'LAF_OAUTH_ALLOWED_SUBJECTS_JSON': '["fixture-owner", "fixture-reviewer"]',
+                     'LAF_OAUTH_REQUIRED_SCOPES': 'mcp:access fixture:read',
                      'CREDENTIALS_DIRECTORY': '/fixture/systemd/credentials'}
         self.binary = '/fixture/bin/codex'
 
@@ -71,7 +72,7 @@ class DaemonNotificationEnvironment(unittest.TestCase):
 
     def enable(self):
         os.environ.update(self.refs)
-        os.environ['ACEIS_MCP_EVENTS_ENABLED'] = '1'
+        os.environ['LAF_MCP_EVENTS_ENABLED'] = '1'
 
     def foreground(self, pipeline, *, released=True):
         captured = {}
@@ -112,40 +113,40 @@ class DaemonNotificationEnvironment(unittest.TestCase):
 
     def test_exact_opt_in_forwards_only_required_references_unchanged(self):
         self.enable()
-        os.environ['ACEIS_OAUTH_RESOURCE_URL'] = 'https://resource.example.invalid/mcp'
-        os.environ['ACEIS_OAUTH_AUTHORIZATION_SERVER'] = 'https://issuer.example.invalid'
+        os.environ['LAF_OAUTH_RESOURCE_URL'] = 'https://resource.example.invalid/mcp'
+        os.environ['LAF_OAUTH_AUTHORIZATION_SERVER'] = 'https://issuer.example.invalid'
         os.environ['CODEX_HOME'] = '/fixture/must-not-change-account-reference'
-        self.assertEqual(self.environment(), {**self.base(), **self.refs, 'ACEIS_MCP_EVENTS_ENABLED': '1'})
+        self.assertEqual(self.environment(), {**self.base(), **self.refs, 'LAF_MCP_EVENTS_ENABLED': '1'})
 
     def test_disabled_flag_does_not_forward_providers(self):
         self.enable()
-        os.environ['ACEIS_MCP_EVENTS_ENABLED'] = '0'
-        self.assertEqual(self.environment(), {**self.base(), 'ACEIS_MCP_EVENTS_ENABLED': '0'})
+        os.environ['LAF_MCP_EVENTS_ENABLED'] = '0'
+        self.assertEqual(self.environment(), {**self.base(), 'LAF_MCP_EVENTS_ENABLED': '0'})
 
     def test_invalid_flags_reach_existing_validator_without_reference_authority(self):
         self.enable()
         for value in ('', 'true', '2', ' 1'):
             with self.subTest(value=value):
-                os.environ['ACEIS_MCP_EVENTS_ENABLED'] = value
-                self.assertEqual(self.environment(), {**self.base(), 'ACEIS_MCP_EVENTS_ENABLED': value})
+                os.environ['LAF_MCP_EVENTS_ENABLED'] = value
+                self.assertEqual(self.environment(), {**self.base(), 'LAF_MCP_EVENTS_ENABLED': value})
 
     def test_missing_references_are_not_filled_or_discovered(self):
-        os.environ['ACEIS_MCP_EVENTS_ENABLED'] = '1'
-        os.environ['ACEIS_OAUTH_ISSUER'] = self.refs['ACEIS_OAUTH_ISSUER']
-        self.assertEqual(self.environment(), {**self.base(), 'ACEIS_MCP_EVENTS_ENABLED': '1',
-                                               'ACEIS_OAUTH_ISSUER': self.refs['ACEIS_OAUTH_ISSUER']})
+        os.environ['LAF_MCP_EVENTS_ENABLED'] = '1'
+        os.environ['LAF_OAUTH_ISSUER'] = self.refs['LAF_OAUTH_ISSUER']
+        self.assertEqual(self.environment(), {**self.base(), 'LAF_MCP_EVENTS_ENABLED': '1',
+                                               'LAF_OAUTH_ISSUER': self.refs['LAF_OAUTH_ISSUER']})
 
     def test_subject_json_and_scope_text_are_preserved_without_reconstruction(self):
         self.enable()
         result = self.environment()
-        self.assertEqual(result['ACEIS_OAUTH_ALLOWED_SUBJECTS_JSON'], '["fixture-owner", "fixture-reviewer"]')
-        self.assertEqual(result['ACEIS_OAUTH_REQUIRED_SCOPES'], 'mcp:access fixture:read')
+        self.assertEqual(result['LAF_OAUTH_ALLOWED_SUBJECTS_JSON'], '["fixture-owner", "fixture-reviewer"]')
+        self.assertEqual(result['LAF_OAUTH_REQUIRED_SCOPES'], 'mcp:access fixture:read')
 
     def test_opted_in_foreground_keeps_guard_and_resource_controller(self):
         self.enable()
         code, captured = self.foreground(True)
         self.assertEqual(code, 0)
-        self.assertEqual(captured['env'], {**self.base(), **self.refs, 'ACEIS_MCP_EVENTS_ENABLED': '1'})
+        self.assertEqual(captured['env'], {**self.base(), **self.refs, 'LAF_MCP_EVENTS_ENABLED': '1'})
         self.assertIn('--allow-codex-pipeline', captured['args'])
 
     def test_ordinary_foreground_still_drops_all_events_references(self):

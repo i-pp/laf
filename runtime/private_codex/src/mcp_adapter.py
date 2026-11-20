@@ -111,7 +111,7 @@ def task_view(task):
     return result
 
 
-def tool_definitions(writes=False, local_llm=False, local_models=False,
+def tool_definitions(writes=False,
                      chat_mailbox=False, codex_pipeline=False, experiments=False):
     identifier = {'type': 'string', 'pattern': UUID_PATTERN, 'maxLength': 36}
     def tool(name, description, properties, required=(), read=True):
@@ -129,26 +129,6 @@ def tool_definitions(writes=False, local_llm=False, local_models=False,
             'offset': {'type': 'integer', 'minimum': 0, 'maximum': 1000000}}),
         tool('orchestrator_get_task', 'Read state and verification metadata. Task text and logs are not exported.',
              {'task_id': identifier}, ['task_id'])]
-    if local_llm:
-        result.append(tool('aceis_local_llm_generate',
-            'Generate an UNVERIFIED local coding suggestion. No code execution or model loading.', {
-                'task': {'type': 'string', 'enum': ['draft', 'review']},
-                'prompt': {'type': 'string', 'minLength': 1, 'maxLength': 16384},
-                'max_tokens': {'type': 'integer', 'minimum': 1, 'maximum': 1024}},
-            ['task', 'prompt'], False))
-        result[-1]['annotations'].update(destructiveHint=False, idempotentHint=False)
-    if local_models:
-        profile = {'type': 'string', 'enum': ['qwen-coder-30b', 'gpt-oss-120b', 'qwen-coder-next']}
-        result.append(tool('aceis_local_model_status', 'Read fixed model availability. Never load or generate.',
-                           {'profile': profile}, ['profile']))
-        result.append(tool('aceis_local_model_generate', 'Generate UNVERIFIED advice from an explicitly selected loaded model. No autoload or fallback.',
-            {'profile': profile, 'task': {'type': 'string', 'enum': ['draft', 'review']},
-             'prompt': {'type': 'string', 'minLength': 1, 'maxLength': 16384},
-             'max_tokens': {'type': 'integer', 'minimum': 1, 'maximum': 1024}}, ['profile', 'task', 'prompt'], False))
-        result[-1]['annotations'].update(destructiveHint=False, idempotentHint=False)
-        result.append(tool('aceis_local_model_prepare', 'Explicitly unload/load one approved profile within the existing router. Temporarily interrupts other profiles; no Docker or commands.',
-                           {'profile': profile}, ['profile'], False))
-        result[-1]['annotations'].update(destructiveHint=False, idempotentHint=False)
     if chat_mailbox:
         common = {'task_id': identifier, 'request_id': identifier,
                   'request_sha256': {'type': 'string', 'pattern': '^[0-9a-f]{64}$'}}
@@ -792,10 +772,6 @@ def main():
     parser.add_argument('--allow-writes', action='store_true', help='Local tests only; requires runtime/mcp-task-policy.json')
     parser.add_argument('--allow-existing-tools', action='store_true',
                         help='Expose the existing non-Codex tool surface; HTTP requires one explicit principal mode')
-    parser.add_argument('--allow-local-llm', action='store_true',
-                        help='Enable the separately configured bounded local LLM helper')
-    parser.add_argument('--allow-local-models', action='store_true',
-                        help='Enable fixed-profile local model tools')
     parser.add_argument('--allow-chat-mailbox', action='store_true',
                         help='Enable the fixed-slot non-secret mailbox tools')
     parser.add_argument('--allow-experiments', action='store_true',
@@ -868,8 +844,7 @@ def main():
             oauth_verifier = OAuthJWTVerifier.from_environment()
         elif args.transport == 'http' and args.local_single_user_http:
             shared_tools_principal = current_local_principal()
-        shared_flags = (args.allow_local_llm or args.allow_local_models
-                        or args.allow_chat_mailbox or args.allow_experiments)
+        shared_flags = args.allow_chat_mailbox or args.allow_experiments
         if shared_flags and not args.allow_existing_tools:
             raise ValueError('Existing tool flags require --allow-existing-tools')
         if args.allow_existing_tools:
@@ -878,16 +853,14 @@ def main():
             from legacy_tool_adapter import Adapter as ExistingToolAdapter
             legacy_adapter = ExistingToolAdapter(
                 runtime, allow_writes=False,
-                allow_local_llm=args.allow_local_llm,
-                allow_local_models=args.allow_local_models,
                 allow_chat_mailbox=args.allow_chat_mailbox,
                 allow_mailbox_grants=False, allow_codex_pipeline=False,
                 pipeline=None, allow_experiments=args.allow_experiments,
                 runtime_project_root=runtime_project_root, **binding_options)
         if args.transport == 'http' and not args.local_single_user_http:
-            resource_url = os.environ.get('ACEIS_OAUTH_RESOURCE_URL', '')
+            resource_url = os.environ.get('LAF_OAUTH_RESOURCE_URL', '')
             authorization_server = os.environ.get(
-                'ACEIS_OAUTH_AUTHORIZATION_SERVER', oauth_verifier.issuer)
+                'LAF_OAUTH_AUTHORIZATION_SERVER', oauth_verifier.issuer)
             parsed_resource = urlsplit(resource_url)
             if (parsed_resource.scheme != 'https' or not parsed_resource.hostname
                     or parsed_resource.username is not None or parsed_resource.password is not None

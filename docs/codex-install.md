@@ -25,10 +25,10 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 # Install the experimental LAF plugin in Codex
 
 LAF 0.1.0 is experimental source, not a self-provisioning inference stack.
-The package retains the 27 Codex/orchestration/legacy tools plus Router5 and adds
-the read-only `codex_models_list` tool, for a fully opted-in catalog of 33 tools.
+The fully opted-in catalog contains 29 tools, including the read-only
+`codex_models_list` and five owner-scoped Router tools.
 First satisfy the [existing owner-host prerequisites](integrated-plugin-install.md):
-SDK 1.30.0, daemon/policy/grant state, legacy helper configuration, an owner-only
+SDK 1.30.0, daemon/policy/grant state, an owner-only
 Router and private receipt directory. Do not copy another person's credentials
 or runtime. Local Core/Router needs no OpenAI account; optional Codex operations
 use that operator's separately authorized installation.
@@ -53,7 +53,7 @@ These are operator-run commands. `--check` validates metadata only; it does not
 accept the SDK, daemon, authentication or models. `mcp add` changes Codex's local
 MCP configuration. First check `codex mcp list` and do not overwrite an existing
 server named `laf`. No extra API listener or cloud binding is needed. Reopen the
-Codex session after registration and verify discovery of 33 tools and harmless
+Codex session after registration and verify discovery of 29 tools and harmless
 status reads before attempting actions. Do not run a model merely as discovery.
 
 ## Codex local marketplace option
@@ -81,7 +81,7 @@ copies source into Codex's plugin cache; it neither provisions the daemon nor
 installs SDKs/models. Never edit the cache as the development source.
 The completed check below used the actual Codex loader and MCP SDK, not only
 metadata inspection. Neither that discovery result nor installation alone
-establishes that all 33 tools' backend actions work.
+establishes that all advertised tools' backend actions work.
 
 See [provider catalog and reasoning-effort selection](codex-model-selection.md)
 for the added read-only tool and immutable input settings.
@@ -114,7 +114,7 @@ is separate from loader acceptance.
 This establishes loader/cache/discovery only, not clean-host setup, all 33 tool
 operations, real-account/provider model or reasoning-effort execution, billing,
 zero native TCP activity, 8-16 GB VRAM suitability, live backend adoption or
-public-directory release. Existing daemon, policy, grants, helper, Router/SDK and
+public-directory release. Existing daemon, policy, grants, Router/SDK and
 private configuration prerequisites still apply.
 
 A separate [bounded Sol/max application-path trial](codex-model-selection.md#bounded-solmax-application-path-result)
@@ -131,8 +131,7 @@ refreshing tools alone does not establish that the listing has changed.
 
 No npm/uvx wrapper is published here. Those wrappers would not remove the daemon,
 policy, auth, model and owner-socket prerequisites. Clean-host/second-PC setup,
-8-16 GB VRAM hardware acceptance and all 33 tools' backend functionality remain open.
-See the legacy-helper transport limitation in the prerequisite guide.
+8-16 GB VRAM hardware acceptance and all supported backend functionality remain open.
 
 The commands were checked against the installed CLI's `--help`; the completed
 loader/discovery check has the exact historical scope above. These examples are

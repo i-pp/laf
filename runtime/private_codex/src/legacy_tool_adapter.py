@@ -20,7 +20,6 @@ import selectors
 import stat
 import sqlite3
 import sys
-import subprocess
 import time
 import uuid
 
@@ -120,7 +119,7 @@ def task_view(task):
     return result
 
 
-def tool_definitions(writes=False, local_llm=False, local_models=False, chat_mailbox=False, codex_pipeline=False, experiments=False):
+def tool_definitions(writes=False, chat_mailbox=False, codex_pipeline=False, experiments=False):
     identifier = {'type': 'string', 'pattern': UUID_PATTERN, 'maxLength': 36}
     def tool(name, description, properties, required=(), read=True):
         return {'name': name, 'description': description,
@@ -137,26 +136,6 @@ def tool_definitions(writes=False, local_llm=False, local_models=False, chat_mai
             'offset': {'type': 'integer', 'minimum': 0, 'maximum': 1000000}}),
         tool('orchestrator_get_task', 'Read state and verification metadata. Task text and logs are not exported.',
              {'task_id': identifier}, ['task_id'])]
-    if local_llm:
-        result.append(tool('aceis_local_llm_generate',
-            'Generate an UNVERIFIED local coding suggestion. No code execution or model loading.', {
-                'task': {'type': 'string', 'enum': ['draft', 'review']},
-                'prompt': {'type': 'string', 'minLength': 1, 'maxLength': 16384},
-                'max_tokens': {'type': 'integer', 'minimum': 1, 'maximum': 1024}},
-            ['task', 'prompt'], False))
-        result[-1]['annotations'].update(destructiveHint=False, idempotentHint=False)
-    if local_models:
-        profile = {'type': 'string', 'enum': ['qwen-coder-30b', 'gpt-oss-120b', 'qwen-coder-next']}
-        result.append(tool('aceis_local_model_status', 'Read fixed model availability. Never load or generate.',
-                           {'profile': profile}, ['profile']))
-        result.append(tool('aceis_local_model_generate', 'Generate UNVERIFIED advice from an explicitly selected loaded model. No autoload or fallback.',
-            {'profile': profile, 'task': {'type': 'string', 'enum': ['draft', 'review']},
-             'prompt': {'type': 'string', 'minLength': 1, 'maxLength': 16384},
-             'max_tokens': {'type': 'integer', 'minimum': 1, 'maximum': 1024}}, ['profile', 'task', 'prompt'], False))
-        result[-1]['annotations'].update(destructiveHint=False, idempotentHint=False)
-        result.append(tool('aceis_local_model_prepare', 'Explicitly unload/load one approved profile within the existing router. Temporarily interrupts other profiles; no Docker or commands.',
-                           {'profile': profile}, ['profile'], False))
-        result[-1]['annotations'].update(destructiveHint=False, idempotentHint=False)
     if chat_mailbox:
         common = {'task_id': identifier, 'request_id': identifier,
                   'request_sha256': {'type': 'string', 'pattern': '^[0-9a-f]{64}$'}}
@@ -197,7 +176,7 @@ from backend_state import load_state, state_sha256, check_snapshot, tool_backend
 
 
 class Adapter:
-    def __init__(self, root, allow_writes=False, allow_local_llm=False, allow_local_models=False, allow_chat_mailbox=False, allow_mailbox_grants=False,
+    def __init__(self, root, allow_writes=False, allow_chat_mailbox=False, allow_mailbox_grants=False,
                  allow_codex_pipeline=False, pipeline=None, allow_experiments=False,
                  runtime_project_root=None, backend_state_sha256=None):
         self.runtime_project_root = resolve_project_root(runtime_project_root)
@@ -211,7 +190,8 @@ class Adapter:
         if pipeline is not None and not allow_codex_pipeline: raise ValueError('Pipeline activation is explicit')
         if allow_codex_pipeline and pipeline is None: raise ValueError('Pipeline executor must be explicitly connected')
         self.pipeline = pipeline
-        self.tools = tool_definitions(allow_writes, allow_local_llm, allow_local_models, allow_chat_mailbox, allow_codex_pipeline, allow_experiments)
+        self.tools = tool_definitions(writes=allow_writes, chat_mailbox=allow_chat_mailbox,
+                                      codex_pipeline=allow_codex_pipeline, experiments=allow_experiments)
         self.experiments = ExperimentStore.from_runtime(self.root) if allow_experiments and 'experiments' not in self.unconfigured else None
         self.mailbox = Mailbox(self.root) if allow_chat_mailbox and 'mailbox' not in self.unconfigured else None
         self.grant = None
@@ -224,19 +204,6 @@ class Adapter:
             if any(task==policy.task_id for task,_ in self.mailbox.allowed):
                 raise ValueError('Grant task namespace conflicts with a fixed mailbox task')
             self.grant=GrantLedger(self.root,policy,enabled=True)
-        self.helper_root = None
-        if (allow_local_llm or allow_local_models) and 'local_helper' not in self.unconfigured:
-            path = self.root/'local-llm.json'
-            info = path.lstat()
-            if path.is_symlink() or not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > 4096:
-                raise ValueError('Local helper configuration must be a private regular file')
-            config = decode(path.read_bytes())
-            fields(config, ['schema', 'helper_directory'], ['schema', 'helper_directory'])
-            if config['schema'] != 1 or not isinstance(config['helper_directory'], str): raise ValueError('Invalid helper configuration')
-            base = Path(config['helper_directory'])
-            if not base.is_absolute() or any(p.is_symlink() for p in [base, *base.parents]) or not base.is_dir() or base.stat().st_uid != os.getuid():
-                raise ValueError('Unsafe helper directory')
-            self.helper_root = base
         self.policy = None
         if allow_writes:
             path = self.root / 'mcp-task-policy.json'
@@ -268,19 +235,6 @@ class Adapter:
         runtime_path(self.root, project_root=self.runtime_project_root)
         return request(self.root, method, params, timeout=TIMEOUT)
 
-    def mark_local_uncertain(self, call_id):
-        if self.helper_root is None: return
-        base = self.helper_root/'.runtime'
-        try:
-            info = base.lstat()
-            if base.is_symlink() or not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700: return
-            path = base/'UNCERTAIN.json'
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-            with os.fdopen(fd, 'w') as stream:
-                json.dump({'code': 'MCP_HELPER_ERROR_OR_UNCERTAIN', 'call_id': call_id,
-                           'time': time.time(), 'automatic_retry': False}, stream)
-        except OSError: pass  # Existing uncertainty is preserved; nothing is deleted.
-
     def call_tool(self, name, arguments, rpc_id):
         if getattr(self, 'backend_state_sha256', None) is not None:
             check_snapshot(self.root, self.backend_state_sha256)
@@ -300,25 +254,6 @@ class Adapter:
             for k, default, low, high in [('limit', 20, 1, 50), ('offset', 0, 0, 1000000)]:
                 v = arguments.get(k, default)
                 if type(v) is not int or not low <= v <= high: raise Invalid('Invalid list bound')
-        elif name in ['aceis_local_model_status', 'aceis_local_model_generate', 'aceis_local_model_prepare']:
-            allowed = ['profile', 'task', 'prompt', 'max_tokens'] if name == 'aceis_local_model_generate' else ['profile']
-            required = ['profile', 'task', 'prompt'] if name == 'aceis_local_model_generate' else ['profile']
-            fields(arguments, allowed, required)
-            if not isinstance(arguments['profile'], str) or arguments['profile'] not in ['qwen-coder-30b', 'gpt-oss-120b', 'qwen-coder-next']:
-                raise Invalid('Invalid selected profile')
-            if name == 'aceis_local_model_generate':
-                if arguments['task'] not in ['draft', 'review']: raise Invalid('Invalid selected task')
-                prompt, tokens = arguments['prompt'], arguments.get('max_tokens', 256)
-                if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode()) > 16384: raise Invalid('Invalid selected prompt')
-                if type(tokens) is not int or not 1 <= tokens <= 1024: raise Invalid('Invalid selected output bound')
-        elif name == 'aceis_local_llm_generate':
-            fields(arguments, ['task', 'prompt', 'max_tokens'], ['task', 'prompt'])
-            if arguments['task'] not in ['draft', 'review']: raise Invalid('Invalid local task')
-            prompt = arguments['prompt']
-            if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode()) > 16384:
-                raise Invalid('Invalid local prompt bound')
-            tokens = arguments.get('max_tokens', 256)
-            if type(tokens) is not int or not 1 <= tokens <= 1024: raise Invalid('Invalid local output bound')
         elif name in ['orchestrator_get_task', 'orchestrator_cancel_task']:
             fields(arguments, ['task_id'], ['task_id'])
             if not uuid_value(arguments['task_id']): raise Invalid('Invalid task ID')
@@ -380,35 +315,6 @@ class Adapter:
                 content = {'call_id': call_id, 'data': data}
                 return {'content': [{'type': 'text', 'text': json.dumps(content)}],
                         'structuredContent': content, 'isError': failed}
-            if name in ['aceis_local_llm_generate', 'aceis_local_model_status', 'aceis_local_model_generate', 'aceis_local_model_prepare']:
-                # Operator-fixed directory; caller cannot supply paths or commands.
-                selected = name != 'aceis_local_llm_generate'
-                helper = self.helper_root/('selection_extension.py' if selected else 'extension.py')
-                bound = 90
-                if name == 'aceis_local_model_status': bound = 15
-                elif name == 'aceis_local_model_prepare': bound = 130
-                elif name == 'aceis_local_model_generate':
-                    bound = {'qwen-coder-30b': 90, 'gpt-oss-120b': 250, 'qwen-coder-next': 190}[arguments['profile']]
-                info = helper.lstat()
-                if helper.is_symlink() or not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
-                    raise ValueError('Unsafe local helper')
-                completed = subprocess.run(['/usr/bin/python3', '-B', str(helper), '--call'],
-                    input=json.dumps({'name': name, 'arguments': arguments}, ensure_ascii=False),
-                    capture_output=True, text=True, timeout=bound,
-                    env={'PATH': '/usr/bin:/bin', 'HOME': str(Path.home()), 'LANG': 'C.UTF-8'})
-                if len(completed.stdout.encode()) > 2*1024**2: raise ValueError('Local result bound exceeded')
-                result = json.loads(completed.stdout)
-                if type(result.get('isError')) is not bool or not isinstance(result.get('structuredContent'), dict):
-                    raise ValueError('Invalid local envelope')
-                if completed.returncode != (1 if result['isError'] else 0): raise ValueError('Local exit mismatch')
-                data = result['structuredContent']
-                if name != 'aceis_local_model_status' and data.get('execution_status') == 'UNKNOWN': self.mark_local_uncertain(call_id)
-                data.update(verification_status='NOT_EXECUTED', code_executed=False)
-                if name in ['aceis_local_llm_generate', 'aceis_local_model_generate']: data['untrusted_advisory'] = True
-                self.record('end', outcome='error_or_uncertain' if result['isError'] else 'returned', **facts)
-                content = {'call_id': call_id, 'data': data}
-                return {'content': [{'type': 'text', 'text': json.dumps(content)}],
-                        'structuredContent': content, 'isError': result['isError']}
             if name == 'orchestrator_status':
                 raw = self.daemon('status', {})
                 maximum = raw.get('maximum_sessions')
@@ -437,11 +343,10 @@ class Adapter:
             self.record('end', outcome='returned', **facts)
             content = {'call_id': call_id, 'data': data}
             return {'content': [{'type': 'text', 'text': json.dumps(content)}], 'structuredContent': content, 'isError': False}
-        except (OSError, EOFError, ValueError, RuntimeError, TypeError, KeyError, subprocess.SubprocessError):
-            if name.startswith('aceis_local_') and name != 'aceis_local_model_status': self.mark_local_uncertain(call_id)
+        except (OSError, EOFError, ValueError, RuntimeError, TypeError, KeyError):
             self.record('end', outcome='error_or_uncertain', **facts)
             # No daemon exception text, task content or local configuration crosses this boundary.
-            body = {'call_id': call_id, 'code': 'LOCAL_LLM_ERROR_OR_UNCERTAIN' if name.startswith('aceis_local_') else 'DAEMON_ERROR_OR_UNCERTAIN',
+            body = {'call_id': call_id, 'code': 'DAEMON_ERROR_OR_UNCERTAIN',
                     'retry_same_request_key': name == 'orchestrator_submit_task'}
             return {'content': [{'type': 'text', 'text': json.dumps(body)}], 'isError': True}
 
@@ -608,10 +513,6 @@ def main():
     parser = argparse.ArgumentParser(description='Local MCP stdio adapter; read-only tools by default')
     parser.add_argument('--runtime', type=Path, required=True, help='Operator-fixed existing private runtime')
     parser.add_argument('--allow-writes', action='store_true', help='Local tests only; requires runtime/mcp-task-policy.json')
-    parser.add_argument('--allow-local-llm', action='store_true',
-                        help='Separately approved bounded localhost inference; does not enable submit/cancel')
-    parser.add_argument('--allow-local-models', action='store_true',
-                        help='Approved fixed-profile HTTP selection/lifecycle; never Docker or commands')
     parser.add_argument('--allow-chat-mailbox', action='store_true',
                         help='Separately approved fixed-slot non-secret mailbox; default off')
     parser.add_argument('--allow-mailbox-grants',action='store_true',
@@ -627,8 +528,9 @@ def main():
         if args.allow_codex_pipeline:
             from codex_host import DaemonPipelineProxy
             pipeline = DaemonPipelineProxy(runtime_path(args.runtime))
-        return serve(Adapter(args.runtime, args.allow_writes, args.allow_local_llm, args.allow_local_models,
-                             args.allow_chat_mailbox, args.allow_mailbox_grants, args.allow_codex_pipeline, pipeline,
+        return serve(Adapter(args.runtime, allow_writes=args.allow_writes,
+                             allow_chat_mailbox=args.allow_chat_mailbox, allow_mailbox_grants=args.allow_mailbox_grants,
+                             allow_codex_pipeline=args.allow_codex_pipeline, pipeline=pipeline,
                              allow_experiments=args.allow_experiments))
     except (OSError, ValueError, TypeError, sqlite3.Error):
         print('Adapter startup refused: verify private runtime and operator policy.', file=sys.stderr)

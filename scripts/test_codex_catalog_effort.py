@@ -1063,15 +1063,13 @@ class LafPortRegressionTests(unittest.TestCase):
     call = PipelineTests.call
     start = PipelineTests.start
 
-    def test_integrated_inventory_only_adds_catalog_and_retains_router_and_legacy(self):
+    def test_integrated_inventory_has_only_supported_tools_and_router(self):
         import legacy_tool_adapter as legacy
         with patch.object(sys, 'path', [str(SOURCE / 'runtime/integration'),
                 str(SOURCE / 'runtime/public_laf/mcp/src'), *sys.path]):
             from laf_shared_tools import CompositeSharedTools
         expected = {
             'orchestrator_status', 'orchestrator_list_tasks', 'orchestrator_get_task',
-            'aceis_local_llm_generate', 'aceis_local_model_status',
-            'aceis_local_model_generate', 'aceis_local_model_prepare',
             'chat_mailbox_register_request', 'chat_mailbox_get_request',
             'chat_mailbox_save_answer', 'chat_mailbox_get_answer',
             'codex_capabilities', 'codex_models_list', 'codex_thread_start',
@@ -1079,15 +1077,14 @@ class LafPortRegressionTests(unittest.TestCase):
             'codex_chat_steer', 'codex_threads_list', 'codex_task_get', 'codex_events',
             'codex_task_cancel', 'codex_thread_archive', 'codex_pipeline_tick',
             'experiment_list', 'experiment_get', 'experiment_artifacts', 'experiment_compare'}
-        definitions = legacy.tool_definitions(local_llm=True, local_models=True,
-            chat_mailbox=True, codex_pipeline=True, experiments=True)
+        definitions = legacy.tool_definitions(chat_mailbox=True, codex_pipeline=True, experiments=True)
         self.assertEqual({t['name'] for t in definitions}, expected)
         stub = SimpleNamespace(tools=definitions, audit=Mock(), call_tool=Mock())
         composite = CompositeSharedTools(stub, SimpleNamespace(call=Mock()), server_info=legacy.SERVER_INFO)
         router = {'laf_router_models', 'laf_router_status', 'laf_router_submit_job',
                   'laf_router_get_job', 'laf_router_cancel_job'}
         self.assertEqual({t['name'] for t in composite.tools}, expected | router)
-        self.assertEqual(len(composite.tools), 33)
+        self.assertEqual(len(composite.tools), 29)
         self.assertEqual(len({t['name'] for t in composite.tools}), len(composite.tools))
         self.assertFalse(any(t['name'].startswith('codex_approval_') for t in composite.tools))
         self.assertEqual(self.call('capabilities')['approval'], 'notify_only')

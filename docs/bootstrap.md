@@ -26,7 +26,7 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 This source-only bootstrap prepares an independent runtime and the standard
 plugin configuration. It does not provision working inference backends. All
-33 tool schemas remain available, but unconfigured operations return
+29 supported tool schemas remain available, but unconfigured operations return
 `BACKEND_UNCONFIGURED` without dispatch. Prepare, configure and doctor never
 start a service, load a model or contact an account. A separate, explicit
 `snapshot-codex` command can copy an existing trusted native executable into

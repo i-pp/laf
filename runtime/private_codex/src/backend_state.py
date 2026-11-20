@@ -31,7 +31,7 @@ import re
 import stat
 from chat_mailbox import _json
 
-BACKENDS=('orchestrator','local_helper','mailbox','mailbox_grants','codex_pipeline','experiments','router')
+BACKENDS=('orchestrator','mailbox','mailbox_grants','codex_pipeline','experiments','router')
 FILE='unconfigured-backends.json'
 LIMIT=16384
 
@@ -178,7 +178,7 @@ def load_unconfigured(runtime):
  return frozenset() if value is None else frozenset(value['unconfigured'])
 
 def tool_backend(name):
- for prefix,backend in (('orchestrator_','orchestrator'),('aceis_local_','local_helper'),
+ for prefix,backend in (('orchestrator_','orchestrator'),
      ('chat_mailbox_','mailbox'),('codex_','codex_pipeline'),('experiment_','experiments'),('laf_router_','router')):
   if name.startswith(prefix):return backend
  return None

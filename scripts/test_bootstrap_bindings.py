@@ -150,12 +150,12 @@ class BindingTests(unittest.TestCase):
    self.assertEqual(cli.main(command[3:]),0)
   from legacy_tool_adapter import tool_definitions
   from laf_mcp.server import TOOLS
-  expected=tool_definitions(local_llm=True,local_models=True,chat_mailbox=True,codex_pipeline=True,experiments=True)
+  expected=tool_definitions(chat_mailbox=True,codex_pipeline=True,experiments=True)
   for name,(description,properties,required) in TOOLS.items():
    write=name in ('laf_router_submit_job','laf_router_cancel_job')
    expected.append({'name':name,'description':description,'inputSchema':{'type':'object','properties':copy.deepcopy(properties),'required':list(required),'additionalProperties':False},
        'annotations':{'readOnlyHint':not write,'destructiveHint':name=='laf_router_cancel_job','idempotentHint':not write,'openWorldHint':False}})
-  self.assertEqual(observed[0][0],expected);self.assertEqual(len(expected),33);self.assertEqual(observed[0][1],frozenset(['raw-router']))
+  self.assertEqual(observed[0][0],expected);self.assertEqual(len(expected),29);self.assertEqual(observed[0][1],frozenset(['raw-router']))
   self.assertEqual(observed[0][2],frozenset(set(boot.BACKENDS)-{'router','codex_pipeline'}))
 
  def test_actual_host_gateway_uses_one_binding_without_legacy_shadow_files(self):
