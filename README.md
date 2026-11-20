@@ -30,10 +30,11 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Local AI Fabric integrated plugin (experimental source)
 
-The root plugin selects the existing 27 legacy/Codex tools, one new Codex catalog read and five Router tools,
-with four explicit operator opt-ins. Local Core/Router inference needs no OpenAI
-account; Codex is an optional separately authorized integration. HTTP-compatible
-source is retained; the portable manifest itself launches stdio, not an HTTP endpoint.
+With four explicit operator opt-ins, the root plugin exposes 29 tools,
+including `codex_models_list` and five owner-scoped Router tools. Local
+Core/Router inference needs no OpenAI account. Codex is an optional separately
+authorized integration. The portable manifest launches stdio, and the source
+retains the HTTP frontend.
 
 See [existing-owner-host setup](docs/integrated-plugin-install.md). This is not a
 complete clean-host Quick Start. Model/SDK/vendor assets and private account,

@@ -30,10 +30,10 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 With the existing Codex pipeline explicitly enabled, `codex_capabilities` keeps
 operator-approved model order and adds fresh provider model/effort metadata.
-`codex_models_list` is the new read-only catalog tool. The integrated profile
-retains every existing legacy/Codex tool and Router5, adding only this catalog
-read. Its configuration name remains `integrated-32` for compatibility; the
-fully opted-in catalog contains 29 tools. No approval-response APIs are added.
+`codex_models_list` is the read-only catalog tool. The `integrated-32` profile
+exposes 29 tools when fully opted in, including this catalog read and five
+owner-scoped Router tools. The four retired helper operations have been removed.
+The Codex approval contract remains notify-only.
 
 Inspect and test the source without an account, SDK or running service:
 
