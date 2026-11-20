@@ -21,6 +21,7 @@
 # Modified 2026-11-15: optional shared resource admission and guarded queue waits.
 # Modified 2026-11-20: bounded Flash load deferral for resource admission.
 # Modified 2026-11-20: release unused Flash residency through host reconciliation.
+# Modified 2026-11-20: fence the read-only Flash preparation phase before reservation.
 
 """Explicit Core backend: container-owned Flash, host-owned Ollama lifecycle.
 
@@ -206,13 +207,18 @@ class CoreBackends:
                 raise ServiceError('Core start invalidated')
             self.address = str(address)
 
-    def start_flash(self, check=lambda: None):
+    def start_flash(self, check=lambda: None, *, job=None):
         if not self.requires_flash:
             raise ServiceError('Flash disabled by explicit catalog')
         with self.lifecycle_lock:
             with self.lock:
                 generation = self.generation
             guard = lambda: self._guard(generation, check)
+            if self.resource_mode and job is not None and self.flash is None:
+                # The worker and watchdog serialize only the phase decision.
+                # A watchdog that has already claimed an abort keeps it.
+                with job.phase_lock:
+                    job.preparing_flash = not job.abort_requested
             guard()
             if self.flash_alive():
                 return
@@ -225,6 +231,13 @@ class CoreBackends:
             if self.resource_mode:
                 from .flash_resources import manifest
                 artifact = manifest(self.config,verify=True)
+                guard()
+                if job is not None:
+                    # Check once more at the handoff. From this point a host
+                    # reservation may be in flight with an unknown outcome.
+                    with job.phase_lock:
+                        job.check_lifetime()
+                        job.preparing_flash = False
                 instance = self._resource_model('flash')
                 loading_id = str(uuid.uuid4())
                 try:
@@ -594,7 +607,10 @@ class CoreBackends:
             self.verify_models()
             guard()
         if self.requires_flash:
-            self.start_flash(guard)
+            if self.resource_mode:
+                self.start_flash(guard, job=job)
+            else:
+                self.start_flash(guard)
         if job.model == 'flash':
             body={'messages':job.messages,'max_tokens':job.max_tokens}
             token=None

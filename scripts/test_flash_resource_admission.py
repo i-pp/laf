@@ -22,6 +22,7 @@
 # Added 2026-11-15: Flash artifact/loading/terminal resource boundaries.
 # Modified 2026-11-20: terminal preload-wait residency reconciliation.
 # Modified 2026-11-20: exercise canonical KFD refusal on the preload cleanup path.
+# Modified 2026-11-20: exercise cancellation and watchdog decisions inside Flash retries.
 
 """Synthetic files, native pipes and host lifecycle; never load a model/device."""
 from contextlib import closing
@@ -46,7 +47,7 @@ require_isolated()  # Refuse raw resource tests before any fixture or project im
 import test_local_resource_admission as local
 from inference.laf_service import flash_resources as assets
 from inference.laf_service import core_backends,core_server,core_flash_worker
-from inference.laf_service.core import Controller,ResourceWait,ServiceError
+from inference.laf_service.core import Controller,GIB,ResourceWait,ServiceError
 from inference.laf_service.lifecycle import LifecycleFault
 from inference.laf_service.test_configured_profiles import selection,profiles,job,ConfiguredAPI
 
@@ -241,7 +242,7 @@ class FlashBoundary(unittest.TestCase):
             with self.assertRaises(ResourceWait):self.start()
         self.create.assert_not_called();self.assertIn('model_residency',self.kinds())
 
-    def run_waiting_flash(self, settle):
+    def run_waiting_flash(self, settle, *, expect_abort=False):
         """Run the serial queue and real host ledger against synthetic headroom."""
         authority = self.fixture.authority
         policy = self.fixture.p['local_inference']
@@ -260,6 +261,7 @@ class FlashBoundary(unittest.TestCase):
             return sample, state
 
         controller = Controller(self.backend, local.pressure_sample, start=False)
+        self.controller = controller
         queued = controller.submit({'model': 'flash', 'messages': [{'role': 'user', 'content': 'synthetic'}]})
         original_get = controller.queue.get
         def get(timeout):
@@ -280,10 +282,93 @@ class FlashBoundary(unittest.TestCase):
         if self.backend.flash_drain is not None:
             self.backend.flash_drain.join(1)
             self.assertFalse(self.backend.flash_drain.is_alive())
-        abort.assert_not_called()
+        if expect_abort:
+            self.assertTrue(abort.called)
+        else:
+            abort.assert_not_called()
         self.assertTrue(queued.done.is_set())
         self.assertEqual(controller.queue.unfinished_tasks, 0)
         return queued
+
+    def watch_once(self):
+        with patch.object(self.controller.stop, 'wait', side_effect=[False, True]):
+            self.controller.watch()
+
+    def on_retry_idle_interval(self, action):
+        def wait_idle(check):
+            # Actual two-sample idle gate. Inject time or cancel between its
+            # samples without delaying the synthetic controller.
+            with patch.object(core_backends.time, 'sleep', side_effect=action) as sleep:
+                try:
+                    self.backend.__class__.wait_idle(self.backend, check)
+                finally:
+                    sleep.assert_called_once_with(.5)
+        self.backend.wait_idle.side_effect = wait_idle
+
+    def assert_retry_idle_interruption(self, *, expire, watchdog):
+        def retry(queued):
+            self.assertEqual(queued.wait_reason, 'resource_ram_bytes_headroom')
+            def interrupt(_delay):
+                if expire:
+                    queued.deadline = self.fixture.now
+                else:
+                    queued.cancel.set()
+                if watchdog:
+                    self.watch_once()
+            self.on_retry_idle_interval(interrupt)
+
+        with patch.object(self.fixture.authority, '_idle_upper', return_value=0) as proof:
+            queued = self.run_waiting_flash(retry)
+        self.assertEqual(queued.status, 'failed' if expire else 'cancelled')
+        self.assertFalse(queued.abort_requested)
+        proof.assert_called_once()
+        self.assertEqual(self.kinds(), ['local_control'] * 3)
+        self.assertNotIn('flash', self.backend.resource_instances)
+        self.create.assert_not_called()
+
+    def test_cancel_during_retried_idle_samples_releases_without_generic_abort(self):
+        self.assert_retry_idle_interruption(expire=False, watchdog=False)
+
+    def test_watchdog_cancel_during_retried_idle_samples_leaves_provider_running(self):
+        self.assert_retry_idle_interruption(expire=False, watchdog=True)
+
+    def test_watchdog_expiry_during_retried_idle_samples_leaves_provider_running(self):
+        self.assert_retry_idle_interruption(expire=True, watchdog=True)
+
+    def test_watchdog_hard_fault_during_retried_idle_samples_still_stops_provider(self):
+        def retry(_queued):
+            def hard_fault(_delay):
+                under_floor = {**local.pressure_sample(), 'mem_available': 7 * GIB}
+                with patch.object(self.controller, 'read_resources', return_value=under_floor):
+                    self.watch_once()
+            self.on_retry_idle_interval(hard_fault)
+
+        with patch.object(self.fixture.authority, '_idle_upper', return_value=0) as proof:
+            queued = self.run_waiting_flash(retry, expect_abort=True)
+        self.assertEqual(self.controller.fault, 'RAM reserve below 8 GiB')
+        self.assertEqual(queued.status, 'cancelled')
+        proof.assert_not_called()
+        self.assertIn('model_residency', self.kinds())
+        self.create.assert_not_called()
+
+    def test_watchdog_cancel_after_retried_load_starts_keeps_stop_barrier(self):
+        def retry(queued):
+            self.ram_headroom = self.loading_ram
+            start = self.create.side_effect
+            def launch(*args, **kwargs):
+                process = start(*args, **kwargs)
+                queued.cancel.set()
+                self.watch_once()
+                return process
+            self.create.side_effect = launch
+
+        with patch.object(self.fixture.client, 'resource_call', wraps=self.fixture.client.resource_call) as rpc:
+            queued = self.run_waiting_flash(retry, expect_abort=True)
+        self.assertEqual(queued.status, 'cancelled')
+        self.assertTrue(queued.abort_requested)
+        self.assertNotIn('model_release', [call.args[0] for call in rpc.call_args_list])
+        self.assertIn('model_loading', self.kinds())
+        self.create.assert_called_once()
 
     def test_cancelled_cold_wait_releases_only_the_unused_residency(self):
         def cancel(queued):
