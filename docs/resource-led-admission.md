@@ -26,6 +26,7 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 <!-- Modified 2026-11-20: on-demand Flash startup and bounded pre-load queue waits. -->
 <!-- Modified 2026-11-20: reconcile unused Flash residency when pre-load waiting ends. -->
 <!-- Modified 2026-11-20: document the canonical KFD ownership guard. -->
+<!-- Modified 2026-11-20: preserve cancellation semantics during read-only Flash retry checks. -->
 
 # Resource-led queued admission
 
@@ -246,6 +247,12 @@ readings with zero owned GPU residency. Only a confirmed release clears Core's
 instance record. Missing physical proof leaves the grant held. An uncertain reply
 requires reconciliation through the existing lifecycle fence. If a later attempt
 has already loaded Flash, the job's cancellation leaves that residency in place.
+
+The worker and watchdog distinguish read-only Flash preparation on a retry.
+Cancellation or expiry during the paired idle samples or artifact verification
+ends the wait through the same limited residency reconciliation. The watchdog
+continues checking hard faults in this phase. Its ordinary stop barrier applies
+once another reservation may have been sent or native loading has begun.
 
 The host matches the canonical AMD KFD class at `/sys/class/kfd/kfd` to the
 character device `/dev/kfd` by device number. Mismatched or incomplete identity

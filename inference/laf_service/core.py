@@ -23,6 +23,7 @@
 # Modified 2026-11-15: optional shared resource admission and guarded queue waits.
 # Modified 2026-11-20: request-driven Flash loading in resource mode.
 # Modified 2026-11-20: reconcile unused residency when its pre-load wait ends.
+# Modified 2026-11-20: distinguish read-only Flash preparation from abortable work.
 
 """Bounded single-lane scheduling and fail-closed resource admission."""
 from __future__ import annotations
@@ -35,9 +36,14 @@ from pathlib import Path
 
 GIB = 1 << 30
 MODELS = {"flash", "coder-next", "gpt-oss-120b"}
+JOB_STOPPED = 'cancelled, expired, or resource safety latch set'
 
 class ServiceError(Exception):
     pass
+
+
+class JobInterrupted(ServiceError):
+    """Job-local cancellation or expiry."""
 
 
 RESOURCE_WAIT_CODES = frozenset({'resource_observation_unknown', 'resource_observation_stale',
@@ -135,6 +141,15 @@ class Job:
     done: threading.Event = dataclasses.field(default_factory=threading.Event)
     abort_requested: bool = False
     wait_reason: str | None = None
+    phase_lock: threading.Lock = dataclasses.field(default_factory=threading.Lock, repr=False, compare=False)
+    preparing_flash: bool = False
+
+    def cancellation_due(self):
+        return self.cancel.is_set() or time.monotonic() >= self.deadline
+
+    def check_lifetime(self):
+        if self.cancellation_due():
+            raise JobInterrupted(JOB_STOPPED)
 
     def public(self):
         return {'id': self.id, 'model': self.model, 'status': self.status,
@@ -217,9 +232,13 @@ class Controller:
                 continue
             with self.lock:
                 job = self.active
-                abort = job and not job.abort_requested and (job.cancel.is_set() or time.monotonic() >= job.deadline)
+                if job is None:
+                    continue
+                with job.phase_lock:
+                    abort = not job.preparing_flash and not job.abort_requested and job.cancellation_due()
+                    if abort:
+                        job.abort_requested = True
                 if abort:
-                    job.abort_requested = True
                     try:
                         self.backend.abort()
                     except Exception:
@@ -239,9 +258,24 @@ class Controller:
                 self.fault += '; provider stop unconfirmed'
 
     def cancelled(self, job):
-        if self.stop.is_set() or job.cancel.is_set() or time.monotonic() >= job.deadline or self.fault:
-            raise ServiceError('cancelled, expired, or resource safety latch set')
+        if self.stop.is_set() or self.fault:
+            raise ServiceError(JOB_STOPPED)
+        job.check_lifetime()
         self.safety()
+
+    def _end_resource_wait(self, job, release_unused):
+        error = JOB_STOPPED
+        # Do not hold the controller lock across the host reconciliation.
+        # Independent hard-stop observation remains active during cleanup.
+        if release_unused is not None and not self.stop.is_set() and not self.fault:
+            try:
+                release_unused()
+            except Exception:
+                error = 'unused Flash residency release unconfirmed'
+        with self.lock:
+            job.status = 'cancelled' if job.cancel.is_set() or self.stop.is_set() else 'failed'
+            job.error = error
+            job.wait_reason = None
 
     def run(self):
         pending = None
@@ -272,22 +306,11 @@ class Controller:
                     job.status = 'running'
                     job.wait_reason = None
             if finished_wait:
-                error = 'cancelled, expired, or resource safety latch set'
-                # Keep the job out of the active stop path and leave the
-                # controller lock free for the independent hard-stop guard.
-                if release_unused is not None and not self.stop.is_set() and not self.fault:
-                    try:
-                        release_unused()
-                    except Exception:
-                        error = 'unused Flash residency release unconfirmed'
+                self._end_resource_wait(job, release_unused)
                 release_unused = None
-                with self.lock:
-                    job.status = 'cancelled' if cancelled or job.cancel.is_set() or self.stop.is_set() else 'failed'
-                    job.error = error
-                    job.wait_reason = None
-                    job.messages = []
-                    job.done.set()
-                    self.queue.task_done()
+                job.messages = []
+                job.done.set()
+                self.queue.task_done()
                 continue
             try:
                 self.cancelled(job)
@@ -303,15 +326,19 @@ class Controller:
                 if exc.release_unused is not None:
                     release_unused = exc.release_unused
             except Exception as exc:
-                job.status = 'cancelled' if job.cancel.is_set() or self.stop.is_set() else 'failed'
-                job.error = str(exc)[:240]
-                try:
-                    self.backend.abort()
-                except Exception:
-                    self.fault = 'provider stop unconfirmed'
+                if isinstance(exc, JobInterrupted) and job.preparing_flash:
+                    self._end_resource_wait(job, release_unused)
+                else:
+                    job.status = 'cancelled' if job.cancel.is_set() or self.stop.is_set() else 'failed'
+                    job.error = str(exc)[:240]
+                    try:
+                        self.backend.abort()
+                    except Exception:
+                        self.fault = 'provider stop unconfirmed'
             finally:
                 with self.lock:
                     self.active = None
+                    job.preparing_flash = False
                     if pending is not None:
                         job.status = 'queued'
                 if pending is None:
