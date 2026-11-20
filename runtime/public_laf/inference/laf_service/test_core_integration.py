@@ -18,8 +18,12 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-20: synthetic Flash preload and queued-wait coverage.
+
+import io
 import json
 import os
+import queue
 from pathlib import Path
 import signal
 import subprocess
@@ -27,12 +31,13 @@ import sys
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
-from .core import GIB, Job, ServiceError
+from .core import Controller, GIB, Job, ResourceWait, ServiceError
 from .core_backends import CoreBackends, current_pid_namespace
 from .core_server import load_config
-from .lifecycle import HostLifecycle
+from .lifecycle import HostLifecycle, LifecycleFault
 from .lifecycle_client import LifecycleClient
 from .test_lifecycle import Provider, sample
 from .test_lifecycle_uds import Loopback
@@ -131,6 +136,212 @@ class CoreBackendTest(unittest.TestCase):
         before = time.monotonic(); backend.abort(); worker.join(1)
         self.assertLess(time.monotonic() - before, .5); self.assertFalse(worker.is_alive())
         self.assertEqual(len(errors), 1); self.assertFalse(backend.stopping)
+
+
+class ResourceFlashWaitTest(unittest.TestCase):
+    def setUp(self):
+        from .test_configured_profiles import ConfiguredAPI, selection
+        self.config = selection(flash=True)
+        self.config.update(resource_admission_generation='a' * 64, tokenizer_python='/synthetic/python',
+                           resource_model_sha256={'flash': 'f' * 64,
+                                                 'qwen-coder-small': 'a' * 64,
+                                                 'qwen-coder-next-size': 'b' * 64})
+        self.client = FakeLifecycle()
+        self.client.identity.update(running=True, stopping=False, fault=None)
+        self.client.resource_call = Mock(side_effect=AssertionError('unexpected reservation'))
+        self.create = Mock(side_effect=AssertionError('unexpected native process'))
+        verify = patch('inference.laf_service.flash_resources.manifest', return_value='f' * 64)
+        self.manifest = verify.start()
+        self.addCleanup(verify.stop)
+        self.backend = CoreBackends(self.config, '/synthetic/core.json', self.client,
+                                    namespace_probe=lambda: 'pid:[222]', process_factory=self.create)
+        self.backend.api = ConfiguredAPI()
+        self.manifest.reset_mock()
+
+    def test_startup_and_empty_queue_leave_flash_unloaded_and_ready(self):
+        from .core_server import run_core
+        backend, client = self.backend, self.client
+        client.resource_policy = lambda: {'epoch': client.identity['epoch'], 'swap_limit_mib': 512,
+                                          'resource_admission_generation': 'a' * 64}
+        backend.abort = Mock()
+        health = backend.health
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = {**ConfigPackagingTest().config(root), **self.config}
+            path = root / 'core.json'
+            path.write_text(json.dumps(config))
+            path.chmod(0o600)
+
+            class FakeServer:
+                def __init__(self, address, handler):
+                    Path(address).touch(exist_ok=False)
+                def serve_forever(self, poll_interval):
+                    self.controller.thread.join(.3)
+                def shutdown(self):
+                    pass
+                def server_close(self):
+                    pass
+
+            # The worker must not query health as a cue to preload on an idle tick.
+            backend.health = Mock(side_effect=health)
+            run_core(path, backend_factory=lambda *args: backend, client_factory=lambda _: client,
+                     server_factory=FakeServer, install_signals=False)
+        self.assertEqual(client.calls, ['ensure'])
+        backend.health.assert_not_called()
+        self.create.assert_not_called()
+        client.resource_call.assert_not_called()
+        self.assertFalse(any(call.kwargs.get('verify') for call in self.manifest.call_args_list))
+
+    def test_readiness_distinguishes_queue_availability_from_residency(self):
+        self.backend.start_ollama()
+        self.backend.verify_models()
+        health = self.backend.health()
+        self.assertTrue(health['ready'])
+        self.assertTrue(health['flash_on_demand'])
+        self.assertFalse(health['flash_resident'])
+        self.client.identity['fault'] = 'pressure latched'
+        self.assertFalse(self.backend.health()['ready'])
+        self.client.identity['fault'] = None
+        self.backend.flash = Mock()
+        self.backend.flash_alive = Mock(return_value=True)
+        self.assertFalse(self.backend.health()['ready'])
+
+    def test_busy_second_sample_defers_before_artifact_read_or_reservation(self):
+        self.backend.read_resources = Mock(side_effect=[sample(), {**sample(), 'vram_used': 3 * GIB}])
+        with patch('inference.laf_service.core_backends.time.sleep'), self.assertRaises(ResourceWait) as error:
+            self.backend.start_flash()
+        self.assertEqual(error.exception.code, 'resource_vram_bytes_headroom')
+        self.assertEqual(self.backend.read_resources.call_count, 2)
+        self.manifest.assert_not_called()
+        self.client.resource_call.assert_not_called()
+        self.create.assert_not_called()
+
+    def test_unknown_telemetry_owner_or_profile_never_creates_worker(self):
+        self.backend.read_resources = Mock(side_effect=ServiceError('unconfirmed host telemetry'))
+        with self.assertRaisesRegex(ServiceError, 'unconfirmed host telemetry'):
+            self.backend.start_flash()
+        self.client.resource_call.assert_not_called()
+        self.backend.read_resources = self.client.read_resources
+        for problem in ('resource profile or owner requires reconciliation', 'lost loading acknowledgement'):
+            with self.subTest(problem=problem):
+                self.backend.resource_instances.clear()
+                self.client.resource_call = Mock(side_effect=[{'instance': 'synthetic'}, LifecycleFault(problem)])
+                with patch('inference.laf_service.core_backends.time.sleep'), self.assertRaises(LifecycleFault):
+                    self.backend.start_flash()
+                self.assertEqual([call.args[0] for call in self.client.resource_call.call_args_list],
+                                 ['model_reserve', 'loading_reserve'])
+        self.create.assert_not_called()
+
+    def test_load_grant_denial_keeps_residency_and_starts_no_worker(self):
+        self.client.resource_call.side_effect = [{'instance': 'synthetic'},
+                                                ResourceWait('resource_ram_bytes_headroom')]
+        with patch('inference.laf_service.core_backends.time.sleep'), self.assertRaises(ResourceWait):
+            self.backend.start_flash()
+        self.assertEqual(self.backend.resource_instances, {'flash': 'synthetic'})
+        self.create.assert_not_called()
+
+    def test_new_idle_pair_and_loading_grant_allow_one_worker(self):
+        backend = self.backend
+        process = SimpleNamespace(pid=42, stdout=io.StringIO(), poll=lambda: None)
+        self.create.side_effect = None
+        self.create.return_value = process
+        backend._process = lambda pid: {'state': 'S', 'pgid': 42, 'sid': 42, 'start': pid, 'uids': {os.getuid()}}
+        backend.read_flash = Mock(side_effect=[
+            {'starting': True, 'engine_pid': 84, 'artifact_sha256': 'f' * 64},
+            {'ready': True, 'engine_pid': 84, 'artifact_sha256': 'f' * 64},
+        ])
+        self.client.resources['vram_used'] = 3 * GIB
+        with self.assertRaises(ResourceWait):
+            backend.start_flash()
+        self.client.resources['vram_used'] = 3 * GIB - 1
+        operations = []
+        def grant(operation, **parameters):
+            operations.append(operation)
+            if operation in ('model_reserve', 'loading_reserve'):
+                self.create.assert_not_called()
+            if operation == 'model_reserve':
+                return {'instance': 'synthetic'}
+            if operation == 'loading_reserve':
+                return {'token': 'synthetic-loading'}
+            return {'released': True}
+        self.client.resource_call.side_effect = grant
+        with patch('inference.laf_service.core_backends.time.sleep'):
+            backend.start_flash()
+            backend.start_flash()
+        backend.flash_drain.join(1)
+        self.assertFalse(backend.flash_drain.is_alive())
+        self.create.assert_called_once()
+        self.manifest.assert_called_once_with(self.config, verify=True)
+        self.assertEqual(operations, ['model_reserve', 'loading_reserve', 'loading_finish'])
+        self.assertTrue(backend.flash_alive())
+        self.assertIsNotNone(backend.flash_base)
+
+    def test_wait_preserves_fifo_and_terminal_waits_do_not_stop_provider(self):
+        for action in ('admit', 'cancel', 'expire'):
+            with self.subTest(action=action):
+                backend = SimpleNamespace(resource_mode=True, abort=Mock(), start_flash=Mock(), close=Mock())
+                controller = Controller(backend, sample, start=False)
+                request = {'model': 'flash', 'messages': [{'role': 'user', 'content': 'synthetic'}]}
+                first = controller.submit(request)
+                second = controller.submit(request)
+                attempts, completions = [], []
+                def generate(job, check):
+                    check()
+                    attempts.append(job.id)
+                    if len(attempts) == 1:
+                        raise ResourceWait('resource_ram_bytes_headroom')
+                    completions.append(job.id)
+                    return {'content': 'synthetic'}
+                def settle_wait(timeout):
+                    self.assertIsNone(controller.active)
+                    self.assertEqual(first.public()['resource_wait_reason'], 'resource_ram_bytes_headroom')
+                    self.assertFalse(second.done.is_set())
+                    if action == 'cancel':
+                        first.cancel.set()
+                    if action == 'expire':
+                        first.deadline = 0
+                def get(timeout):
+                    try:
+                        return original_get(block=False)
+                    except queue.Empty:
+                        controller.stop.set()
+                        raise
+                original_get = controller.queue.get
+                backend.generate = generate
+                controller.queue.get = get
+                controller.stop.wait = Mock(side_effect=settle_wait)
+                controller.run()
+                expected = [first.id, second.id] if action == 'admit' else [second.id]
+                self.assertEqual(attempts, [first.id] + expected)
+                self.assertEqual(completions, expected)
+                self.assertEqual(first.status, {'admit': 'completed', 'cancel': 'cancelled', 'expire': 'failed'}[action])
+                self.assertEqual(second.status, 'completed')
+                self.assertTrue(first.done.is_set())
+                self.assertEqual(controller.queue.unfinished_tasks, 0)
+                backend.abort.assert_not_called()
+                backend.start_flash.assert_not_called()
+
+    def test_hard_fault_while_waiting_keeps_the_stop_barrier(self):
+        stop_provider = Mock()
+        generate = Mock(side_effect=ResourceWait('resource_ram_bytes_headroom'))
+        backend = SimpleNamespace(resource_mode=True, abort=stop_provider, generate=generate)
+        controller = Controller(backend, sample, start=False)
+        job = controller.submit({'model': 'flash', 'messages': [{'role': 'user', 'content': 'synthetic'}]})
+        original_get = controller.queue.get
+        def get(timeout):
+            try:
+                return original_get(block=False)
+            except queue.Empty:
+                controller.stop.set()
+                raise
+        controller.queue.get = get
+        controller.stop.wait = Mock(side_effect=lambda _: controller.trip('hard resource fault'))
+        controller.run()
+        self.assertEqual(controller.fault, 'hard resource fault')
+        self.assertEqual(job.status, 'failed')
+        self.assertTrue(job.done.is_set())
+        generate.assert_called_once()
+        stop_provider.assert_called_once()
 
 
 class FlashProcessTest(unittest.TestCase):

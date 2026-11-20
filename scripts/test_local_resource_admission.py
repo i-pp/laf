@@ -20,6 +20,7 @@
 
 
 # Added 2026-11-15: local residency, GPU/UMA and Router boundary regressions.
+# Modified 2026-11-20: canonical KFD identity and bounded procfs FD regressions.
 
 """Offline model/GPU/UMA/Router admission; synthetic kernel and native peers."""
 from contextlib import closing
@@ -427,6 +428,17 @@ class LocalPreflight(unittest.TestCase):
 
 
 class KernelScopeEvidence(unittest.TestCase):
+    def test_reader_can_scan_its_own_real_proc_fdinfo(self):
+        temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
+        scope=Path(temporary.name)/'scope';scope.mkdir()
+        (scope/'cgroup.procs').write_text(str(os.getpid())+'\n')
+        # Real procfs in the physical test namespace, with no device opens.
+        # An eager directory listing includes its own already-closed FD.
+        with patch.object(gpu,'PROC',Path('/proc')),\
+                patch.object(gpu,'_device_nodes',return_value=(set(),None)),\
+                patch.object(gpu,'_pid_snapshot',return_value='same-start'):
+            self.assertEqual(gpu.scope_clients(scope,policy()['local_inference']['device']),{})
+
     def fixture(self):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
         root=Path(temporary.name);scope=root/'scope';scope.mkdir();(scope/'cgroup.procs').write_text('42\n')
@@ -463,9 +475,22 @@ class GpuDescriptorEvidence(unittest.TestCase):
         self.device=policy()['local_inference']['device'];pci=self.root/'pci';target=pci/self.device['pci_bdf'];target.mkdir(parents=True)
         drm=self.root/'drm';node=drm/'renderD128';node.mkdir(parents=True)
         (node/'device').symlink_to(target);self.number=node/'dev';self.number.write_text('226:128')
-        self.kfd=self.root/'kfd';self.kfd.mkdir();(self.kfd/'dev').write_text('235:0')
-        for name,value in (('PROC',self.root/'proc'),('PCI',pci),('DRM',drm),('KFD',self.kfd)):
-            self.enterContext(patch.object(gpu,name,value))
+        # Real kernel layout; map the production defaults into fake roots
+        # instead of replacing the defective class path with an arbitrary fixture.
+        kfd_default=gpu.KFD;device_default=getattr(gpu,'KFD_DEVICE',Path('/dev/kfd'))
+        self.kfd_number=os.makedev(511,0);self.kfd=self.root/'sys/class/kfd/kfd';self.kfd.mkdir(parents=True);(self.kfd/'dev').write_text('511:0')
+        self.kfd_device=self.root/'dev/kfd';self.kfd_device.parent.mkdir()
+        self.device_present=True;original_stat=Path.stat
+        def device_stat(path,*args,**kwargs):
+            if path==self.kfd_device:
+                if not self.device_present:raise FileNotFoundError('synthetic absent KFD node')
+                return SimpleNamespace(st_mode=stat.S_IFCHR|0o600,st_rdev=self.kfd_number)
+            return original_stat(path,*args,**kwargs)
+        self.enterContext(patch.object(Path,'stat',device_stat))
+        for name,value in (('PROC',self.root/'proc'),('PCI',pci),('DRM',drm),
+                           ('KFD',self.root/'sys'/kfd_default.relative_to('/sys')),
+                           ('KFD_DEVICE',self.root/'dev'/device_default.relative_to('/dev'))):
+            self.enterContext(patch.object(gpu,name,value,create=True))
         self.enterContext(patch.object(gpu,'_pid_snapshot',return_value='pinned-start'))
         self.descriptor=(stat.S_IFCHR|0o600,1,2,os.makedev(226,128))
         self.enterContext(patch.object(gpu,'_fd',side_effect=lambda path:self.descriptor))
@@ -487,12 +512,46 @@ class GpuDescriptorEvidence(unittest.TestCase):
         self.file.write_text('pos: 0\n');self.assertEqual(self.capture(),{})
 
     def test_kfd_descriptor_is_unknown_even_without_drm_counters_and_never_opens_device(self):
-        self.descriptor=(stat.S_IFCHR|0o600,1,2,os.makedev(235,0));self.file.write_text('pos: 0\n')
-        with self.assertRaisesRegex(shared.AdmissionWait,'gpu_ownership_unknown'):self.capture()
+        self.descriptor=(stat.S_IFCHR|0o600,1,2,self.kfd_number);self.file.write_text('pos: 0\n')
+        for private in (True,False):
+            with self.assertRaisesRegex(shared.AdmissionWait,'gpu_ownership_unknown'):self.capture(private)
 
     def test_wrong_pci_counters_on_the_selected_drm_device_cannot_be_ignored(self):
         self.file.write_text(KernelGpu().raw().replace('0000:00:01.0','0000:00:02.0'))
         with self.assertRaisesRegex(shared.AdmissionWait,'gpu_counters_unknown'):self.capture()
+
+    def tracked_fd_scan(self,count=1):
+        original=os.scandir;target=self.fdinfo
+        class Scan:
+            active=False;closed=False
+            def __enter__(scan):
+                scan.active=True
+                return (SimpleNamespace(path=str(self.file)) for _ in range(count))
+            def __exit__(scan,*args):scan.active=False;scan.closed=True
+        scan=Scan()
+        return scan,patch.object(gpu.os,'scandir',side_effect=lambda path:scan if Path(path)==target else original(path))
+
+    def test_fd_scan_holds_enumerator_during_checks_and_bounds_entries(self):
+        scan,scanner=self.tracked_fd_scan(4097)
+        checked=[]
+        def descriptor(path):
+            self.assertTrue(scan.active);checked.append(path);return self.descriptor
+        with scanner,patch.object(gpu,'_fd',side_effect=descriptor),\
+                patch.object(gpu.time,'monotonic',return_value=100),\
+                self.assertRaisesRegex(shared.AdmissionWait,'usage_unknown'):
+            self.capture()
+        self.assertEqual(len(checked),4096*2);self.assertTrue(scan.closed)
+
+    def test_fd_scan_closes_enumerator_without_skipping_disappeared_or_unknown_descriptors(self):
+        for error in (FileNotFoundError('synthetic disappeared FD'),PermissionError('synthetic denied FD')):
+            scan,scanner=self.tracked_fd_scan()
+            with scanner,patch.object(gpu,'_fd',side_effect=error),self.assertRaises(type(error)):
+                self.capture()
+            self.assertTrue(scan.closed)
+        scan,scanner=self.tracked_fd_scan();self.descriptor=(stat.S_IFCHR|0o600,1,2,self.kfd_number)
+        self.file.write_text('pos: 0\n')
+        with scanner,self.assertRaisesRegex(shared.AdmissionWait,'gpu_ownership_unknown'):self.capture()
+        self.assertTrue(scan.closed)
 
     def test_descriptor_stat_denial_or_replacement_retains_unknown(self):
         for change in (PermissionError('synthetic'),[self.descriptor,(stat.S_IFREG|0o600,1,3,0)]):
@@ -509,12 +568,52 @@ class GpuDescriptorEvidence(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):self.capture()
 
     def test_missing_kfd_is_distinct_from_denied_kernel_metadata(self):
-        (self.kfd/'dev').unlink();self.kfd.rmdir();self.assertEqual(self.capture(),{1:8192})
-        self.kfd.mkdir();(self.kfd/'dev').write_text('235:0');original=os.stat
+        (self.kfd/'dev').unlink();self.kfd.rmdir();self.device_present=False;self.assertEqual(self.capture(),{1:8192})
+        self.kfd.mkdir();(self.kfd/'dev').write_text('511:0');self.device_present=True;original=os.stat
         def denied(path,*args,**kwargs):
             if isinstance(path,(str,bytes,os.PathLike)) and Path(path)==self.kfd:raise PermissionError('synthetic metadata denial')
             return original(path,*args,**kwargs)
         with patch.object(os,'stat',denied),self.assertRaises(PermissionError):self.capture()
+
+    def kfd_metadata(self,number=None,mode=None):
+        original=Path.stat;number=self.kfd_number if number is None else number
+        mode=stat.S_IFCHR|0o600 if mode is None else mode
+        def observed(path,*args,**kwargs):
+            if path==self.kfd_device:return SimpleNamespace(st_mode=mode,st_rdev=number)
+            return original(path,*args,**kwargs)
+        return patch.object(Path,'stat',observed)
+
+    def test_present_kfd_device_without_kernel_class_is_unknown(self):
+        (self.kfd/'dev').unlink();self.kfd.rmdir()
+        with self.kfd_metadata(),self.assertRaisesRegex(shared.AdmissionWait,'gpu_topology_unknown'):self.capture()
+
+    def test_missing_kfd_node_with_present_kernel_class_is_unknown(self):
+        self.device_present=False
+        with self.assertRaisesRegex(shared.AdmissionWait,'gpu_topology_unknown'):self.capture()
+
+    def test_kfd_device_number_must_match_the_canonical_kernel_class(self):
+        with self.kfd_metadata():self.assertEqual(self.capture(),{1:8192})
+        with self.kfd_metadata(number=os.makedev(512,0)),self.assertRaisesRegex(shared.AdmissionWait,'gpu_topology_unknown'):self.capture()
+
+    def test_non_character_kfd_node_cannot_masquerade_as_absence(self):
+        for mode in (stat.S_IFREG|0o600,stat.S_IFDIR|0o700):
+            with self.subTest(mode=mode),self.kfd_metadata(mode=mode),self.assertRaisesRegex(shared.AdmissionWait,'gpu_topology_unknown'):self.capture()
+
+    def test_kfd_device_metadata_denial_never_becomes_absence(self):
+        original=Path.stat
+        def denied(path,*args,**kwargs):
+            if path==self.kfd_device:raise PermissionError('synthetic KFD device metadata denial')
+            return original(path,*args,**kwargs)
+        with patch.object(Path,'stat',denied),self.assertRaises(PermissionError):self.capture()
+
+    def test_kfd_device_rebinding_during_sample_is_unknown(self):
+        original=Path.stat;calls=[0]
+        def changed(path,*args,**kwargs):
+            if path==self.kfd_device:
+                calls[0]+=1
+                return SimpleNamespace(st_mode=stat.S_IFCHR|0o600,st_rdev=self.kfd_number if calls[0]==1 else os.makedev(512,0))
+            return original(path,*args,**kwargs)
+        with patch.object(Path,'stat',changed),self.assertRaisesRegex(shared.AdmissionWait,'gpu_topology_unknown'):self.capture()
 
     def test_final_slow_descriptor_read_cannot_return_stale_zero_evidence(self):
         now=[100.0];self.file.write_text('pos: 0\n');self.descriptor=(stat.S_IFREG|0o600,1,2,0)
