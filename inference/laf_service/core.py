@@ -21,6 +21,8 @@
 # Changed 2026-11-13: bounded swap policy and explicit quiet resource recovery.
 
 # Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+# Modified 2026-11-20: request-driven Flash loading in resource mode.
+# Modified 2026-11-20: reconcile unused residency when its pre-load wait ends.
 
 """Bounded single-lane scheduling and fail-closed resource admission."""
 from __future__ import annotations
@@ -47,9 +49,10 @@ RESOURCE_WAIT_CODES = frozenset({'resource_observation_unknown', 'resource_obser
 
 class ResourceWait(ServiceError):
     """A correlated pre-dispatch refusal, never an uncertain execution result."""
-    def __init__(self, code):
+    def __init__(self, code, *, release_unused=None):
         if not isinstance(code,str) or code not in RESOURCE_WAIT_CODES:raise ValueError('Unknown resource wait code')
         self.code=code
+        self.release_unused = release_unused  # Local only. The wire reply carries just the refusal code.
         super().__init__(code)
 
 
@@ -146,6 +149,7 @@ class Controller:
         self.swap_limit_mib = swap_limit_mib
         self.models = frozenset(getattr(backend, 'models', MODELS))
         self.requires_flash = getattr(backend, 'requires_flash', True)
+        self.prewarm_flash = self.requires_flash and not getattr(backend, 'resource_mode', False)
         self.read_resources = read_resources
         self.baseline = read_resources()
         check_resources(self.baseline, self.baseline, self.swap_limit_mib)
@@ -241,12 +245,13 @@ class Controller:
 
     def run(self):
         pending = None
+        release_unused = None
         while not self.stop.is_set():
             try:
                 job = pending if pending is not None else self.queue.get(timeout=.2)
                 pending = None
             except queue.Empty:
-                if self.requires_flash and not self.fault and not self.stop.is_set() and not self.backend.health()['flash_resident']:
+                if self.prewarm_flash and not self.fault and not self.stop.is_set() and not self.backend.health()['flash_resident']:
                     now = time.monotonic()
                     self.restarts = [t for t in self.restarts if now - t < 600]
                     if len(self.restarts) >= 2:
@@ -258,21 +263,45 @@ class Controller:
                     except Exception as exc:
                         self.trip('Flash recovery failed: ' + str(exc))
                 continue
-            try:
-                with self.lock:
+            with self.lock:
+                cancelled = job.cancel.is_set() or self.stop.is_set()
+                finished_wait = job.wait_reason is not None and (
+                    cancelled or time.monotonic() >= job.deadline or self.fault)
+                if not finished_wait:
                     self.active = job
                     job.status = 'running'
                     job.wait_reason = None
+            if finished_wait:
+                error = 'cancelled, expired, or resource safety latch set'
+                # Keep the job out of the active stop path and leave the
+                # controller lock free for the independent hard-stop guard.
+                if release_unused is not None and not self.stop.is_set() and not self.fault:
+                    try:
+                        release_unused()
+                    except Exception:
+                        error = 'unused Flash residency release unconfirmed'
+                release_unused = None
+                with self.lock:
+                    job.status = 'cancelled' if cancelled or job.cancel.is_set() or self.stop.is_set() else 'failed'
+                    job.error = error
+                    job.wait_reason = None
+                    job.messages = []
+                    job.done.set()
+                    self.queue.task_done()
+                continue
+            try:
                 self.cancelled(job)
                 job.result = self.backend.generate(job, lambda: self.cancelled(job))
                 self.cancelled(job)
                 job.status = 'completed'
             except ResourceWait as exc:
-                # Only an authenticated, correlated no-dispatch reply can wait.
+                # ResourceWait is confined to verified pre-dispatch refusals.
                 # Keep this oldest job in front of new arrivals until admission,
                 # cancellation or its existing deadline; never replay a turn.
-                job.status, job.wait_reason = 'queued', exc.code
+                job.wait_reason = exc.code
                 pending = job
+                if exc.release_unused is not None:
+                    release_unused = exc.release_unused
             except Exception as exc:
                 job.status = 'cancelled' if job.cancel.is_set() or self.stop.is_set() else 'failed'
                 job.error = str(exc)[:240]
@@ -283,7 +312,10 @@ class Controller:
             finally:
                 with self.lock:
                     self.active = None
+                    if pending is not None:
+                        job.status = 'queued'
                 if pending is None:
+                    release_unused = None
                     job.messages = []
                     job.done.set()
                     self.queue.task_done()

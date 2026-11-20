@@ -20,6 +20,7 @@
 
 
 # Added 2026-11-15: Flash artifact/loading/terminal resource boundaries.
+# Modified 2026-11-20: terminal preload-wait residency reconciliation.
 
 """Synthetic files, native pipes and host lifecycle; never load a model/device."""
 from contextlib import closing
@@ -29,6 +30,7 @@ import io
 import json
 import os
 from pathlib import Path
+import queue
 import sys
 import tempfile
 from types import SimpleNamespace,ModuleType
@@ -43,7 +45,7 @@ require_isolated()  # Refuse raw resource tests before any fixture or project im
 import test_local_resource_admission as local
 from inference.laf_service import flash_resources as assets
 from inference.laf_service import core_backends,core_server,core_flash_worker
-from inference.laf_service.core import ResourceWait,ServiceError
+from inference.laf_service.core import Controller,ResourceWait,ServiceError
 from inference.laf_service.lifecycle import LifecycleFault
 from inference.laf_service.test_configured_profiles import selection,profiles,job,ConfiguredAPI
 
@@ -237,6 +239,180 @@ class FlashBoundary(unittest.TestCase):
         with patch.object(self.fixture.client,'resource_call',side_effect=refuse):
             with self.assertRaises(ResourceWait):self.start()
         self.create.assert_not_called();self.assertIn('model_residency',self.kinds())
+
+    def run_waiting_flash(self, settle):
+        """Run the serial queue and real host ledger against synthetic headroom."""
+        authority = self.fixture.authority
+        policy = self.fixture.p['local_inference']
+        flash = policy['models']['flash']
+        residency_ram = local.shared.effective_resources({'resources': flash['residency']}, policy['device'])['ram_bytes']
+        self.loading_ram = local.shared.effective_resources({'resources': flash['loading']}, policy['device'])['ram_bytes']
+        self.ram_headroom = self.loading_ram - 1
+        observe = authority.observe
+        def limit_loading(rows, prior):
+            sample, state = observe(rows, prior)
+            demands = [json.loads(row['demand']) for row in rows]
+            promised = sum(local.shared.effective_resources(demand, policy['device'])['ram_bytes'] for demand in demands)
+            has_residency = any(demand['kind'] == 'model_residency' for demand in demands)
+            free = self.ram_headroom if has_residency else residency_ram
+            sample['available']['ram_bytes'] = promised + self.fixture.p['reserve']['ram_bytes'] + free
+            return sample, state
+
+        controller = Controller(self.backend, local.pressure_sample, start=False)
+        queued = controller.submit({'model': 'flash', 'messages': [{'role': 'user', 'content': 'synthetic'}]})
+        original_get = controller.queue.get
+        def get(timeout):
+            try:
+                return original_get(block=False)
+            except queue.Empty:
+                controller.stop.set()
+                raise
+
+        def wait(timeout):
+            self.assertIsNone(controller.active)
+            self.assertEqual(queued.status, 'queued')
+            settle(queued)
+
+        with patch.object(authority, 'observe', limit_loading), patch.object(self.backend, 'abort') as abort, \
+                patch.object(controller.queue, 'get', get), patch.object(controller.stop, 'wait', wait):
+            controller.run()
+        if self.backend.flash_drain is not None:
+            self.backend.flash_drain.join(1)
+            self.assertFalse(self.backend.flash_drain.is_alive())
+        abort.assert_not_called()
+        self.assertTrue(queued.done.is_set())
+        self.assertEqual(controller.queue.unfinished_tasks, 0)
+        return queued
+
+    def test_cancelled_cold_wait_releases_only_the_unused_residency(self):
+        def cancel(queued):
+            self.assertEqual(queued.wait_reason, 'resource_ram_bytes_headroom')
+            self.assertIn('model_residency', self.kinds())
+            self.assertNotIn('model_loading', self.kinds())
+            queued.cancel.set()
+
+        with patch.object(self.fixture.authority, '_idle_upper', return_value=0) as proof:
+            queued = self.run_waiting_flash(cancel)
+        self.assertEqual(queued.status, 'cancelled')
+        proof.assert_called_once()
+        self.assertEqual(self.kinds(), ['local_control'] * 3)
+        self.assertEqual(self.backend.resource_instances, {})
+        self.create.assert_not_called()
+
+    def test_expired_cold_wait_remembers_the_residency_through_later_idle_refusal(self):
+        self.backend.wait_idle.side_effect = [None, ResourceWait('resource_vram_bytes_headroom')]
+        reasons = []
+        def expire(queued):
+            reasons.append(queued.wait_reason)
+            if len(reasons) == 2:
+                queued.deadline = self.fixture.now
+
+        with patch.object(self.fixture.authority, '_idle_upper', return_value=0) as proof:
+            queued = self.run_waiting_flash(expire)
+        self.assertEqual(reasons, ['resource_ram_bytes_headroom', 'resource_vram_bytes_headroom'])
+        self.assertEqual(queued.status, 'failed')
+        proof.assert_called_once()
+        self.assertNotIn('model_residency', self.kinds())
+        self.assertNotIn('flash', self.backend.resource_instances)
+        self.create.assert_not_called()
+
+    def test_cold_cancel_retains_residency_with_an_owned_loading_reference(self):
+        def add_reference_and_cancel(queued):
+            self.ram_headroom = self.loading_ram
+            self.fixture.client.resource_call('loading_reserve', model='flash',
+                instance=self.backend.resource_instances['flash'], request_id=local.ident(199))
+            queued.cancel.set()
+
+        with patch.object(self.fixture.authority, '_idle_upper', return_value=0) as proof:
+            queued = self.run_waiting_flash(add_reference_and_cancel)
+        proof.assert_not_called()
+        self.assertIn('flash', self.backend.resource_instances)
+        self.assertIn('model_residency', self.kinds())
+        self.assertIn('model_loading', self.kinds())
+        self.assertEqual(queued.error, 'unused Flash residency release unconfirmed')
+        self.assertTrue(self.fixture.client.uncertain)
+        self.create.assert_not_called()
+
+    def test_cold_cancel_retains_residency_when_gpu_ownership_is_unknown(self):
+        def cancel(queued):
+            queued.cancel.set()
+
+        with patch.object(self.fixture.authority, '_idle_upper', side_effect=
+                          local.shared.AdmissionWait('resource_gpu_ownership_unknown')) as proof:
+            queued = self.run_waiting_flash(cancel)
+        proof.assert_called_once()
+        self.assertIn('flash', self.backend.resource_instances)
+        self.assertIn('model_residency', self.kinds())
+        self.assertEqual(queued.error, 'unused Flash residency release unconfirmed')
+        self.assertTrue(self.fixture.client.uncertain)
+        self.create.assert_not_called()
+
+    def test_cold_cancel_retains_residency_when_host_owner_mismatches(self):
+        def change_owner_and_cancel(queued):
+            self.fixture.authority.owner = local.ident(190)
+            queued.cancel.set()
+
+        with patch.object(self.fixture.authority, '_idle_upper', return_value=0) as proof:
+            queued = self.run_waiting_flash(change_owner_and_cancel)
+        proof.assert_not_called()
+        self.assertIn('model_residency', self.kinds())
+        self.assertIn('flash', self.backend.resource_instances)
+        self.assertEqual(queued.error, 'unused Flash residency release unconfirmed')
+        self.create.assert_not_called()
+
+    def test_cold_cancel_does_not_send_release_after_local_generation_changes(self):
+        def change_generation_and_cancel(queued):
+            self.backend.generation += 1
+            queued.cancel.set()
+
+        with patch.object(self.fixture.client, 'resource_call', wraps=self.fixture.client.resource_call) as rpc:
+            queued = self.run_waiting_flash(change_generation_and_cancel)
+        self.assertEqual(queued.status, 'cancelled')
+        self.assertEqual([call.args[0] for call in rpc.call_args_list], ['model_reserve', 'loading_reserve'])
+        self.assertIn('model_residency', self.kinds())
+        self.assertIn('flash', self.backend.resource_instances)
+        self.create.assert_not_called()
+
+    def test_cold_cancel_lost_release_receipt_leaves_core_uncertain_without_retry(self):
+        original = self.fixture.client.exchange
+        releases = []
+        def lost(request, timeout):
+            result = original(request, timeout)
+            if request['operation'] == 'model_release':
+                releases.append(request['instance'])
+                raise TimeoutError('synthetic lost release receipt')
+            return result
+
+        with patch.object(self.fixture.authority, '_idle_upper', return_value=0), \
+                patch.object(self.fixture.client, 'exchange', lost):
+            queued = self.run_waiting_flash(lambda job: job.cancel.set())
+        self.assertEqual(releases, [self.backend.resource_instances['flash']])
+        self.assertNotIn('model_residency', self.kinds())  # Host committed before the receipt was lost.
+        self.assertEqual(queued.error, 'unused Flash residency release unconfirmed')
+        self.assertTrue(self.fixture.client.uncertain)
+        self.create.assert_not_called()
+
+    def test_cancelled_execution_wait_does_not_release_a_flash_loaded_after_the_wait(self):
+        waits = []
+        def load_then_cancel(queued):
+            waits.append(queued.wait_reason)
+            if len(waits) == 1:
+                # Admit loading while blocking the larger execution grant.
+                self.ram_headroom = self.loading_ram
+            else:
+                queued.cancel.set()
+
+        with patch.object(self.fixture.client, 'resource_call', wraps=self.fixture.client.resource_call) as rpc:
+            queued = self.run_waiting_flash(load_then_cancel)
+        self.assertEqual(queued.status, 'cancelled')
+        self.assertEqual(waits, ['resource_ram_bytes_headroom'] * 2)
+        self.assertEqual([call.args[0] for call in rpc.call_args_list],
+                         ['model_reserve', 'loading_reserve', 'loading_reserve', 'loading_finish', 'execution_reserve'])
+        self.create.assert_called_once()
+        self.assertTrue(self.backend.flash_alive())
+        self.assertIn('model_residency', self.kinds())
+        self.assertNotIn('model_loading', self.kinds())
+        self.assertEqual(self.process.stdin.getvalue(), '')
 
     def test_lost_loading_ack_retains_both_grants_without_native_or_retry(self):
         original=self.fixture.client.exchange;count=[]

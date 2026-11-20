@@ -19,6 +19,8 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+# Modified 2026-11-20: bounded Flash load deferral for resource admission.
+# Modified 2026-11-20: release unused Flash residency through host reconciliation.
 
 """Explicit Core backend: container-owned Flash, host-owned Ollama lifecycle.
 
@@ -38,7 +40,7 @@ import subprocess
 import threading
 import time
 import uuid
-from .core import GIB, MODELS, ServiceError
+from .core import GIB, MODELS, ResourceWait, ServiceError
 
 NAMES = {'coder-next': 'laf-coder-next', 'gpt-oss-120b': 'laf-gpt-oss-120b'}
 
@@ -225,8 +227,12 @@ class CoreBackends:
                 artifact = manifest(self.config,verify=True)
                 instance = self._resource_model('flash')
                 loading_id = str(uuid.uuid4())
-                token = self.client.resource_call('loading_reserve',model='flash',instance=instance,
-                    request_id=loading_id)['token']
+                try:
+                    token = self.client.resource_call('loading_reserve',model='flash',instance=instance,
+                        request_id=loading_id)['token']
+                except ResourceWait as denial:
+                    raise ResourceWait(denial.code, release_unused=lambda: self._release_unstarted_flash(
+                        instance, generation)) from None
                 loading = (instance,loading_id,token)
                 guard()
             self.flash_lines = queue.Queue(maxsize=64)
@@ -272,10 +278,23 @@ class CoreBackends:
                 raise ServiceError('Flash readiness or owned engine identity unavailable')
             if self.resource_mode and ready.get('artifact_sha256') != artifact:
                 raise ServiceError('Flash ready artifact mismatch')
-            self.flash_base = self.read_resources()
+            flash_base = self.read_resources()
             if loading is not None:
                 guard()
                 self.client.resource_call('loading_finish',instance=loading[0],request_id=loading[1],token=loading[2])
+            self.flash_base = flash_base
+
+    def _release_unstarted_flash(self, instance, generation):
+        with self.lifecycle_lock:
+            with self.lock:
+                if (self.closing or self.stopping or self.generation != generation or self.flash is not None
+                        or self.resource_instances.get('flash') != instance):
+                    return
+            self._namespace()
+            # The host rechecks ownership, live references and physical GPU
+            # usage. The client validates the release ACK and fences unknowns.
+            self.client.resource_call('model_release', instance=instance)
+            del self.resource_instances['flash']
 
     def _process(self, pid):
         self._namespace()
@@ -397,6 +416,11 @@ class CoreBackends:
                   'provider_mode': 'host-lifecycle', 'stopping': self.stopping}
         if self.normal_catalog or not self.requires_flash:
             baseline_ready = resident if self.requires_flash else self.idle_base is not None
+            if self.resource_mode and self.requires_flash:
+                # Ready to accept work from the queue before the first load.
+                # A failed or unsettled worker is still unready.
+                baseline_ready = self.flash is None or (resident and self.flash_base is not None)
+                health['flash_on_demand'] = True
             ready = bool(self.address and baseline_ready and self.models_verified and not self.stopping and not self.closing)
             if ready:
                 try:
@@ -414,7 +438,12 @@ class CoreBackends:
         stable = 0
         while time.monotonic() < until:
             check()
-            stable = stable + 1 if self.read_resources()['vram_used'] < 3 * GIB else 0
+            idle = self.read_resources()['vram_used'] < 3 * GIB
+            if self.resource_mode and not idle:
+                # The same paired idle threshold still gates the load. Return
+                # the known refusal before acquiring grants or starting Flash.
+                raise ResourceWait('resource_vram_bytes_headroom')
+            stable = stable + 1 if idle else 0
             if stable >= 2:
                 return
             time.sleep(.5)

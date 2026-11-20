@@ -21,6 +21,7 @@
 # Changed 2026-11-13: bounded swap policy and explicit quiet resource recovery.
 
 # Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+# Modified 2026-11-20: start resource-owned Flash only for queued work.
 
 """Explicit Core-only entrypoint. The legacy host entrypoint remains unchanged."""
 from __future__ import annotations
@@ -146,9 +147,9 @@ def run_core(path, *, backend_factory=CoreBackends, client_factory=lifecycle_cli
         backend.abort()  # Explicit new-generation physical barrier before startup.
         backend.start_ollama(controller.cancelled_idle)
         backend.verify_models()
-        if getattr(backend, 'requires_flash', True):
+        if controller.prewarm_flash:
             backend.start_flash(controller.cancelled_idle)
-        else:
+        elif not controller.requires_flash:
             backend.capture_idle_baseline(controller.cancelled_idle)
         if os.path.lexists(address):
             raise ServiceError('Core public socket already exists; not replaced')
