@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-21: check CLI selections against actual Router configuration validation.
+
 """Offline onboarding regressions using synthetic official metadata and engine state."""
 
 from contextlib import redirect_stderr, redirect_stdout
@@ -30,6 +32,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from ..laf_service.cpu_server import load_cpu_config
 from . import cli, model_setup
 from .model_management import read_engine_config
 
@@ -75,7 +78,8 @@ class SetupTests(unittest.TestCase):
     @staticmethod
     def documents(host, path, media):
         if host == model_setup.HUB:
-            return json.dumps(CARD).encode(), None
+            data = [CARD] if path.startswith("/api/models?") else CARD
+            return json.dumps(data).encode(), None
         if host == model_setup.REGISTRY and path.endswith("/135m-instruct-q4_K_M"):
             return MANIFEST, None
         raise AssertionError("unexpected provider read")
@@ -143,25 +147,80 @@ class SetupTests(unittest.TestCase):
             return {"models": [] if path == "/api/ps" else installed}
         with patch.object(model_setup, "_get", side_effect=self.documents), \
              patch.object(model_setup.OllamaHTTP, "__call__", side_effect=engine):
-            rc, stale = self.invoke("--config", self.conf, "download", MODEL, "--digest", BLOB)
+            rc, catalog = self.invoke("discover", "--publisher", "HuggingFaceTB")
+            self.assertEqual(rc, 0, catalog)
+            model, = catalog["public_models"]
+            rc, choice = self.invoke("artifact", model["id"])
+            self.assertEqual(rc, 0, choice)
+            rc, stale = self.invoke("--config", self.conf, "download", model["id"], "--digest", BLOB)
             self.assertEqual(rc, 1, stale)
             self.assertEqual(wire, [])
             self.assertFalse((self.state / "models.json").exists())
             rc, listing = self.invoke("--config", self.conf, "inventory")
             self.assertEqual(rc, 0, listing)
             self.assertEqual(listing["installed_models"], [])
-            rc, record = self.invoke("--config", self.conf, "download", MODEL, "--digest", DIGEST)
+            rc, record = self.invoke("--config", self.conf, "download", model["id"],
+                                     "--digest", choice["artifact"]["digest"])
             self.assertEqual(rc, 0, record)
             self.assertEqual(record["installed_artifact"]["digest"], DIGEST)
             rc, _ = self.invoke("--config", self.conf, "download", MODEL, "--digest", DIGEST)
             self.assertEqual(rc, 0)
+            unmanaged = "existing-model:Q4_K_M"
+            installed.append({"name": unmanaged, "digest": BLOB, "size": 46})
+            rc, listing = self.invoke("--config", self.conf, "inventory")
+            self.assertEqual(rc, 0, listing)
+            present = next(row for row in listing["installed_models"] if row["reference"] == unmanaged)
             rc, selection = self.invoke("--config", self.conf, "use-installed",
-                                        "--reference", REFERENCE, "--digest", DIGEST, "--profile", "external")
+                                        "--reference", present["reference"], "--digest", present["digest"],
+                                        "--profile", "external")
             self.assertEqual(rc, 0, selection)
         self.assertEqual(selection["router_profile_identity"]["id"], "external")
         self.assertNotIn(b"external", (self.state / "models.json").read_bytes())
         self.assertEqual([row for row in wire if row[0] != "GET"],
                          [("POST", "/api/pull", {"model": REFERENCE, "stream": False})])
+
+        runtime = self.root / "router"
+        runtime.mkdir(mode=0o700)
+        config_file = self.root / "router.json"
+        config_file.touch(mode=0o600)
+        installed_identity = {key: record["installed_artifact"][key] for key in ("id", "reference", "digest")}
+        for identity in (installed_identity, selection["router_profile_identity"]):
+            with self.subTest(configured_model=identity["id"]):
+                config = {
+                    "mode": "cpu-only", "runtime_dir": str(runtime), "model_store": str(self.store),
+                    "generation_lock": str(self.lock),
+                    "ollama_provider": {"image": BLOB, "version": "0.40.15", "memory_bytes": 1 << 30,
+                                        "cpus": 1, "pids_limit": 96},
+                    "ollama_profile": {**identity, "options": {"num_ctx": 8192, "num_thread": 1, "num_batch": 32,
+                                                              "num_gpu": 0, "seed": 42, "temperature": 0}},
+                }
+                config_file.write_text(json.dumps(config))
+                self.assertEqual(load_cpu_config(config_file), config)
+
+    def test_invalid_router_identity_is_rejected_before_provider_access(self):
+        config = {"model_store": str(self.root), "engine_url": self.fixture_engine}
+        names = ("flash", "coder-next", "gpt-oss-120b", "test-fixture", "Upper", "bad_id", "a" * 65)
+        cases = [(name, REFERENCE) for name in names]
+        cases.extend(("external", reference) for reference in ("Mixed:tag", "model:" + "t" * 195))
+        present = {"models": [{"name": REFERENCE, "digest": DIGEST, "size": 170}]}
+
+        with (patch.object(model_setup, "read_engine_config", return_value=config) as read_config,
+              patch.object(model_setup, "_get") as metadata,
+              patch.object(model_setup.OllamaHTTP, "__call__", return_value=present) as provider):
+            for name, reference in cases:
+                with self.subTest(name=name, reference=reference):
+                    rc, result = self.invoke("--config", self.conf, "use-installed",
+                                             "--reference", reference, "--digest", DIGEST, "--profile", name)
+                    self.assertEqual(rc, 1, result)
+                    self.assertIn("profile", result["error"])
+            read_config.assert_not_called()
+            with patch.dict(model_setup.ARTIFACTS, {MODEL: ("flash", REFERENCE)}):
+                rc, result = self.invoke("--config", self.conf, "download", MODEL, "--digest", DIGEST)
+                self.assertEqual(rc, 1, result)
+                self.assertIn("profile", result["error"])
+        metadata.assert_not_called()
+        provider.assert_not_called()
+        self.assertFalse((self.state / "models.json").exists())
 
     def test_existing_gguf_checks_bytes_and_prepares_no_download(self):
         raw = b"GGUF" + (3).to_bytes(4, "little") + b"\0" * 24

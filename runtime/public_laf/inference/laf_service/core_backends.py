@@ -22,6 +22,7 @@
 # Modified 2026-11-20: bounded Flash load deferral for resource admission.
 # Modified 2026-11-20: release unused Flash residency through host reconciliation.
 # Modified 2026-11-20: fence the read-only Flash preparation phase before reservation.
+# Modified 2026-11-21: share Router profile identity validation with model setup.
 
 """Explicit Core backend: container-owned Flash, host-owned Ollama lifecycle.
 
@@ -46,6 +47,17 @@ from .core import GIB, MODELS, ResourceWait, ServiceError
 NAMES = {'coder-next': 'laf-coder-next', 'gpt-oss-120b': 'laf-gpt-oss-120b'}
 
 
+def valid_configured_profile_id(key):
+    return (type(key) is str and re.fullmatch(r'[a-z][a-z0-9-]{0,63}', key) is not None
+            and key not in MODELS and not key.startswith('test-'))
+
+
+def valid_profile_reference(reference):
+    return (type(reference) is str and len(reference) <= 200
+            and re.fullmatch(r'[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?:[A-Za-z0-9][A-Za-z0-9._-]*',
+                             reference) is not None)
+
+
 # Changed 2026-11-11: share bounded options across isolated and normal owner catalogs.
 def _profiles(value, *, normal):
     if type(value) is not list or not 1 <= len(value) <= 8:
@@ -58,13 +70,11 @@ def _profiles(value, *, normal):
         if type(entry) is not dict or set(entry) != fields:
             raise ServiceError('fixed profile fields required')
         key, reference, options = entry['id'], entry['reference'], entry['options']
-        pattern = r'[a-z][a-z0-9-]{0,63}' if normal else r'test-[a-z0-9][a-z0-9-]{0,58}'
-        if (type(key) is not str or not re.fullmatch(pattern, key) or key in profiles
-                or normal and (key in MODELS or key.startswith('test-'))):
+        valid_id = (valid_configured_profile_id(key) if normal
+                    else type(key) is str and re.fullmatch(r'test-[a-z0-9][a-z0-9-]{0,58}', key) is not None)
+        if not valid_id or key in profiles:
             raise ServiceError('distinct nonreserved configured model IDs required')
-        if (type(reference) is not str or len(reference) > 200
-                or not re.fullmatch(r'[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?:[A-Za-z0-9][A-Za-z0-9._-]*', reference)
-                or reference in references):
+        if not valid_profile_reference(reference) or reference in references:
             raise ServiceError('distinct exact tagged local Ollama references required')
         if type(options) is not dict or set(options) != set(bounds) | {'temperature'}:
             raise ServiceError('fixed bounded profile options required')

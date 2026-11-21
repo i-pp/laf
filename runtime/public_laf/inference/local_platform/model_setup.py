@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-21: require Router-compatible identity before selecting or downloading a model.
+
 """Owner-side model selection for LAF onboarding."""
 
 import hashlib
@@ -31,8 +33,9 @@ import stat
 import tempfile
 from urllib.parse import quote, urlencode
 
+from ..laf_service.core_backends import valid_configured_profile_id, valid_profile_reference
 from .model_management import (
-    DIGEST, MAX_JSON, REFERENCE, ModelError, ModelManager, OllamaAdapter,
+    DIGEST, MAX_JSON, ModelError, ModelManager, OllamaAdapter,
     OllamaHTTP, checked_directory, checked_file, read_engine_config, strict_json,
 )
 
@@ -44,7 +47,6 @@ ARTIFACTS = {
     "Qwen/Qwen2.5-Coder-1.5B-Instruct": ("qwen25-coder-15b", "qwen2.5-coder:1.5b-instruct-q4_K_M"),
 }
 REPO = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,95}/[A-Za-z0-9][A-Za-z0-9_.-]{0,95}\Z")
-PROFILE = re.compile(r"[a-z][a-z0-9-]{0,63}\Z")
 REVISION = re.compile(r"[a-f0-9]{40}\Z")
 MANIFEST = "application/vnd.docker.distribution.manifest.v2+json"
 MODEL_LAYER = "application/vnd.ollama.image.model"
@@ -141,6 +143,8 @@ def artifact(identifier):
     if mapping is None:
         raise ModelError("no reviewed compatible artifact mapped to this publisher model")
     profile, reference = mapping
+    if not valid_configured_profile_id(profile) or not valid_profile_reference(reference):
+        raise ModelError("reviewed artifact needs a valid nonreserved Router profile")
     publisher = identifier.split("/", 1)[0]
     hub_bytes, _ = _get(HUB, "/api/models/" + quote(identifier, safe="/"), "application/json")
     card = _card(strict_json(hub_bytes), publisher)
@@ -279,11 +283,11 @@ def download(config_path, identifier, expected_digest):
 
 
 def installed(config_path, reference=None, digest=None, profile=None):
+    if reference is not None and (not valid_configured_profile_id(profile) or not valid_profile_reference(reference)
+                                  or not isinstance(digest, str) or not DIGEST.fullmatch(digest)):
+        raise ModelError("provide a nonreserved Router profile ID, exact installed tag and full digest")
     config = read_engine_config(config_path)
     checked_directory(config["model_store"])
-    if reference is not None and (not REFERENCE.fullmatch(reference) or ":" not in reference
-                                  or not DIGEST.fullmatch(digest) or not PROFILE.fullmatch(profile)):
-        raise ModelError("provide a valid profile, exact installed tag and full digest")
     models = OllamaAdapter(OllamaHTTP(config["engine_url"])).installed()
     result = {"model_store": config["model_store"], "storage_mapping": "operator_verify",
               "registry_changed": False, "downloaded": False}

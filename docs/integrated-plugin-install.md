@@ -21,7 +21,7 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 
-Modified 2026-11-21 to document the private 0.0.1 workspace package.
+Modified 2026-11-21 to document the private 0.0.1 workspace package and Python requirements.
 -->
 
 # LAF integrated plugin: experimental source
@@ -114,9 +114,8 @@ Prerequisites must already be real, not inferred from these instructions:
 
 1. A supported Linux owner environment with the existing daemon/runtime,
    prepared policy checkout and capability/grant configuration.
-2. Python 3.12 or later for the launcher and the interpreter that runs
-   MCP SDK **1.30.0**. The production CLI checks both versions before
-   opening the runtime.
+2. Python 3.12 or later for the LAF runtime. The pinned MCP SDK **1.30.0**
+   installer supports CPython 3.12 and 3.14.
 3. An existing owner-only Router socket and explicit allowed model IDs.
 4. A private receipt directory path reserved for this user's adapter. Preserve
    its durable records across frontend updates; never recreate attempt IDs or
