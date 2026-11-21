@@ -22,7 +22,7 @@
 # Added 2026-11-12: integrated source-tree archive preparation.
 
 """Pure metadata contracts for Codex packaging; never installs or connects."""
-import ast,json,tempfile,unittest,zipfile
+import ast,json,struct,tempfile,unittest,zipfile
 from pathlib import Path
 import check_release_names as names
 ROOT=Path(__file__).resolve().parents[1]
@@ -40,6 +40,13 @@ class CodexPackage(unittest.TestCase):
   self.assertEqual(compat['interface'],portable['extensions']['com.openai']['interface'])
   self.assertEqual(portable['author']['name'],'I-plusplus Inc.')
   self.assertEqual(compat['interface']['developerName'],portable['author']['name'])
+  icon=compat['interface']['logo']
+  self.assertEqual(icon,'./assets/laf-neural-fabric.png')
+  self.assertEqual(compat['interface']['composerIcon'],icon)
+  image=(ROOT/icon).read_bytes()
+  self.assertEqual(image[:8],b'\x89PNG\r\n\x1a\n')
+  self.assertEqual(image[12:16],b'IHDR')
+  self.assertEqual(struct.unpack('>IIBB',image[16:26]),(512,512,8,6))
   self.assertEqual(compat['mcpServers'],'./.mcp.json');self.assertEqual(compat['skills'],'./skills')
   self.assertNotIn('apps',compat)
  def test_codex_mcp_is_local_stdio_without_auth_or_auto_install(self):
@@ -51,6 +58,7 @@ class CodexPackage(unittest.TestCase):
   self.assertEqual(len(market['plugins']),1)
   self.assertEqual(market['plugins'][0],{'name':'laf','source':{'source':'local','path':'.'},'policy':{'installation':'AVAILABLE','authentication':'ON_USE'},'category':'Developer Tools'})
   names=[p for rule in read('.github/license-policy.json')['rules'] for p in rule['paths']]
+  self.assertIn(Path(read('.codex-plugin/plugin.json')['interface']['logo']).as_posix(),names)
   for p in ('.codex-plugin/plugin.json','.mcp.json','.agents/plugins/marketplace.json','docs/codex-install.md','scripts/test_codex_package.py'):self.assertIn(p,names)
  def test_release_gate_rejects_retired_visible_path_and_content(self):
   retired='aCe'+'Is'

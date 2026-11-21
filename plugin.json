@@ -12,6 +12,8 @@
         "displayName": "Local AI Fabric",
         "shortDescription": "Local models and Codex tools",
         "developerName": "I-plusplus Inc.",
+        "logo": "./assets/laf-neural-fabric.png",
+        "composerIcon": "./assets/laf-neural-fabric.png",
         "category": "Developer Tools"
       }
     }

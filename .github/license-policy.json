@@ -232,6 +232,7 @@
         "LICENSE",
         "LICENSES/LicenseRef-KOL-v1.txt",
         "NOTICE",
+        "assets/laf-neural-fabric.png",
         "docs/resource-calibration.md",
         "inference/laf_npu_service/resource_evidence.py",
         "inference/laf_service/config.example.json",
