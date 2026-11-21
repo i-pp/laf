@@ -20,6 +20,8 @@
 
 """Owner-only Router for one explicitly configured CPU Ollama model."""
 
+# Modified 2026-11-21: require a verified running CPU provider for readiness.
+
 import argparse
 import hashlib
 import http.client
@@ -123,8 +125,8 @@ class CPUOllama:
             raise ServiceError('owned CPU Ollama Docker operation unconfirmed') from None
         return result.stdout.decode().strip()
 
-    def inspect(self):
-        fields = json.loads(self.docker('container', 'inspect', self.cid))
+    def inspect(self, *, timeout=8):
+        fields = json.loads(self.docker('container', 'inspect', self.cid, timeout=timeout))
         if len(fields) != 1 or not self.cid or fields[0].get('Id') != self.cid:
             raise ServiceError('owned CPU provider identity unavailable')
         info = fields[0]
@@ -242,6 +244,7 @@ class CPUOllama:
             if self.cid is None:
                 self.create()
             if not self.inspect()['Running']:
+                self.ready = False
                 check()
                 if snapshot_cpu()['mem_available'] < 8 * GIB + self.policy['memory_bytes']:
                     raise ServiceError('RAM reserve cannot cover CPU provider memory limit')
@@ -268,12 +271,17 @@ class CPUOllama:
             self.ready = True
 
     def health(self):
-        with self.lifecycle:
+        running = False
+        # Lifecycle operations can hold this lock while starting or stopping Docker.
+        if self.lifecycle.acquire(blocking=False):
             try:
-                state = self.inspect() if self.ready and not self.blocked and not self.closing else None
-            except (ValueError, KeyError, TypeError, ServiceError, OSError):
-                state = None
-        return {'ready': state is not None, 'engine_running': bool(state and state['Running']),
+                if self.ready and not self.blocked and not self.closing:
+                    running = self.inspect(timeout=1)['Running']
+            except (ValueError, KeyError, TypeError, AttributeError, ServiceError, OSError):
+                pass
+            finally:
+                self.lifecycle.release()
+        return {'ready': running, 'engine_running': running,
                 'flash_resident': False, 'provider_mode': 'cpu-only'}
 
     def generate(self, job, check):
@@ -298,6 +306,7 @@ class CPUOllama:
     def abort(self):
         with self.lifecycle:
             self.generation += 1
+            self.ready = False
             self.blocked = True
             if self.cid is None:
                 if self.creation_attempted:

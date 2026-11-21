@@ -18,12 +18,15 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-21: cover CPU readiness before and after an owned restart.
+
 import copy
 import json
 import os
 from pathlib import Path
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
@@ -138,7 +141,7 @@ class CPUProviderTests(unittest.TestCase):
         self.info['Config']['Labels']['laf.cpu.owner'] = 'other'
         with self.assertRaises(ServiceError):
             self.engine.close()
-        self.engine.docker.assert_called_once_with('container', 'inspect', self.engine.cid)
+        self.engine.docker.assert_called_once_with('container', 'inspect', self.engine.cid, timeout=8)
         self.assertTrue(self.engine.blocked)
 
         self.info['Config']['Labels']['laf.cpu.owner'] = self.engine.owner
@@ -155,6 +158,8 @@ class CPUProviderTests(unittest.TestCase):
         self.assertTrue(self.engine.blocked)
 
     def test_close_removes_only_after_confirmed_owned_stop(self):
+        self.engine.ready = True
+
         def docker(*args, **kwargs):
             if args[0] == 'stop':
                 self.info['State'].update(Running=False, Pid=0)
@@ -170,6 +175,7 @@ class CPUProviderTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in self.engine.docker.call_args_list],
                          ['container', 'stop', 'container', 'rm'])
         self.assertIsNone(self.engine.cid)
+        self.assertFalse(self.engine.ready)
 
     def test_uncertain_create_fences_further_create_and_cleanup(self):
         engine = self.engine
@@ -186,7 +192,59 @@ class CPUProviderTests(unittest.TestCase):
         with patch.object(cpu_server, 'snapshot_cpu', return_value={'mem_available': 9 * GIB - 1}):
             with self.assertRaisesRegex(ServiceError, 'RAM reserve'):
                 self.engine.ensure(lambda: None)
-        self.engine.docker.assert_called_once_with('container', 'inspect', self.engine.cid)
+        self.engine.docker.assert_called_once_with('container', 'inspect', self.engine.cid, timeout=8)
+
+    def test_http_health_tracks_stopped_provider_and_verified_restart(self):
+        engine = self.engine
+        resources = {'mem_available': 10 * GIB, 'swap_used': 0, 'pswpin': 0, 'pswpout': 0, 'psi_full_avg10': 0}
+        controller = cpu_server.Controller(engine, read_resources=lambda: resources, start=False,
+                                           check_limits=check_cpu_resources)
+        handler = cpu_server.Handler.__new__(cpu_server.Handler)
+        handler.path = '/health'
+        handler.headers = {}
+        handler.server = SimpleNamespace(config={}, controller=controller)
+        handler.response = Mock()
+        engine.ready = True
+        engine.api = Mock()
+
+        def check_health(code, status, *, inspect=True):
+            engine.docker.reset_mock()
+            api_calls = engine.api.call_count
+            handler.do_GET()
+            health_code, body = handler.response.call_args.args
+            self.assertEqual((health_code, body['status']), (code, status))
+            self.assertIs(body['gpu']['engine_running'], code == 200)
+            self.assertEqual(engine.api.call_count, api_calls)
+            if inspect:
+                engine.docker.assert_called_once_with('container', 'inspect', engine.cid, timeout=1)
+            else:
+                engine.docker.assert_not_called()
+
+        check_health(200, 'ready')
+        with patch.object(engine.docker, 'side_effect', ServiceError('inspection unavailable')):
+            check_health(503, 'not_ready')
+        self.info['State'].update(Running=False, Pid=0)
+        check_health(503, 'not_ready')
+
+        def docker(*args, **kwargs):
+            if args == ('start', engine.cid):
+                self.info['State'].update(Running=True, Pid=51)
+                return ''
+            return self.docker(*args, **kwargs)
+
+        model = {'name': engine.profile['reference'], 'digest': engine.profile['digest']}
+        replies = {'/api/version': {'version': engine.policy['version']}, '/api/tags': {'models': [model]}}
+
+        def api(path, **_kwargs):
+            check_health(503, 'not_ready', inspect=False)
+            return replies[path]
+
+        engine.docker.side_effect = docker
+        engine.api.side_effect = api
+        with patch.object(cpu_server, 'snapshot_cpu', return_value=resources):
+            engine.ensure(lambda: None)
+        self.assertEqual([call.args[0] for call in engine.api.call_args_list], list(replies))
+        check_health(200, 'ready')
 
     def test_one_chat_and_exact_cpu_model_evidence(self):
         engine = self.engine
