@@ -17,6 +17,7 @@
 #
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
+# Modified 2026-11-21: expose owner-side publisher discovery and model setup.
 
 """Opt-in, persistent model management, separate from Router load/unload.
 
@@ -186,6 +187,16 @@ def read_catalog(path=None):
             'user_setup_required': True,
         } for key in ('flash','coder-next','gpt-oss-120b')])
     return validate_catalog(read_private_json(path))
+
+
+def read_engine_config(path):
+    if not path:
+        raise ModelError('explicit private configuration required for model engine operations')
+    config = read_private_json(path)
+    required = {'state_dir', 'model_store', 'generation_lock', 'engine_url'}
+    if not isinstance(config, dict) or set(config) != required or not all(isinstance(v, str) for v in config.values()):
+        raise ModelError('invalid model manager configuration')
+    return config
 
 
 class OllamaHTTP:
@@ -421,6 +432,8 @@ def local_status():
     return ModelManager(directory,read_catalog()).status()
 
 def main(argv=None):
+    from . import model_setup
+
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--catalog',help='private JSON catalog containing verified model metadata')
     parser.add_argument('--config',help='private JSON configuration; required for mutations')
@@ -428,17 +441,55 @@ def main(argv=None):
     sub.add_parser('catalog');sub.add_parser('list');sub.add_parser('status')
     for action in ('install','remove','inspect'):
         sub.add_parser(action).add_argument('model')
+    discover = sub.add_parser('discover', help='read the official publisher model list')
+    discover.add_argument('--publisher', choices=model_setup.PUBLISHERS, required=True)
+    discover.add_argument('--limit', type=int, default=12)
+    discover.add_argument('--search')
+    sub.add_parser('artifact', help='verify metadata of one reviewed Ollama artifact').add_argument('model')
+    setup = sub.add_parser('setup', help='write a new private configuration without contacting an engine')
+    setup.add_argument('--engine-url', required=True)
+    setup.add_argument('--generation-lock', type=Path, required=True)
+    setup.add_argument('--model-store', type=Path)
+    setup.add_argument('--state-dir', type=Path)
+    download = sub.add_parser('download', help='install the selected artifact and verify its full digest')
+    download.add_argument('model')
+    download.add_argument('--digest', required=True)
+    sub.add_parser('inventory', help='read exact model tags and digests from the configured local engine')
+    existing = sub.add_parser('use-installed', help='select a verified model without adopting it into the registry')
+    existing.add_argument('--reference', required=True)
+    existing.add_argument('--digest', required=True)
+    existing.add_argument('--profile', required=True)
+    existing_file = sub.add_parser('use-file', help='verify a downloaded GGUF and prepare a local Ollama Modelfile')
+    existing_file.add_argument('path', type=Path)
+    existing_file.add_argument('--digest', required=True)
+    existing_file.add_argument('--modelfile', type=Path, required=True)
     args=parser.parse_args(argv)
     try:
+        if args.command in {'discover', 'artifact', 'setup', 'download', 'inventory', 'use-installed', 'use-file'}:
+            if args.catalog:
+                raise ModelError('the setup commands do not accept a replacement catalog')
+            if args.command == 'discover':
+                out = model_setup.discover(args.publisher, args.limit, args.search)
+            elif args.command == 'artifact':
+                out = model_setup.artifact(args.model)
+            elif args.command == 'setup':
+                if not args.config:
+                    raise ModelError('choose a new private destination with --config')
+                out = model_setup.setup(args.config, args.engine_url, args.generation_lock, args.model_store, args.state_dir)
+            elif args.command == 'download':
+                out = model_setup.download(args.config, args.model, args.digest)
+            elif args.command == 'inventory':
+                out = model_setup.installed(args.config)
+            elif args.command == 'use-installed':
+                out = model_setup.installed(args.config, args.reference, args.digest, args.profile)
+            else:
+                out = model_setup.prepare_existing_file(args.path, args.digest, args.modelfile)
+            print(json.dumps(out, ensure_ascii=False, indent=2))
+            return 0
         catalog=read_catalog(args.catalog)
         if args.command=='catalog': out={'catalog':catalog,'automatic_retry':False}
         else:
-            config=read_private_json(args.config) if args.config else {}
-            required={'state_dir','model_store','generation_lock','engine_url'}
-            if args.config and (not isinstance(config,dict) or set(config)!=required or not all(isinstance(v,str) for v in config.values())):
-                raise ModelError('invalid model manager configuration')
-            if args.command in {'install','remove','inspect'} and not config:
-                raise ModelError('explicit private configuration required for model engine operations')
+            config = read_engine_config(args.config) if args.config or args.command in {'install','remove','inspect'} else {}
             state=config.get('state_dir',os.environ.get('LAF_MODEL_STATE_DIR',str(Path.home()/'.local/state/laf-models')))
             engine=OllamaAdapter(OllamaHTTP(config['engine_url'])) if args.command in {'install','remove','inspect'} else None
             manager=ModelManager(state,catalog,engine,config.get('generation_lock'),config.get('model_store'))

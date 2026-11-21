@@ -22,6 +22,10 @@
 """Private integrated MCP launcher. No service installation or activation."""
 from pathlib import Path
 import sys
+
+if sys.version_info < (3, 12):
+    raise SystemExit('LAF requires Python 3.12 or later.')
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT/'integration'), str(ROOT/'private_codex/src'),
                str(ROOT/'public_laf/mcp/src')]

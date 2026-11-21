@@ -34,7 +34,7 @@ It connects to an existing private LAF Router; it does not install or start a
 Router, engine or model. These are client installation commands, not a fresh-host
 runtime Quick Start.
 
-Use an existing Linux Python 3.10 or later with `venv`, `pip`, `fcntl` and
+Use an existing Linux Python 3.12 or later with `venv`, `pip`, `fcntl` and
 `resource`. From the reviewed repository checkout:
 
 ```sh

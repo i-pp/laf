@@ -20,14 +20,32 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Added 2026-11-12: integrated source-tree archive preparation.
+# Modified 2026-11-21 to cover the private workspace package.
+# Modified 2026-11-21 to verify the shared Python support minimum.
 
 """Pure metadata contracts for Codex packaging; never installs or connects."""
-import ast,json,struct,tempfile,unittest,zipfile
+import ast,io,json,runpy,struct,sys,tempfile,tomllib,unittest,zipfile
+from contextlib import redirect_stderr,redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
+import build_workspace_plugin as workspace
 import check_release_names as names
 ROOT=Path(__file__).resolve().parents[1]
 def read(name):return json.loads((ROOT/name).read_text())
 class CodexPackage(unittest.TestCase):
+ def test_package_python_floor_and_unsupported_frontend_startup(self):
+  for manifest in ('pyproject.toml','runtime/public_laf/pyproject.toml','mcp/pyproject.toml'):
+   with self.subTest(manifest=manifest):
+    project=tomllib.loads((ROOT/manifest).read_text())['project']
+    self.assertEqual(project['requires-python'],'>=3.12')
+  for path in ('launcher.py','packaging/portable_launcher.py','runtime/integration/laf_stdio_cli.py','runtime/integration/laf_bootstrap.py'):
+   with self.subTest(path=path):
+    main=runpy.run_path(str(ROOT/path))['main']
+    errors=io.StringIO()
+    with patch.object(sys,'version_info',(3,11,9)),redirect_stderr(errors),redirect_stdout(io.StringIO()):
+     self.assertEqual(main(['--help']),1)
+    self.assertIn('Python 3.12 or later',errors.getvalue())
+  self.assertEqual((ROOT/'launcher.py').read_bytes(),(ROOT/'packaging/portable_launcher.py').read_bytes())
  def test_release_identity_and_both_protocol_versions(self):
   self.assertEqual(read('plugin.json')['version'],'0.1.0')
   for name in ('mcp_adapter.py','legacy_tool_adapter.py'):
@@ -49,6 +67,71 @@ class CodexPackage(unittest.TestCase):
   self.assertEqual(struct.unpack('>IIBB',image[16:26]),(512,512,8,6))
   self.assertEqual(compat['mcpServers'],'./.mcp.json');self.assertEqual(compat['skills'],'./skills')
   self.assertNotIn('apps',compat)
+ def test_model_setup_skill_is_packaged_in_both_forms(self):
+  portable=read('plugin.json')['extensions']['com.openai']
+  compat=read('.codex-plugin/plugin.json')
+  skill='./skills/laf-model-setup/SKILL.md'
+  self.assertEqual(portable['onboardingSkill'],skill)
+  self.assertEqual(compat['onboardingSkill'],skill)
+  self.assertEqual((ROOT/skill).read_bytes(),(ROOT/'runtime/public_laf'/skill).read_bytes())
+  names={p for rule in read('.github/license-policy.json')['rules'] for p in rule['paths']}
+  self.assertIn(Path(skill).as_posix(),names)
+  bundled=ast.parse((ROOT/'runtime/public_laf/scripts/check-laf.py').read_text())
+  modules=next(node.value for node in bundled.body if isinstance(node,ast.Assign)
+               and any(isinstance(target,ast.Name) and target.id=='MODULES' for target in node.targets))
+  self.assertIn('inference.local_platform.test_model_setup',ast.literal_eval(modules))
+ def test_workspace_zip_kinds_and_version_match_without_direct_mcp(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   directory=Path(tmp)
+   binding=directory/'binding.json'
+   binding.touch(mode=0o600)
+   mapping={'apps':{'laf':{'id':'asdk_app_' + 'generated-fixture','required':True}}}
+   binding.write_text(json.dumps(mapping))
+   output=directory/'laf-workspace-0.0.1.zip'
+   self.assertEqual(workspace.build(ROOT,binding,output),{'version':'0.0.1','files':10,'app_references':1})
+   self.assertEqual(output.stat().st_mode & 0o777,0o600)
+   self.assertEqual(names.check_zip(output),10)
+   with zipfile.ZipFile(output) as archive:
+    self.assertIsNone(archive.testzip())
+    self.assertEqual(set(archive.namelist()),set(workspace.PACKAGED)|{'plugin.json','.codex-plugin/plugin.json','.app.json'})
+    portable=json.loads(archive.read('plugin.json'));compat=json.loads(archive.read('.codex-plugin/plugin.json'))
+    extension=portable['extensions']['com.openai']
+    for key in ('name','version','description','author'):self.assertEqual(portable[key],compat[key])
+    self.assertEqual(portable['version'],'0.0.1')
+    self.assertEqual(extension['apps'],compat['apps'])
+    self.assertEqual(extension['apps'],'./.app.json')
+    self.assertEqual(extension['interface'],compat['interface'])
+    self.assertEqual(extension['onboardingSkill'],compat['onboardingSkill'])
+    self.assertNotIn('mcpServers',compat)
+    self.assertEqual(json.loads(archive.read('.app.json')),mapping)
+    for path in workspace.PACKAGED:self.assertEqual(archive.read(path),(ROOT/path).read_bytes())
+   previous=output.read_bytes()
+   with self.assertRaises(ValueError):workspace.build(ROOT,binding,output)
+   self.assertEqual(output.read_bytes(),previous)
+ def test_workspace_builder_rejects_ambiguous_and_untrusted_binding(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   directory=Path(tmp)
+   binding=directory/'binding.json'
+   binding.touch(mode=0o600)
+   output=directory/'laf-workspace.zip'
+   for value in (
+       '{"apps":{},"apps":{}}',
+       json.dumps({'apps':{'laf':{'id':'<VERIFIED_APP_ID>','required':True}}}),
+       json.dumps({'apps':{'laf':{'id':'tunnel_' + 'test','required':True}}}),
+       json.dumps({'apps':{'laf':{'id':'asdk_app_' + 'sample','required':False}}}),
+       json.dumps({'apps':{'laf':{'id':'asdk_app_' + 'sample','required':True},'second':{}}}),
+   ):
+    binding.write_text(value)
+    with self.subTest(value=value),self.assertRaises(ValueError):workspace.build(ROOT,binding,output)
+    self.assertFalse(output.exists())
+   binding.write_text(json.dumps({'apps':{'laf':{'id':'asdk_app_' + 'sample','required':True}}}))
+   link=directory/'alias.json'
+   link.symlink_to(binding)
+   with self.assertRaises(ValueError):workspace.build(ROOT,link,output)
+   with self.assertRaises(ValueError):workspace.build(ROOT,binding,ROOT/'private-output.zip')
+   binding.chmod(0o644)
+   with self.assertRaises(ValueError):workspace.build(ROOT,binding,output)
+   self.assertFalse(output.exists())
  def test_codex_mcp_is_local_stdio_without_auth_or_auto_install(self):
   self.assertEqual(read('.mcp.json'),{'mcpServers':{'laf':{'command':'python3','args':['-B','./launcher.py'],'cwd':'.'}}})
   self.assertTrue((ROOT/'launcher.py').is_file())

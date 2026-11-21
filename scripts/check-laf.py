@@ -20,6 +20,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Modified 2026-11-09: include offline conversation CLI regressions.
+# Modified 2026-11-21: include isolated CPU Router regressions.
 
 """Run standalone LAF Python regressions without models, Docker or vendor SDKs.
 
@@ -43,6 +44,7 @@ MODULES = (
     'inference.laf_service.test_acceptance_profiles',
     'inference.laf_service.test_configured_profiles',
     'inference.laf_service.test_core_integration',
+    'inference.laf_service.test_cpu_server',
     'inference.laf_service.test_host_supervisor',
     'inference.laf_service.test_lifecycle',
     'inference.laf_service.test_lifecycle_uds',
@@ -58,6 +60,7 @@ MODULES = (
     'inference.local_platform.test_cli_responses',
     'inference.local_platform.test_developer',
     'inference.local_platform.test_models',
+    'inference.local_platform.test_model_setup',
     'inference.local_platform.test_model_catalog',
     'inference.local_platform.test_project_runner',
     'inference.local_platform.test_repair',

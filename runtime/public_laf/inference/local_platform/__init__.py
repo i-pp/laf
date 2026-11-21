@@ -19,3 +19,8 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 """Small local inference client. Product name and network transport are undecided."""
+
+import sys
+
+if sys.version_info < (3, 12):
+    raise SystemExit("LAF requires Python 3.12 or later.")

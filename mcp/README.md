@@ -37,9 +37,8 @@ directory with an existing parent) and `LAF_MCP_MODELS` (comma-separated exact I
 Startup uses the selected host interpreter with the separately installed reviewed
 SDK. There is no automatic dependency installation or provider fallback.
 
-Python metadata requires 3.10+; historical cloud source checks used 3.12.
-The SDK installation and native adapter checks used 3.14.4, not a measured
-Python 3.10 pass.
+The adapter requires Python 3.12 or later. Historical cloud source checks
+used 3.12. The selected SDK installation and native adapter checks used 3.14.4.
 The Unix transport requires Linux SO_PEERCRED. Windows/macOS and hardware support
 are not established. This is adapter packaging, not a full runtime Quick Start.
 

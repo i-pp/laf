@@ -222,7 +222,7 @@ def sdk_reference(value):
  return str(path)
 
 def prepare_prefix(prefix,*,sdk_python=None,dry_run=False):
- if sys.version_info<(3,11):raise BootstrapError('Bootstrap requires Python3.11 or later')
+ if sys.version_info<(3,12):raise BootstrapError('LAF requires Python 3.12 or later.')
  prefix=safe_path(prefix,new=True);sdk=sdk_reference(sdk_python)
  sys.path.insert(0,str(RUNTIME/'private_codex/src'))
  from bundled_policy import load_snapshot
@@ -722,6 +722,8 @@ def activate_config(prefix,*,config=None,dry_run=False):
    os.umask(old_umask)
 
 def main(argv=None):
+ if sys.version_info<(3,12):
+  print('LAF requires Python 3.12 or later.',file=sys.stderr);return 1
  parser=Parser(description=__doc__);parser.add_argument('action',choices=('prepare','doctor','admission','activate-config','configure-orchestrator','configure-router','configure-codex','configure-resource-policy','snapshot-codex','daemon-command'))
  parser.add_argument('--prefix',type=Path,required=True);parser.add_argument('--sdk-python',type=Path)
  parser.add_argument('--dry-run',action='store_true');parser.add_argument('--config',type=Path,help='NEW standard config destination for explicit activate-config only')

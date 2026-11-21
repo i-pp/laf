@@ -8,6 +8,7 @@
   },
   "extensions": {
     "com.openai": {
+      "onboardingSkill": "./skills/laf-model-setup/SKILL.md",
       "interface": {
         "displayName": "Local AI Fabric",
         "shortDescription": "Local models and Codex tools",

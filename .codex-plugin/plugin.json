@@ -13,6 +13,7 @@
     "composerIcon": "./assets/laf-neural-fabric.png",
     "category": "Developer Tools"
   },
+  "onboardingSkill": "./skills/laf-model-setup/SKILL.md",
   "skills": "./skills",
   "mcpServers": "./.mcp.json"
 }
