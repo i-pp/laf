@@ -55,10 +55,22 @@ is unavailable. The same plugin handles Router inference after setup.
    Use the exact digest the user selected. Preserve an uncertain result and
    inspect it before another attempt. License or login requirements are
    completed by the owner at the official source.
-4. To use an existing store, run `model --config CONFIG inventory` and
-   `model --config CONFIG use-installed --reference TAG --digest FULL_DIGEST --profile ID`.
-   To select a downloaded GGUF file, use
-   `model use-file ABSOLUTE_FILE --digest FILE_SHA256 --modelfile NEW_PRIVATE_PATH`.
+4. To use an existing store, list installed models and select one exact tag
+   and manifest digest.
+
+   ```sh
+   python3 -B -m inference.local_platform.cli model --config CONFIG inventory
+   python3 -B -m inference.local_platform.cli model --config CONFIG use-installed \
+     --reference TAG --digest FULL_DIGEST --profile ID
+   ```
+
+   To select a downloaded GGUF file, prepare an Ollama Modelfile.
+
+   ```sh
+   python3 -B -m inference.local_platform.cli model use-file \
+     ABSOLUTE_FILE --digest FILE_SHA256 --modelfile NEW_PRIVATE_PATH
+   ```
+
    This verifies the file and prepares the Ollama Modelfile. The owner imports
    it locally with the official Ollama CLI, then selects its installed tag and
    manifest digest from `inventory`.

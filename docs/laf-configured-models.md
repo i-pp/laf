@@ -166,9 +166,11 @@ generation, 8-16 GB GPU or clean-host acceptance is claimed.
 On a Linux host with operator-authorized local Docker access, the separate CPU
 entry point serves one preinstalled Ollama profile using the ordinary
 owner-only Router socket. Prepare the model store through
-[model setup](laf-model-management.md). Use a dedicated store containing that
-one exact tag, the store's existing owner-only `generation.lock`, a locally
-installed digest-pinned Ollama image, and a new owner-only runtime directory.
+[model setup](laf-model-management.md). Use a dedicated store containing one
+exact tag, a locally installed digest-pinned Ollama image, and a new owner-only
+runtime directory. Keep the existing owner-only `generation.lock` in a private
+model state directory outside the model store. Configure model setup and the
+CPU Router to use that same lock.
 Keep the store outside directories replaced by plugin updates.
 
 Save this example with mode 0600 under a directory owned by your user with mode
