@@ -25,6 +25,7 @@ HTTP keeps its separately reviewed entrypoint/auth policy. Existing Codex/local
 helper flags remain opt-in; Router5 has its own explicit owner-only configuration.
 """
 # Modified 2026-11-13: explicit NEW-prefix bootstrap/deny-all setup; legacy behavior retained.
+# Modified 2026-11-21: enforce the supported SDK interpreter before loading the runtime.
 import argparse,importlib.metadata,os,sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -45,6 +46,8 @@ def _components():
  return SimpleNamespace(resolve_project_root=resolve_project_root,runtime_path=runtime_path,pipeline=pipeline,router=build_router_application,unconfigured_router=UnconfiguredRouterApplication,adapter=StdioRouterAdapter,serve=run_stdio)
 
 def main(argv=None):
+ if sys.version_info<(3,12):
+  print('LAF requires Python 3.12 or later.',file=sys.stderr);return 1
  parser=Parser(description='Private LAF composed stdio frontend; does not install or switch services')
  parser.add_argument('--runtime',type=Path,required=True,help='Explicit existing private runtime')
  parser.add_argument('--runtime-project-root',type=Path,help='Explicit owner-controlled original runtime anchor; no guard bypass')

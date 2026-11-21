@@ -206,7 +206,7 @@ class InstalledClientTests(unittest.TestCase):
                                  name.endswith('.py')), name)
             metadata = archive.read(next(n for n in names if n.endswith('/METADATA'))).decode()
             self.assertIn('License-Expression: LicenseRef-KOL-v1', metadata)
-            self.assertIn('Requires-Python: >=3.10', metadata)
+            self.assertIn('Requires-Python: >=3.12', metadata)
             self.assertNotIn('Requires-Dist:', metadata)
 
     def test_shell_local_path_invocation(self):

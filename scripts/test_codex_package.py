@@ -21,15 +21,30 @@
 
 # Added 2026-11-12: integrated source-tree archive preparation.
 # Modified 2026-11-21 to cover the private workspace package.
+# Modified 2026-11-21 to verify the shared Python support minimum.
 
 """Pure metadata contracts for Codex packaging; never installs or connects."""
-import ast,json,struct,tempfile,unittest,zipfile
+import ast,io,json,runpy,struct,sys,tempfile,tomllib,unittest,zipfile
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest.mock import patch
 import build_workspace_plugin as workspace
 import check_release_names as names
 ROOT=Path(__file__).resolve().parents[1]
 def read(name):return json.loads((ROOT/name).read_text())
 class CodexPackage(unittest.TestCase):
+ def test_package_python_floor_and_unsupported_frontend_startup(self):
+  for manifest in ('pyproject.toml','runtime/public_laf/pyproject.toml','mcp/pyproject.toml'):
+   with self.subTest(manifest=manifest):
+    project=tomllib.loads((ROOT/manifest).read_text())['project']
+    self.assertEqual(project['requires-python'],'>=3.12')
+  for path in ('launcher.py','runtime/integration/laf_stdio_cli.py','runtime/integration/laf_bootstrap.py'):
+   with self.subTest(path=path):
+    main=runpy.run_path(str(ROOT/path))['main']
+    errors=io.StringIO()
+    with patch.object(sys,'version_info',(3,11,9)),redirect_stderr(errors):
+     self.assertEqual(main([]),1)
+    self.assertIn('Python 3.12 or later',errors.getvalue())
  def test_release_identity_and_both_protocol_versions(self):
   self.assertEqual(read('plugin.json')['version'],'0.1.0')
   for name in ('mcp_adapter.py','legacy_tool_adapter.py'):

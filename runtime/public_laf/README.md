@@ -110,7 +110,7 @@ declared default model prepared (`gpt-oss-120b` for the legacy profile). Complet
 [Router prerequisites and host acceptance](inference/laf_service/README.md#machine-specific-preparation)
 first. This source preview does not provide a complete fresh-host installation.
 
-Use an existing Linux Python 3.10+ with `fcntl`, `resource` and Unix-process
+Use an existing Linux Python 3.12 or later with `fcntl`, `resource` and Unix-process
 support. From the repository root, use the checkout-local launcher:
 
 ```sh

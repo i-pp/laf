@@ -28,7 +28,7 @@ build-backend = "setuptools.build_meta"
 name = "local-ai-fabric-client"
 version = "0.0.0.dev0"
 description = "Local AI Fabric terminal client for an existing private Router"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = "LicenseRef-KOL-v1"
 license-files = [
   "LICENSE", "LICENSES/LicenseRef-KOL-v1.txt", "NOTICE", "LICENSING.md",

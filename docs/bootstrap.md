@@ -34,7 +34,7 @@ the private prefix. No SDK, model or authentication material is installed or cop
 
 ## Run from the downloaded source
 
-Use Linux and Python3.11 or later. First obtain the separately pinned SDK using
+Use Linux with Python 3.12 or later. First obtain the separately pinned SDK using
 [the SDK installation guide](laf-sdk-install.md). The interpreter below must
 already exist; the bootstrap checks its file metadata, not its package version.
 The frontend independently requires MCP SDK1.30.0 when it is actually launched.

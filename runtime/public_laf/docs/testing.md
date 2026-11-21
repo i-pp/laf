@@ -34,7 +34,7 @@ external-asset and distribution requirements.
 
 ## Portable and socket groups
 
-For offline development, use an existing Linux Python 3.10 or later with standard
+For offline development, use an existing Linux Python 3.12 or later with standard
 library support for `fcntl`, `resource` and Unix processes. No package installation,
 Docker, model download, running Router or vendor SDK is needed for these commands.
 From the repository root:

@@ -34,7 +34,8 @@ With four explicit operator opt-ins, the root plugin exposes 29 tools,
 including `codex_models_list` and five owner-scoped Router tools. Local
 Core/Router inference needs no OpenAI account. Codex is an optional separately
 authorized integration. The portable manifest launches stdio, and the source
-retains the HTTP frontend.
+retains the HTTP frontend. The LAF host and standalone packages require
+Python 3.12 or later.
 
 See [existing-owner-host setup](docs/integrated-plugin-install.md). This is not a
 complete clean-host Quick Start. Model/SDK/vendor assets and private account,

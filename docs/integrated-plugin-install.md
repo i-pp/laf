@@ -114,8 +114,9 @@ Prerequisites must already be real, not inferred from these instructions:
 
 1. A supported Linux owner environment with the existing daemon/runtime,
    prepared policy checkout and capability/grant configuration.
-2. An existing MCP SDK **1.30.0** Python interpreter. The production CLI enforces
-   the version; the launcher does not download, install or import an SDK to fix it.
+2. Python 3.12 or later for the launcher and the interpreter that runs
+   MCP SDK **1.30.0**. The production CLI checks both versions before
+   opening the runtime.
 3. An existing owner-only Router socket and explicit allowed model IDs.
 4. A private receipt directory path reserved for this user's adapter. Preserve
    its durable records across frontend updates; never recreate attempt IDs or

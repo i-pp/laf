@@ -19,4 +19,9 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 
+import sys
+
+if sys.version_info < (3, 12):
+    raise SystemExit("LAF requires Python 3.12 or later.")
+
 __version__ = "0.1.0"

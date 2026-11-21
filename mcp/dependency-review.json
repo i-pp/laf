@@ -37,7 +37,7 @@
     "Official archive identities are metadata evidence, not bundled SDK artifacts. No SDK package was installed by the source migration.",
     "Historical cloud SDK 1.29.0 tests do not establish SDK 1.30.0 compatibility. Separate native SDK 1.30.0 checks are recorded below and do not establish other SDK or platform support.",
     "The 29-version SDK installer selection is platform-specific, not a full cross-platform hash lock or exhaustive license/security clearance.",
-    "Python 3.10 metadata minimum is not a measured Python 3.10 test pass. The dependency closure includes rpds-py requiring Python >=3.11.",
+    "LAF requires Python 3.12 or later. The selected dependency closure and native SDK evidence apply only to the verified interpreter and platform.",
     "User-reported SDK installation checks do not establish adapter runtime, live Router, hardware, small-memory, clean-host, or second-PC acceptance.",
     "Runtime venv intentionally has no pip/build tools; do not modify it to run package build tests.",
     "Remote transport, authentication/catalog changes, service activation, model downloads and Docker actions remain outside this source candidate."

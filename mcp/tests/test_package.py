@@ -33,7 +33,7 @@ class PackageTests(unittest.TestCase):
    wheels=list((tmp/'wheels').glob('*.whl'));self.assertEqual(len(wheels),1)
    with zipfile.ZipFile(wheels[0]) as z:
     names=z.namelist();metadata=z.read(next(x for x in names if x.endswith('/METADATA'))).decode()
-    self.assertIn('Requires-Python: >=3.10',metadata);self.assertIn('Requires-Dist: mcp==1.30.0',metadata)
+    self.assertIn('Requires-Python: >=3.12',metadata);self.assertIn('Requires-Dist: mcp==1.30.0',metadata)
     self.assertIn('License-Expression: LicenseRef-KOL-v1',metadata)
     self.assertTrue(any(x.endswith('/licenses/LICENSE') for x in names));self.assertTrue(any(x.endswith('/licenses/licenses/MCP-SDK-LICENSE.txt') for x in names))
     self.assertFalse(any('/tests/' in x or 'baseline-tree' in x or '.venv' in x for x in names))
