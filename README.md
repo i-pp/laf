@@ -28,177 +28,87 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 <!-- Modified 2026-11-10: link client-only packaging while retaining the separate runtime-provisioning boundary. -->
 
-# Local AI Fabric
+# Local AI Fabric integrated plugin (experimental source)
 
-**Your hardware. Your models. Your AI.**
+With four explicit operator opt-ins, the root plugin exposes 29 tools,
+including `codex_models_list` and five owner-scoped Router tools. Local
+Core/Router inference needs no OpenAI account. Codex is an optional separately
+authorized integration. The portable manifest launches stdio, and the source
+retains the HTTP frontend.
 
-Local AI Fabric (LAF) coordinates local inference engines and development tools
-through one private API. Use your own model assets while LAF checks resources,
-switches models and handles recovery on your machine.
+See [existing-owner-host setup](docs/integrated-plugin-install.md). This is not a
+complete clean-host Quick Start. Model/SDK/vendor assets and private account,
+service, tunnel and runtime state are not included. The installation guide keeps
+the [historical loader evidence](docs/codex-install.md#completed-local-loader-and-discovery-evidence)
+scoped to its original source. Later local predecessors were checked separately:
+`c2ab056` completed installed stdio Flash and Codex canaries, correlated terminal
+history and same-runtime restart/reconciliation; `438b2aa` passed installed
+private-policy setup and 33-tool discovery with an expired synthetic policy.
+`e42ebd1` later completed installed Flash/Codex canaries, original-key restart
+replay, active Codex cancellation and owned local executor cleanup. The model
+canaries used compatibility admission with resource mode off. Those observations
+do not accept a newer package, production resource policy, provider quota or
+the production Tunnel/client path. Use the [installed acceptance procedure](docs/installed-acceptance.md)
+for the selected package. Raw account, process and receipt evidence stays private.
 
-[Getting started](#getting-started) · [Architecture](#architecture) ·
-[Project status](#project-status) · [Documentation](#documentation)
+For Codex registration and the local marketplace option, see [Codex install](docs/codex-install.md).
 
-## Why LAF?
+Choose a model from the Router's [configured catalog](docs/laf-configured-models.md).
+Keep its weights in persistent operator-managed storage outside the installed
+plugin. Point the Router at an existing model, or explicitly install the
+selected artifact using its [model-management procedure](docs/laf-model-management.md)
+after reviewing its source and terms. Plugin installation and updates do not
+fetch, install or replace model weights.
 
-- **Local-first inference.** Talk to a Router through an owner-only Unix socket,
-  without a cloud control plane or an exposed TCP listener.
-- **Multiple execution engines.** Use Strata Flash and Ollama-backed large-model
-  profiles through the same client and job API.
-- **Resource-aware orchestration.** Check memory before admission, limit queued
-  GPU work and confirm resources are released before switching models.
-- **GPU and NPU integration.** Keep GPU generation separate from an optional,
-  fixed-shape NPU classification service. An unavailable NPU does not block GPU jobs.
-- **Development workflows.** Chat in the terminal, inspect or cancel jobs, and use
-  opt-in, scoped repair and project tools with explicit file and execution limits.
+The optional [provider-feedback contract](docs/provider-feedback-admission.md)
+supports resource-admission schema3 for bounded Codex pipeline and ordinary
+Runner execution without inferring a provider concurrency limit. Local resources,
+account ownership, durable provider restrictions and UNKNOWN/no-replay guards
+still apply. Ordinary pre-turn waiting retains one execution, reservation and
+workspace lock; it never requeues a dispatched task. Existing schema1/2 finite
+provider quotas retain their enforcement. This staged source path
+does not select a calibrated policy or establish live resource-mode acceptance.
 
-**Current stage: source preview.** The control paths and clients are implemented,
-with unit/mocked checks. This checkout does not ship model weights, vendor SDKs
-or a ready-to-run runtime image, and does not establish hardware support.
-Getting started assumes an already provisioned host; the optional checks can run
-without models. See [source-preview limits and release gates](docs/source-preview.md).
+For a NEW independent private prefix, use the [prepare and configure guide](docs/bootstrap.md).
+It connects explicit existing Router/Codex prerequisites without copying another
+runtime's state. Unconfigured backends remain denied; this is not complete
+clean-host provisioning or acceptance of all backend actions.
 
-## Architecture
+For provider-advertised Codex models and immutable reasoning effort, see
+[model selection](docs/codex-model-selection.md). One bounded `gpt-6.1-sol`/`max`
+application-path turn completed; its [verification scope](docs/codex-model-selection.md#bounded-solmax-application-path-result)
+does not verify provider effort or normal installation. The existing configuration
+profile name `integrated-32` is retained for compatibility.
 
-```mermaid
-flowchart TD
-    Client["Terminal chat / JSON CLI / scoped development tools"]
-    Router["LAF Router · owner-only Unix socket"]
-    Guards["Resource admission · bounded GPU queue · release checks"]
-    Flash["Strata Flash"]
-    Ollama["Ollama · one large-model profile at a time"]
-    NPU["Optional NPU service · fixed-shape classification"]
-    Core["Opt-in Core entrypoint"]
-    Host["Fixed host supervisor · owned provider lifecycle"]
+## Source layout and package build
 
-    Client --> Router
-    Router --> Guards
-    Guards --> Flash
-    Guards --> Ollama
-    Router --> NPU
-    Client -. "alternative deployment path" .-> Core
-    Core -. "private lifecycle / resource protocol" .-> Host
-```
+`runtime/` retains the reviewed compatibility base plus the explicit changes
+recorded in [CHANGES.md](CHANGES.md) and [SOURCE_ORIGIN.md](SOURCE_ORIGIN.md).
+Top-level `inference/`, `laf` and `mcp/` remain separate development/component
+source. The shared resource protocol and selected Core/Router changes are
+mirrored in top-level and bundled inference source.
+The standalone five-tool `mcp/` is retained as an optional component, not the root
+plugin. Changes to root source do not silently change the pinned runtime subset.
+The previous public component guide is preserved at [component source guide](docs/public-source-component-guide.md). See [origin and changes](SOURCE_ORIGIN.md). Future consolidation must preserve
+the supported tool schemas and runtime guards.
 
-The default Router manages the host-backed inference path. The opt-in Core
-entrypoint separates inference control from fixed host lifecycle operations.
-See [Core integration](docs/laf-core-integration.md) and
-[the API contract](inference/local_platform/API.md) for those boundaries.
-
-## How is this different from Ollama?
-
-Ollama is an inference runtime used by LAF for its large-model profiles. LAF adds
-a coordination layer across engines: a shared request API, resource admission,
-model-switch and shutdown checks, an independent NPU lane, and bounded developer
-clients. It uses Ollama rather than replacing it.
-
-Start with standalone Ollama if you only need its model runtime. LAF is for
-coordinating engines and guarded development workflows.
-
-The current Router exposes three fixed generation profiles: `flash`, `coder-next`
-and `gpt-oss-120b`. It is not an arbitrary-model launcher or a complete OpenAI API
-emulator. See [Router behavior and limits](inference/laf_service/README.md).
-
-## Getting started
-
-### Chat with an existing Router
-
-This path requires an already configured and accepted LAF Router, with the model
-assets for the default `gpt-oss-120b` profile prepared. Complete the
-[Router prerequisites and host acceptance](inference/laf_service/README.md#machine-specific-preparation)
-first. This source preview does not provide a complete fresh-host installation.
-
-Use an existing Linux Python 3.10+ with `fcntl`, `resource` and Unix-process
-support. From the repository root, use the checkout-local launcher:
+Build source-only from this checkout without a private input ZIP:
 
 ```sh
-./laf status
-./laf
+python3 -B scripts/build-integrated-source.py --output /absolute/new/laf-source.zip
 ```
 
-`status` checks the running Router. `./laf` opens the chat prompt using
-`gpt-oss-120b`; type a message to request inference, or `/quit` to exit. To choose
-Flash instead, use:
+This creates a new archive only; it installs or starts nothing. Release-time rights,
+secret and dependency review is required before distribution. Portal listing
+metadata is a later submission concern, not a prerequisite to reviewing this source.
 
-```sh
-./laf chat --model flash
-```
+## LAF 0.1.0 release naming
 
-The default socket is `/run/user/<uid>/laf-inference/service.sock`, using your
-current user ID. `LOCAL_INFERENCE_SOCKET` can select another existing private
-socket; an explicit `--socket` takes priority. See [the chat guide](docs/laf-chat-cli.md)
-for custom-socket commands, filename-only workspace search, privacy and cancellation.
-These client commands do not install or start a Router, engine or model. Chat
-replies are unverified model output.
+Use the five `laf_router_*` tools for owner-scoped local inference. The fully
+opted-in integrated profile exposes 29 tools. The former four local helper
+operations and their configuration switches have been removed.
 
-For `laf` outside the checkout, [install the client in a dedicated virtual
-environment](docs/client-install.md) and activate it. This installs only the
-client, not a Router or model. If the checkout launcher's executable bit was lost
-during transfer, use `python3 -B laf` with the same arguments. `./laf --help` shows the CLI reference
-without contacting a Router.
-
-## Testing (optional)
-
-These checks are not required to start a conversation. Run them from the
-repository root with the Python prerequisites above:
-
-```sh
-# Print the client's built-in help, then exit without querying a model.
-printf '/help\n/quit\n' | ./laf
-
-# Run the portable Python unit/mocked checks without models or Docker.
-python3 -B scripts/check-laf.py --suite portable
-```
-
-The first command automatically enters `/help` and `/quit`; it is an offline
-launcher check, not an AI conversation. The test suite uses temporary files and
-owned fake subprocesses, and lists socket tests as **unexecuted**, not passed.
-Neither command establishes runtime or hardware readiness. See
-[test groups and result accounting](docs/testing.md) for details.
-
-## Project status
-
-- **Implemented in source:** guarded Router and JSON job API; Strata/Ollama
-  adapters; terminal chat; bounded repair and scoped project tools; model catalog,
-  registry and guarded Ollama management operations; isolated Python client
-  packaging.
-- **Opt-in source paths:** Core/host-supervisor separation and a fixed-shape NPU
-  classifier. Real runtime, GPU/NPU and clean-host acceptance remain separate
-  from software tests. Model acquisition and management also need verified
-  operator inputs; the bundled catalog is not install-ready.
-- **Future work:** complete runtime provisioning,
-  distributable images, broader hardware acceptance, remote/multi-PC workflows,
-  and a web UI. These are not shipped capabilities or promised release dates.
-
-See [the full preview and release boundary](docs/source-preview.md) before
-selecting a runtime configuration or distributing external assets.
-
-## Documentation
-
-- [Router setup, model switching and recovery](inference/laf_service/README.md)
-- [Terminal conversation and filename search](docs/laf-chat-cli.md)
-- [Isolated terminal-client installation](docs/client-install.md)
-- [Development client](inference/local_platform/README.md) and
-  [scoped project tools](inference/local_platform/workspace-client.md)
-- [Model management and provenance](docs/laf-model-management.md)
-- [Core integration](docs/laf-core-integration.md) and
-  [fixed host supervisor](docs/laf-host-supervisor.md)
-- [Optional NPU service](inference/laf_npu_service/README.md) and
-  [NPU distribution requirements](inference/laf_npu_service/DISTRIBUTION.md)
-- [Tests](docs/testing.md), [source-preview limits](docs/source-preview.md) and
-  [naming/migration](inference/local_platform/naming.md)
-
-## Contributing
-
-Start with [the development rules](AGENTS.md) and [the offline checks](docs/testing.md).
-Keep changes small, preserve the ownership and resource guards, and report what
-you verified and what remains untested. Do not commit model data, credentials,
-caches or logs.
-
-## License
-
-Identified first-party source is licensed under [KISS Open License v1.0](LICENSE)
-(KOL-v1), a custom license with no claim of OSI approval. Read [the licensing
-scope](LICENSING.md) and [third-party notices](THIRD_PARTY_NOTICES.md). External
-engines, models and SDKs retain their own terms; this source license does not
-grant rights to redistribute them.
+The [LAF-only naming gate](docs/laf-release-names.md) is mandatory for 0.1.0.
+Existing resource guards still apply. Allocation-level
+[GPU release verification](https://github.com/i-pp/laf/issues/22) and coordinated
+[swap policy management](https://github.com/i-pp/laf/issues/13) are follow-up work.

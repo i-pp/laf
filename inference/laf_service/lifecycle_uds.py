@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+
 """Owner-authenticated, bounded local transport for the fixed lifecycle port.
 
 No TCP listener, Docker API forwarding, automatic retries or socket replacement.
@@ -34,7 +36,7 @@ import stat
 import struct
 import threading
 import time
-from .core import ServiceError
+from .core import ServiceError, ResourceWait
 from .lifecycle import LifecycleFault, StaleLease
 
 MAX_REQUEST = 4096
@@ -178,6 +180,11 @@ class FramedExchange:
                 if set(response) != {'ok', 'result'} or type(response['result']) is not dict:
                     raise TransportError('invalid lifecycle response')
                 return response['result']
+            if set(response) == {'ok','error','code'} and response['error'] == 'resource_wait':
+                if request.get('operation') not in ('model_reserve','execution_reserve','loading_reserve'):
+                    raise TransportError('Resource wait cannot acknowledge an execution outcome')
+                try:raise ResourceWait(response['code'])
+                except ValueError:raise TransportError('Invalid resource wait code') from None
             if (set(response) != {'ok', 'error'} or type(response['error']) is not str
                     or response['error'] not in {'invalid', 'stale', 'fault', 'internal'}):
                 raise TransportError('invalid lifecycle response')
@@ -206,6 +213,8 @@ def handle_connection(stream, port, expected_uid, io_timeout=2, operation_timeou
             # The client cannot set host execution deadlines or resource policy.
             result = port.dispatch(request, deadline=time.monotonic() + operation_timeout)
             response = {'ok': True, 'result': result}
+        except ResourceWait as error:
+            response = {'ok': False, 'error': 'resource_wait', 'code': error.code}
         except StaleLease:
             response = {'ok': False, 'error': 'stale'}
         except LifecycleFault:
@@ -232,7 +241,7 @@ class UnixLifecycleServer:
                 raise ValueError('positive bounded timeouts required')
         self.uid = os.getuid()
         self.path = private_runtime(runtime_dir, self.uid) / (CONTROL_SOCKET_NAME if control else SOCKET_NAME)
-        self.allowed_operations = {'stop', 'status', 'sample', 'panic'} if control else {'ensure'}
+        self.allowed_operations = {'stop', 'status', 'sample', 'panic', 'resource_policy'} if control else {'ensure', 'model_reserve', 'execution_reserve', 'execution_finish', 'model_release', 'loading_reserve', 'loading_finish', 'core_models_stopped'}
         if os.path.lexists(self.path):
             raise TransportError('lifecycle socket already exists; not replaced')
         self.port = port

@@ -60,8 +60,8 @@ An owner-only mode-0600 Core configuration may instead contain exactly
 `state_dir`, `runtime_dir`, `lifecycle_runtime_dir`, `acceptance_ollama_profiles`,
 and optionally `npu_socket`. All paths retain the container-native absolute-path
 rule. Strata fields are rejected in this mode, which removes ambiguity about
-whether Flash should start. Without `acceptance_ollama_profiles`, the original
-required fields and Flash behavior are unchanged.
+whether Flash should start. When neither acceptance nor normal configured-model
+fields are present, the original required fields and Flash behavior are unchanged.
 
 Each acceptance profile has exactly `id`, `reference`, and `options`. The example
 below shows the schema, not verified model installation or deployment settings:
@@ -115,8 +115,11 @@ false, streaming false and keep-alive fixed at -1. Only the existing bounded
 
 Public job requests still allow only `model`, `messages`, `max_tokens` and
 `timeout_seconds`. `/v1/models`, `/v1/capabilities` and Controller validation
-use the selected instance catalog. The legacy CLI's fixed choices are unchanged;
-acceptance uses bounded private UDS requests directly.
+use the selected instance catalog. The normal CLI now validates this catalog
+before submission, so an explicitly selected `test-*` ID can also be used by a
+client. This acceptance mode declares no default; specify its ID. Normal
+operator profiles with pinned manifests and optional Flash use
+[the configured-model contract](laf-configured-models.md).
 
 ## Provider readiness and release
 

@@ -18,6 +18,11 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+# Modified 2026-11-20: bounded Flash load deferral for resource admission.
+# Modified 2026-11-20: release unused Flash residency through host reconciliation.
+# Modified 2026-11-20: fence the read-only Flash preparation phase before reservation.
+
 """Explicit Core backend: container-owned Flash, host-owned Ollama lifecycle.
 
 No Docker module, CLI, socket path, host PID or host mount authority is imported.
@@ -35,41 +40,79 @@ import signal
 import subprocess
 import threading
 import time
-from .core import GIB, MODELS, ServiceError
+import uuid
+from .core import GIB, MODELS, ResourceWait, ServiceError
 
 NAMES = {'coder-next': 'laf-coder-next', 'gpt-oss-120b': 'laf-gpt-oss-120b'}
 
 
-# Candidate-only owner configuration. It does not mutate the compatibility catalog.
-def acceptance_profiles(value):
+# Changed 2026-11-11: share bounded options across isolated and normal owner catalogs.
+def _profiles(value, *, normal):
     if type(value) is not list or not 1 <= len(value) <= 8:
-        raise ServiceError('1..8 explicit acceptance Ollama profiles required')
+        raise ServiceError('1..8 explicit Ollama profiles required')
     profiles, references = {}, set()
     bounds = {'num_ctx': (512, 8192), 'num_thread': (1, 32), 'num_batch': (1, 512),
               'num_gpu': (0, 256), 'seed': (0, 2147483647)}
     for entry in value:
-        if type(entry) is not dict or set(entry) != {'id', 'reference', 'options'}:
-            raise ServiceError('fixed acceptance profile fields required')
+        fields = {'id', 'reference', 'options'} | ({'digest'} if normal else set())
+        if type(entry) is not dict or set(entry) != fields:
+            raise ServiceError('fixed profile fields required')
         key, reference, options = entry['id'], entry['reference'], entry['options']
-        if type(key) is not str or not re.fullmatch(r'test-[a-z0-9][a-z0-9-]{0,58}', key) or key in profiles:
-            raise ServiceError('distinct test-prefixed acceptance IDs required')
+        pattern = r'[a-z][a-z0-9-]{0,63}' if normal else r'test-[a-z0-9][a-z0-9-]{0,58}'
+        if (type(key) is not str or not re.fullmatch(pattern, key) or key in profiles
+                or normal and (key in MODELS or key.startswith('test-'))):
+            raise ServiceError('distinct nonreserved configured model IDs required')
         if (type(reference) is not str or len(reference) > 200
                 or not re.fullmatch(r'[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?:[A-Za-z0-9][A-Za-z0-9._-]*', reference)
                 or reference in references):
             raise ServiceError('distinct exact tagged local Ollama references required')
         if type(options) is not dict or set(options) != set(bounds) | {'temperature'}:
-            raise ServiceError('fixed bounded acceptance options required')
+            raise ServiceError('fixed bounded profile options required')
         for name, (lower, upper) in bounds.items():
             if type(options[name]) is not int or not lower <= options[name] <= upper:
-                raise ServiceError('acceptance option outside permitted bounds')
+                raise ServiceError('profile option outside permitted bounds')
         if type(options['temperature']) not in (int, float) or not 0 <= options['temperature'] <= 2:
-            raise ServiceError('acceptance temperature outside permitted bounds')
+            raise ServiceError('profile temperature outside permitted bounds')
         # Keep the public validator's existing conservative context budget true.
         if options['num_ctx'] != 8192:
-            raise ServiceError('acceptance context must preserve 8192-token request budget')
+            raise ServiceError('profile context must preserve 8192-token request budget')
         profiles[key] = {'reference': reference, 'options': dict(options)}
+        if normal:
+            digest = entry['digest']
+            if type(digest) is not str or not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
+                raise ServiceError('exact configured model manifest digest required')
+            profiles[key]['digest'] = digest
         references.add(reference)
     return profiles
+
+
+def acceptance_profiles(value):
+    return _profiles(value, normal=False)
+
+
+def configured_profiles(value):
+    return _profiles(value, normal=True)
+
+
+def configured_selection(config):
+    if ('acceptance_ollama_profiles' in config
+            or not {'ollama_profiles', 'flash_enabled', 'default_model'} <= set(config)
+            or type(config['flash_enabled']) is not bool):
+        raise ServiceError('distinct explicit normal catalog and Flash policy required')
+    profiles = configured_profiles(config['ollama_profiles'])
+    models = set(profiles) | ({'flash'} if config['flash_enabled'] else set())
+    default = config['default_model']
+    if type(default) is not str or default not in models:
+        raise ServiceError('explicit default must belong to selected model catalog')
+    return profiles, config['flash_enabled'], default
+
+
+def manifest_digest(value):
+    if type(value) is str and re.fullmatch(r'[0-9a-f]{64}', value):
+        value = 'sha256:' + value
+    if type(value) is not str or not re.fullmatch(r'sha256:[0-9a-f]{64}', value):
+        raise ServiceError('engine manifest digest invalid')
+    return value
 
 
 def current_pid_namespace():
@@ -86,10 +129,27 @@ class CoreBackends:
     def __init__(self, config, config_path, lifecycle, *, namespace_probe=current_pid_namespace,
                  process_factory=subprocess.Popen):
         self.config, self.config_path, self.client = config, str(config_path), lifecycle
-        self.requires_flash = 'acceptance_ollama_profiles' not in config
-        self.profiles = (None if self.requires_flash else acceptance_profiles(config['acceptance_ollama_profiles']))
-        self.models = frozenset(MODELS if self.requires_flash else self.profiles)
-        self.names = dict(NAMES) if self.requires_flash else {key: item['reference'] for key, item in self.profiles.items()}
+        self.normal_catalog = any(key in config for key in ('ollama_profiles', 'flash_enabled', 'default_model'))
+        if self.normal_catalog:
+            self.profiles, self.requires_flash, self.default_model = configured_selection(config)
+        elif 'acceptance_ollama_profiles' in config:
+            self.profiles = acceptance_profiles(config['acceptance_ollama_profiles'])
+            self.requires_flash, self.default_model = False, None
+        else:
+            self.profiles, self.requires_flash, self.default_model = None, True, 'gpt-oss-120b'
+        self.resource_mode = 'resource_admission_generation' in config
+        self.resource_instances = {}
+        if self.resource_mode:
+            pins = config.get('resource_model_sha256')
+            if (not self.normal_catalog or not isinstance(pins, dict)
+                    or set(pins) != (set(self.profiles) | ({'flash'} if self.requires_flash else set()))
+                    or any(pins[key] != self.profiles[key]['digest'][7:] for key in self.profiles)):
+                raise ServiceError('Resource mode requires explicit manifest-pinned models')
+            if self.requires_flash:
+                from .flash_resources import manifest
+                manifest(config)
+        self.names = dict(NAMES) if self.profiles is None else {key: item['reference'] for key, item in self.profiles.items()}
+        self.models = frozenset(set(self.names) | ({'flash'} if self.requires_flash else set()))
         self.idle_base, self.models_verified = None, False
         self.read_resources = lifecycle.read_resources
         self.namespace_probe, self.process_factory = namespace_probe, process_factory
@@ -147,13 +207,18 @@ class CoreBackends:
                 raise ServiceError('Core start invalidated')
             self.address = str(address)
 
-    def start_flash(self, check=lambda: None):
+    def start_flash(self, check=lambda: None, *, job=None):
         if not self.requires_flash:
-            raise ServiceError('Flash disabled by explicit acceptance catalog')
+            raise ServiceError('Flash disabled by explicit catalog')
         with self.lifecycle_lock:
             with self.lock:
                 generation = self.generation
             guard = lambda: self._guard(generation, check)
+            if self.resource_mode and job is not None and self.flash is None:
+                # The worker and watchdog serialize only the phase decision.
+                # A watchdog that has already claimed an abort keeps it.
+                with job.phase_lock:
+                    job.preparing_flash = not job.abort_requested
             guard()
             if self.flash_alive():
                 return
@@ -161,10 +226,32 @@ class CoreBackends:
                 raise ServiceError('stale Flash requires explicit provider stop')
             self.wait_idle(guard)
             guard()
+            loading = None
+            artifact = None
+            if self.resource_mode:
+                from .flash_resources import manifest
+                artifact = manifest(self.config,verify=True)
+                guard()
+                if job is not None:
+                    # Check once more at the handoff. From this point a host
+                    # reservation may be in flight with an unknown outcome.
+                    with job.phase_lock:
+                        job.check_lifetime()
+                        job.preparing_flash = False
+                instance = self._resource_model('flash')
+                loading_id = str(uuid.uuid4())
+                try:
+                    token = self.client.resource_call('loading_reserve',model='flash',instance=instance,
+                        request_id=loading_id)['token']
+                except ResourceWait as denial:
+                    raise ResourceWait(denial.code, release_unused=lambda: self._release_unstarted_flash(
+                        instance, generation)) from None
+                loading = (instance,loading_id,token)
+                guard()
             self.flash_lines = queue.Queue(maxsize=64)
             env = {**os.environ, 'HF_HUB_OFFLINE': '1', 'TRANSFORMERS_OFFLINE': '1', 'OMP_NUM_THREADS': '8'}
             self.flash = self.process_factory([self.config['tokenizer_python'], '-B',
-                str(Path(__file__).with_name('core_flash_worker.py')), self.config_path],
+                str(Path(__file__).with_name('core_flash_worker.py')), self.config_path, *([artifact] if artifact else [])],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1,
                 start_new_session=True, env=env)
             process, records = self.flash, self.flash_lines
@@ -187,9 +274,11 @@ class CoreBackends:
             self.flash_drain.start()
             deadline = time.monotonic() + 90
             launch = self.read_flash(deadline, guard)
-            if (type(launch) is not dict or set(launch) != {'starting', 'engine_pid'}
+            if (type(launch) is not dict or set(launch) != ({'starting', 'engine_pid'} | ({'artifact_sha256'} if self.resource_mode else set()))
                     or launch['starting'] is not True or type(launch['engine_pid']) is not int or launch['engine_pid'] <= 0):
                 raise ServiceError('Flash launch identity protocol mismatch')
+            if self.resource_mode and launch['artifact_sha256'] != artifact:
+                raise ServiceError('Flash launch artifact mismatch')
             self.engine_pid = launch['engine_pid']
             engine = self._process(self.engine_pid)
             if (engine is None or engine['pgid'] != process.pid or engine['sid'] != process.pid
@@ -200,7 +289,25 @@ class CoreBackends:
             if (type(ready) is not dict or ready.get('ready') is not True
                     or ready.get('engine_pid') != self.engine_pid or not self.flash_alive()):
                 raise ServiceError('Flash readiness or owned engine identity unavailable')
-            self.flash_base = self.read_resources()
+            if self.resource_mode and ready.get('artifact_sha256') != artifact:
+                raise ServiceError('Flash ready artifact mismatch')
+            flash_base = self.read_resources()
+            if loading is not None:
+                guard()
+                self.client.resource_call('loading_finish',instance=loading[0],request_id=loading[1],token=loading[2])
+            self.flash_base = flash_base
+
+    def _release_unstarted_flash(self, instance, generation):
+        with self.lifecycle_lock:
+            with self.lock:
+                if (self.closing or self.stopping or self.generation != generation or self.flash is not None
+                        or self.resource_instances.get('flash') != instance):
+                    return
+            self._namespace()
+            # The host rechecks ownership, live references and physical GPU
+            # usage. The client validates the release ACK and fences unknowns.
+            self.client.resource_call('model_release', instance=instance)
+            del self.resource_instances['flash']
 
     def _process(self, pid):
         self._namespace()
@@ -300,6 +407,9 @@ class CoreBackends:
             # Only after Flash's process barrier can the host's physical absolute
             # GPU-idle barrier acknowledge an Ollama stop.
             self.client.stop()
+            if self.resource_mode:
+                self.client.resource_call('core_models_stopped')
+                self.resource_instances.clear()
             with self.lock:
                 self.active_model = self.flash_base = self.idle_base = self.address = None
                 self.models_verified = False
@@ -317,8 +427,14 @@ class CoreBackends:
             resident = False
         health = {'flash_resident': resident, 'ollama_selected': self.active_model,
                   'provider_mode': 'host-lifecycle', 'stopping': self.stopping}
-        if not self.requires_flash:
-            ready = bool(self.address and self.idle_base and self.models_verified and not self.stopping and not self.closing)
+        if self.normal_catalog or not self.requires_flash:
+            baseline_ready = resident if self.requires_flash else self.idle_base is not None
+            if self.resource_mode and self.requires_flash:
+                # Ready to accept work from the queue before the first load.
+                # A failed or unsettled worker is still unready.
+                baseline_ready = self.flash is None or (resident and self.flash_base is not None)
+                health['flash_on_demand'] = True
+            ready = bool(self.address and baseline_ready and self.models_verified and not self.stopping and not self.closing)
             if ready:
                 try:
                     status = self.client.status()
@@ -326,7 +442,8 @@ class CoreBackends:
                              and not status['stopping'] and status['fault'] is None)
                 except Exception:
                     ready = False
-            health.update(ready=ready, acceptance_ollama_only=True)
+            health.update(ready=ready, flash_enabled=self.requires_flash,
+                          acceptance_ollama_only=not self.normal_catalog)
         return health
 
     def wait_idle(self, check=lambda: None):
@@ -334,7 +451,12 @@ class CoreBackends:
         stable = 0
         while time.monotonic() < until:
             check()
-            stable = stable + 1 if self.read_resources()['vram_used'] < 3 * GIB else 0
+            idle = self.read_resources()['vram_used'] < 3 * GIB
+            if self.resource_mode and not idle:
+                # The same paired idle threshold still gates the load. Return
+                # the known refusal before acquiring grants or starting Flash.
+                raise ResourceWait('resource_vram_bytes_headroom')
+            stable = stable + 1 if idle else 0
             if stable >= 2:
                 return
             time.sleep(.5)
@@ -364,16 +486,32 @@ class CoreBackends:
                     self.connection = None
 
     def verify_models(self):
-        tags = {m['name'] for m in self.api('/api/tags')['models']}
-        required = ({name + ':latest' for name in NAMES.values()} if self.requires_flash else set(self.names.values()))
-        if not required <= tags:
+        self.models_verified = False
+        value = self.api('/api/tags')
+        if self.normal_catalog:
+            if type(value) is not dict or type(value.get('models')) is not list or len(value['models']) > 1024:
+                raise ServiceError('bounded engine inventory required')
+            tags = {}
+            for entry in value['models']:
+                if (type(entry) is not dict or type(entry.get('name')) is not str
+                        or entry['name'] in tags):
+                    raise ServiceError('ambiguous engine inventory')
+                tags[entry['name']] = entry
+            for profile in self.profiles.values():
+                actual = tags.get(profile['reference'])
+                if actual is None or manifest_digest(actual.get('digest')) != profile['digest']:
+                    raise ServiceError('configured model manifest identity changed or absent')
+        else:
+            tags = {m['name'] for m in value['models']}
+        required = ({name + ':latest' for name in self.names.values()} if self.profiles is None else set(self.names.values()))
+        if not required <= set(tags):
             raise ServiceError('models not prepared; run --prepare-models first' if self.requires_flash
                                else 'configured models not prepared')
         self.models_verified = True
 
     def capture_idle_baseline(self, check):
         if self.requires_flash:
-            raise ServiceError('idle baseline only applies to explicit acceptance mode')
+            raise ServiceError('idle baseline only applies to explicit Flash-free mode')
         # Capture only after the host stop barrier, empty engine inventory, and
         # two authenticated physical idle observations. No local /proc fallback.
         with self.lock:
@@ -383,7 +521,7 @@ class CoreBackends:
         while time.monotonic() < until:
             guard()
             sample = self.read_resources()
-            empty = not self.api('/api/ps')['models']
+            empty = not self.loaded_models()
             if empty and sample['vram_used'] < 3 * GIB and sample['mem_available'] >= 8 * GIB:
                 stable += 1; samples.append(sample)
             else:
@@ -392,12 +530,12 @@ class CoreBackends:
                 guard()
                 with self.lock:
                     if generation != self.generation or self.stopping or self.closing:
-                        raise ServiceError('acceptance baseline invalidated by provider stop')
+                        raise ServiceError('physical idle baseline invalidated by provider stop')
                     self.idle_base = {**samples[-1], 'vram_used': min(s['vram_used'] for s in samples),
                                       'mem_available': max(s['mem_available'] for s in samples)}
                 return
             time.sleep(.5)
-        raise ServiceError('acceptance physical idle baseline unconfirmed')
+        raise ServiceError('physical idle baseline unconfirmed')
 
     def read_flash(self, deadline, check):
         while time.monotonic() < deadline:
@@ -414,6 +552,14 @@ class CoreBackends:
             return obj
         raise ServiceError('Flash deadline exceeded')
 
+    def loaded_models(self):
+        value = self.api('/api/ps')
+        if (type(value) is not dict or type(value.get('models')) is not list
+                or len(value['models']) > 1024 or any(type(entry) is not dict for entry in value['models'])):
+            self.models_verified = False
+            raise ServiceError('valid bounded loaded-model inventory required')
+        return value['models']
+
     def unload(self, check):
         if not self.active_model:
             return
@@ -428,49 +574,109 @@ class CoreBackends:
         while time.monotonic() < until:
             check()
             s = self.read_resources()
-            empty = not self.api('/api/ps')['models']
+            empty = not self.loaded_models()
             released = (s['vram_used'] <= baseline['vram_used'] + 512 * 1024**2
                         and s['mem_available'] >= max(8 * GIB, baseline['mem_available'] - 2 * GIB)
                         and (self.requires_flash or s['vram_used'] < 3 * GIB))
             stable = stable + 1 if empty and released else 0
             if stable >= 2:
+                if self.resource_mode and self.active_model in self.resource_instances:
+                    self.client.resource_call('model_release',instance=self.resource_instances[self.active_model])
+                    self.resource_instances.pop(self.active_model)
                 self.active_model = None
                 return
             time.sleep(.5)
         raise ServiceError('old model physical release unconfirmed; next model not loaded')
 
+    def _resource_model(self, model):
+        if model not in self.resource_instances:
+            reply=self.client.resource_call('model_reserve',model=model,
+                artifact=self.config['resource_model_sha256'][model],request_id=str(uuid.uuid4()))
+            self.resource_instances[model]=reply['instance']
+        return self.resource_instances[model]
+
     def generate(self, job, check):
         if job.model not in self.models:
             raise ServiceError('unknown configured model')
-        if self.requires_flash:
-            self.start_flash(check)
-        if job.model == 'flash':
-            self.flash.stdin.write(json.dumps({'messages': job.messages, 'max_tokens': job.max_tokens}) + '\n')
-            self.flash.stdin.flush()
-            return self.read_flash(job.deadline, check)
-        self.start_ollama(check)
-        if not self.requires_flash and self.idle_base is None:
+        with self.lock:
+            generation = self.generation
+        guard = lambda: self._guard(generation, check)
+        guard()
+        if self.normal_catalog:
+            self.start_ollama(guard)
             self.verify_models()
-            self.capture_idle_baseline(check)
+            guard()
+        if self.requires_flash:
+            if self.resource_mode:
+                self.start_flash(guard, job=job)
+            else:
+                self.start_flash(guard)
+        if job.model == 'flash':
+            body={'messages':job.messages,'max_tokens':job.max_tokens}
+            token=None
+            if self.resource_mode:
+                instance=self._resource_model('flash');request_id=str(uuid.UUID(job.id))
+                token=self.client.resource_call('execution_reserve',model='flash',instance=instance,
+                    request_id=request_id)['token']
+                body['resource_request_id']=request_id
+                guard()
+            self.flash.stdin.write(json.dumps(body) + '\n')
+            self.flash.stdin.flush()
+            result=self.read_flash(job.deadline, guard)
+            if self.resource_mode:
+                if (not isinstance(result,dict) or set(result)!={'content','finish_reason','prompt_tokens','completion_tokens','resource_request_id'}
+                        or result['resource_request_id']!=request_id or not isinstance(result['content'],str)
+                        or result['finish_reason'] not in ('stop','length')
+                        or type(result['prompt_tokens']) is not int or not 0<=result['prompt_tokens']<=8192
+                        or type(result['completion_tokens']) is not int or not 0<=result['completion_tokens']<=job.max_tokens):
+                    raise ServiceError('Flash terminal identity unconfirmed')
+                guard()
+                self.client.resource_call('execution_finish',instance=instance,request_id=request_id,token=token)
+                result={key:value for key,value in result.items() if key!='resource_request_id'}
+            return result
+        if not self.normal_catalog:
+            self.start_ollama(guard)
+        if not self.requires_flash and self.idle_base is None:
+            if not self.normal_catalog:
+                self.verify_models()
+            self.capture_idle_baseline(guard)
         if self.active_model != job.model:
-            self.unload(check)
-            check()
+            self.unload(guard)
+            guard()
             self.active_model = job.model
         key = job.model
         options = ({'num_ctx': 8192, 'num_thread': 8, 'num_batch': 256,
                     'num_gpu': 48 if key == 'coder-next' else 28, 'temperature': 0, 'seed': 42}
-                   if self.requires_flash else dict(self.profiles[key]['options']))
+                   if self.profiles is None else dict(self.profiles[key]['options']))
         options['num_predict'] = job.max_tokens
+        guard()  # Inventory/unload can finish after cancellation or a provider-generation change.
+        resource_token = None
+        if self.resource_mode:
+            instance=self._resource_model(job.model)
+            resource_token=self.client.resource_call('execution_reserve',model=job.model,
+                instance=instance,request_id=str(uuid.UUID(job.id)))['token']
+            guard()
         result = self.api('/api/chat', {'model': self.names[key], 'messages': job.messages, 'stream': False,
                             'think': 'low' if key == 'gpt-oss-120b' else False, 'keep_alive': -1,
                             'options': options},
                           timeout=max(.1, job.deadline - time.monotonic()))
-        check()
+        guard()
         if result.get('done') is not True or result.get('done_reason') not in {'stop', 'length'}:
             raise ServiceError('Ollama nonterminal response')
-        loaded = self.api('/api/ps')['models']
-        if len(loaded) != 1 or (not self.requires_flash and loaded[0].get('name') != self.names[key]):
+        loaded = self.loaded_models()
+        if (type(loaded) is not list or len(loaded) != 1 or type(loaded[0]) is not dict
+                or self.profiles is not None and loaded[0].get('name') != self.names[key]):
+            self.models_verified = False
             raise ServiceError('Ollama single-model invariant violated')
+        if self.normal_catalog:
+            try:
+                if manifest_digest(loaded[0].get('digest')) != self.profiles[key]['digest']:
+                    raise ServiceError('loaded model manifest identity mismatch')
+            except ServiceError:
+                self.models_verified = False
+                raise
+        if resource_token is not None:
+            self.client.resource_call('execution_finish',instance=instance,request_id=str(uuid.UUID(job.id)),token=resource_token)
         return {'content': result['message'].get('content', ''),
                 'thinking': result['message'].get('thinking', ''), 'finish_reason': result['done_reason'],
                 'prompt_tokens': result.get('prompt_eval_count'), 'completion_tokens': result.get('eval_count'),

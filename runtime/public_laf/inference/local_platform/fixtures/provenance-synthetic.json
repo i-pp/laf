@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "synthetic_test_fixture": true,
+  "purpose": "Synthetic examples only; no actual asset, license, origin or runtime evidence",
+  "sources": [
+    {
+      "id": "synthetic-experiment",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "source_bytes_verified": false,
+      "kind": "synthetic_report"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "flash",
+      "historical_asset_revision": "2222222222222222222222222222222222222222",
+      "revision_source": "synthetic-experiment",
+      "installable": false,
+      "current_full_weight_sha256_recomputed": false,
+      "verified_weight_sha256": null,
+      "verified_license": null
+    },
+    {
+      "id": "coder-next",
+      "historical_asset_revision": "3333333333333333333333333333333333333333",
+      "revision_source": "synthetic-experiment",
+      "installable": false,
+      "current_full_weight_sha256_recomputed": false,
+      "verified_weight_sha256": null,
+      "verified_license": null
+    },
+    {
+      "id": "gpt-oss-120b",
+      "historical_asset_revision": "4444444444444444444444444444444444444444",
+      "revision_source": "synthetic-experiment",
+      "installable": false,
+      "current_full_weight_sha256_recomputed": false,
+      "verified_weight_sha256": null,
+      "verified_license": null
+    }
+  ],
+  "runtime_identities": [
+    {
+      "name": "synthetic-runtime",
+      "kind": "runtime_image",
+      "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "source": "synthetic-experiment",
+      "is_model_weight_or_manifest_digest": false
+    }
+  ]
+}

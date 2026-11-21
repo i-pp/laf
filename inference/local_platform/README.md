@@ -31,7 +31,7 @@ service names and the source migration boundary.
 
 ## Busy-reader summary
 
-- Select Flash, Coder Next or GPT-OSS 120B without bypassing resource/switch guards.
+- Select the active Router's configured model IDs without bypassing resource/switch guards.
 - Submit once, poll, inspect or cancel a job, including after an uncertain outcome.
 - Repair small pure Python functions against declarative cases, without executing
   arbitrary shell, model-proposed imports or executable test files.
@@ -48,12 +48,15 @@ python3 -B -m inference.local_platform.cli --socket "$SOCKET" status
 python3 -B -m inference.local_platform.cli --socket "$SOCKET" models
 python3 -B -m inference.local_platform.cli --socket "$SOCKET" capabilities
 python3 -B -m inference.local_platform.cli --socket "$SOCKET" ask \
-  --model gpt-oss-120b --prompt 'Explain one cause of a Python KeyError.' \
+  --prompt 'Explain one cause of a Python KeyError.' \
   --max-tokens 256 --timeout 180 --output /NEW/answer.json
 python3 -B -m inference.local_platform.cli --socket "$SOCKET" get JOB_ID
 python3 -B -m inference.local_platform.cli --socket "$SOCKET" cancel JOB_ID
 ```
 
+The omitted model uses the Router's declared default. For explicit selection,
+use `--model` with an ID returned by `models`; the legacy catalog includes
+`gpt-oss-120b`. See [configured models and optional Flash](../../docs/laf-configured-models.md).
 Choose a genuinely new output path, or omit `--output` for JSON on stdout. Code
 sent by `ask` is advice only, not applied or executed. Length-capped output may be
 incomplete. Generation is never silently retried. Ctrl-C requests cancellation
@@ -98,7 +101,7 @@ in source or test data. There is no automatic original-file writeback or commit.
 ## API and remote boundary
 
 The product-independent contract is [API.md](API.md). It uses HTTP/JSON over the
-operator's owner-only Unix socket, with one GPU queue for all three models. A
+operator's owner-only Unix socket, with one GPU queue for the selected catalog. A
 missing NPU is reported separately and does not stop GPU requests. NPU inference
 uses an independent classification lane through the same private API, while the
 separate NPU service owns its worker and recovery:

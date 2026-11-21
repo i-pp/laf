@@ -19,6 +19,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Modified 2026-11-10: open the existing chat command for an empty invocation.
+# Modified 2026-11-11: validate the operator catalog before each submission and pin job identity.
 
 """Bounded standalone CLI for a private local inference service.
 
@@ -38,7 +39,7 @@ import stat
 import sys
 import time
 
-MODELS = ['flash', 'coder-next', 'gpt-oss-120b']
+LEGACY_DEFAULT_MODEL = 'gpt-oss-120b'
 MAX_RESPONSE = 2 * 1024**2
 MAX_JSON_DEPTH = 64
 
@@ -47,6 +48,14 @@ class ClientError(Exception):
     def __init__(self, message, identifier=None):
         super().__init__(message)
         self.job_id = identifier
+
+
+class ClientNotSubmitted(ClientError):
+    """A failed preflight proves that no generation request was submitted."""
+
+
+class ClientPreflightInterrupted(KeyboardInterrupt):
+    """An interrupted discovery GET cannot have submitted or cancelled a job."""
 
 
 class ClientCancelled(KeyboardInterrupt):
@@ -140,9 +149,46 @@ def job_id(value):
     return value
 
 
-def checked_job(out, identifier, model=None):
+def is_model_id(value):
+    return isinstance(value, str) and re.fullmatch('[a-z][a-z0-9-]{0,63}', value) is not None
+
+
+def checked_catalog(out):
+    """Accept only bounded public IDs and the fixed Router resource contract."""
+    limits = {'context_limit':8192, 'max_output_tokens':1024, 'max_large_models_loaded':1}
+    required = {'models', *limits}
+    if (not isinstance(out, dict) or not required <= set(out)
+            or set(out) - required - {'default_model', 'flash_enabled'}):
+        raise ClientError('invalid model catalog fields')
+    models = out['models']
+    if (not isinstance(models, list) or not 1 <= len(models) <= 9
+            or not all(is_model_id(model) for model in models)
+            or len(set(models)) != len(models)):
+        raise ClientError('invalid model catalog IDs')
+    if any(type(out[key]) is not int or out[key] != value for key, value in limits.items()):
+        raise ClientError('unsupported model catalog limits')
+    default = out.get('default_model', LEGACY_DEFAULT_MODEL if LEGACY_DEFAULT_MODEL in models else None)
+    if default is not None and (not is_model_id(default) or default not in models):
+        raise ClientError('invalid model catalog default')
+    flash = out.get('flash_enabled', 'flash' in models)
+    if type(flash) is not bool or flash != ('flash' in models):
+        raise ClientError('invalid model catalog Flash state')
+    return {'models':list(models), **limits, 'default_model':default, 'flash_enabled':flash}
+
+
+def discover_catalog(path, call=None):
+    call = request if call is None else call
+    try:
+        return checked_catalog(call(path, 'GET', '/v1/models'))
+    except (ClientError, OSError, ValueError, http.client.HTTPException):
+        raise ClientNotSubmitted('model catalog unavailable or invalid; no request submitted') from None
+    except KeyboardInterrupt:
+        raise ClientPreflightInterrupted('model catalog interrupted; no request submitted') from None
+
+
+def checked_job(out, identifier, catalog, model=None):
     if (not isinstance(out, dict) or out.get('id') != identifier
-            or out.get('model') not in MODELS
+            or out.get('model') not in catalog['models']
             or model is not None and out.get('model') != model):
         raise ClientError('job identity mismatch', identifier)
     if out.get('status') not in ['queued','running','completed','failed','cancelled']:
@@ -154,32 +200,51 @@ def checked_job(out, identifier, model=None):
     return out
 
 
-def ask(path, model, text, max_tokens=512, timeout=180, call=request, sleep=time.sleep):
-    if model not in MODELS or type(max_tokens) is not int or not 1 <= max_tokens <= 1024:
+def ask(path, model, text, max_tokens=512, timeout=180, call=None, sleep=time.sleep):
+    if (model is not None and not is_model_id(model)
+            or type(max_tokens) is not int or not 1 <= max_tokens <= 1024):
         raise ClientError('invalid model/output bound')
     if type(timeout) is not int or not 1 <= timeout <= 300:
         raise ClientError('timeout must be1..300')
-    if not isinstance(text, str) or not text.strip() or len(text.encode()) > 8192:
-        raise ClientError('input must be1..8192 UTF-8 bytes and fit the server context budget')
-    if len(text.encode("utf-8")) + 64 + max_tokens + 256 > 8192:
-        raise ClientError('input exceeds server context budget')
+    try:
+        if not isinstance(text, str) or not text.strip() or len(text.encode()) > 8192:
+            raise ClientError('input must be1..8192 UTF-8 bytes and fit the server context budget')
+        if len(text.encode("utf-8")) + 64 + max_tokens + 256 > 8192:
+            raise ClientError('input exceeds server context budget')
+    except UnicodeError:
+        raise ClientError('input must be valid UTF-8 text') from None
     return converse(path, model, [{'role':'user','content':text}], max_tokens,
                     timeout, call=call, sleep=sleep)
 
 
 def converse(path, model, messages, max_tokens=512, timeout=180, call=None, sleep=time.sleep):
-    """One bounded JSON chat job. Never replay an uncertain submission."""
+    """Discover before each bounded job. Never replay an uncertain submission."""
     from inference.laf_service.core import validate_request
-    body = {'model':model,'messages':messages,
+    if model is not None and not is_model_id(model):
+        raise ClientError('invalid model identifier')
+    # Check all caller input before socket access. The temporary name validates
+    # only request structure; discovered membership is mandatory before POST.
+    candidate = model if model is not None else 'client-validation'
+    body = {'model':candidate,'messages':messages,
             'max_tokens':max_tokens,'timeout_seconds':timeout}
     try:
-        validate_request(body)
+        validate_request(body, (candidate,))
     except (ValueError, UnicodeError) as exc:
         raise ClientError(str(exc)) from None
     call = request if call is None else call
+    catalog = discover_catalog(path, call)
+    if model is None:
+        model = catalog['default_model']
+        if model is None:
+            raise ClientNotSubmitted('Router has no default model; specify --model; no request submitted')
+    if model not in catalog['models']:
+        raise ClientNotSubmitted('selected model is not configured; no request submitted')
+    body['model'] = model
     # A submission failure might follow accepted work. Never replay it.
     try:
         submitted = call(path,'POST','/v1/jobs',body)
+        if not isinstance(submitted, dict):
+            raise ClientError('invalid submission response')
         identifier = job_id(submitted.get('id'))
     except (ClientError,OSError,ValueError,http.client.HTTPException) as exc:
         raise ClientError('submission outcome unknown; do not automatically resubmit',
@@ -188,7 +253,7 @@ def converse(path, model, messages, max_tokens=512, timeout=180, call=None, slee
     try:
         while time.monotonic() - start < timeout + 5:
             out = call(path,'GET','/v1/jobs/'+identifier)
-            checked_job(out, identifier, model)
+            checked_job(out, identifier, catalog, model)
             status = out.get('status')
             if status == 'completed':
                 generated = out.get('result')
@@ -235,16 +300,16 @@ def main(argv=None):
     classify.add_argument('--input',required=True,help='JSON model/input file, at most100000 bytes')
     r=sub.add_parser('repair',help='bounded pure-function repair; no arbitrary shell or original-file writes')
     r.add_argument('--source',required=True);r.add_argument('--cases',required=True)
-    r.add_argument('--workdir',required=True);r.add_argument('--model',choices=MODELS,default='gpt-oss-120b')
+    r.add_argument('--workdir',required=True);r.add_argument('--model',default=LEGACY_DEFAULT_MODEL)
     r.add_argument('--attempts',type=int,default=2)
     get=sub.add_parser('get');get.add_argument('job_id')
     cancel=sub.add_parser('cancel');cancel.add_argument('job_id')
-    q=sub.add_parser('ask');q.add_argument('--model',choices=MODELS,default='gpt-oss-120b')
+    q=sub.add_parser('ask');q.add_argument('--model',help='configured Router model ID; omitted uses its declared default')
     source=q.add_mutually_exclusive_group(required=True);source.add_argument('--prompt');source.add_argument('--input',help='UTF-8 file, or - for stdin')
     q.add_argument('--max-tokens',type=int,default=512);q.add_argument('--timeout',type=int,default=180)
     q.add_argument('--output',help='create a new JSON file; never overwrite')
     chat=sub.add_parser('chat',help='interactive conversation; optional bounded workspace filename search')
-    chat.add_argument('--model',choices=MODELS,default='gpt-oss-120b')
+    chat.add_argument('--model',help='configured Router model ID; omitted resolves on the first message')
     chat.add_argument('--max-tokens',type=int,default=512)
     chat.add_argument('--timeout',type=int,default=180)
     chat.add_argument('--workspace',help='absolute owned directory; permits filename-only search, no shell or file contents')
@@ -268,7 +333,9 @@ def main(argv=None):
             gpu, npu = out.get('gpu',{}), out.get('npu',{})
             if not isinstance(gpu,dict) or not isinstance(npu,dict):
                 raise ClientError('invalid service health response')
-            out={'status':out.get('status'),'models':MODELS,
+            catalog=discover_catalog(args.socket)
+            out={'status':out.get('status'),'models':catalog['models'],
+                 'default_model':catalog['default_model'],'flash_enabled':catalog['flash_enabled'],
                  'flash_resident':gpu.get('flash_resident'),
                  'selected_model':gpu.get('ollama_selected'),
                  'queue_depth':out.get('queue_depth'),'npu_status':npu.get('status')}
@@ -286,11 +353,12 @@ def main(argv=None):
         elif args.command=='capabilities':
             out=request(args.socket,'GET','/v1/capabilities')
         elif args.command=='models':
-            out=request(args.socket,'GET','/v1/models')
+            out=discover_catalog(args.socket)
         elif args.command=='get':
             identifier=job_id(args.job_id)
+            catalog=discover_catalog(args.socket)
             raw=request(args.socket,'GET','/v1/jobs/'+identifier)
-            checked_job(raw, identifier)
+            checked_job(raw, identifier, catalog)
             out={k:raw.get(k) for k in ['id','model','status','error']}
             generated=raw.get('result')
             if isinstance(generated,dict):
@@ -317,9 +385,14 @@ def main(argv=None):
         return 0
     except (ClientError,OSError,ValueError,http.client.HTTPException) as exc:
         print(json.dumps({'status':'error_or_uncertain','error':str(exc)[:180],
-                          'job_id':getattr(exc,'job_id',None) or locals().get('identifier') or (locals().get('out') or {}).get('job_id'),
+                          'job_id':locals().get('identifier') or getattr(exc,'job_id',None) or (locals().get('out') or {}).get('job_id'),
                           'automatic_retry':False}),file=sys.stderr)
         return 1
+    except ClientPreflightInterrupted as exc:
+        print(json.dumps({'status':'client_wait_interrupted', 'error':str(exc),
+                          'job_id':locals().get('identifier'), 'submission_attempted':False,
+                          'automatic_retry':False}),file=sys.stderr)
+        return 130
     except KeyboardInterrupt as exc:
         print(json.dumps({'status':'client_wait_interrupted' if args.command=='classify' else 'cancellation_requested_or_uncertain',
                           'job_id':getattr(exc,'job_id',None),'stop_confirmed':False,'automatic_retry':False}),file=sys.stderr)

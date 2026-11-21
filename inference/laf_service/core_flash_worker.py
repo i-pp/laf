@@ -18,16 +18,51 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-15: explicit resource-owned Flash identity and source boundary.
+
 """Offline pinned Strata tokenizer/protocol adapter. No network or tool use."""
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
+import uuid
+
+
+def _pinned_config(path):
+    """Read the same bounded owner-only configuration contract as Core."""
+    fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+    with os.fdopen(fd,'rb') as stream:
+        before=os.fstat(stream.fileno())
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid!=os.getuid()
+                or stat.S_IMODE(before.st_mode)!=0o600 or before.st_nlink!=1 or before.st_size>32768):
+            raise ValueError('Private bounded Flash configuration required')
+        raw=stream.read(32769)
+        after=os.fstat(stream.fileno());current=Path(path).lstat()
+        identity=lambda info:(info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
+        if len(raw)>32768 or identity(before)!=identity(after) or identity(after)!=identity(current):
+            raise ValueError('Flash configuration changed during read')
+    def unique(pairs):
+        result={}
+        for key,value in pairs:
+            if key in result:raise ValueError('Duplicate Flash configuration field')
+            result[key]=value
+        return result
+    return json.loads(raw,object_pairs_hook=unique)
 
 
 def main():
-    config = json.loads(Path(sys.argv[1]).read_text())
+    if len(sys.argv) not in (2,3):raise ValueError('Fixed Flash worker arguments required')
+    artifact = sys.argv[2] if len(sys.argv)==3 else None
+    config = _pinned_config(sys.argv[1]) if artifact else json.loads(Path(sys.argv[1]).read_text())
+    if bool(artifact) != ('resource_admission_generation' in config):
+        raise ValueError('Flash resource artifact binding required')
+    if artifact:
+        sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
+        from inference.laf_service.flash_resources import manifest
+        if manifest(config,verify=True)!=artifact:
+            raise ValueError('Flash worker artifact changed before launch')
     sys.path.insert(0, config['strata_source'])
     from tools.strata_tokenizer import Tokenizer
     from serve.frontend import ChatTemplate
@@ -43,20 +78,27 @@ def main():
                               stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
     try:
         # Capture the child identity before waiting for model readiness.
-        print(json.dumps({'starting': True, 'engine_pid': engine.pid}), flush=True)
+        print(json.dumps({'starting': True, 'engine_pid': engine.pid, **({'artifact_sha256':artifact} if artifact else {})}), flush=True)
         for line in engine.stdout:
             if line.startswith('READY'):
-                print(json.dumps({'ready': True, 'engine_pid': engine.pid}), flush=True)
+                print(json.dumps({'ready': True, 'engine_pid': engine.pid, **({'artifact_sha256':artifact} if artifact else {})}), flush=True)
                 break
         else:
             raise RuntimeError('Strata exited before READY')
         for line in sys.stdin:
             body = json.loads(line)
+            identity = {}
+            if artifact:
+                request_id=body.get('resource_request_id') if isinstance(body,dict) else None
+                if (not isinstance(body,dict) or set(body)!={'messages','max_tokens','resource_request_id'}
+                        or not isinstance(request_id,str) or str(uuid.UUID(request_id))!=request_id):
+                    raise ValueError('Flash one-use request binding required')
+                identity={'resource_request_id':request_id}
             rendered = template.render(body['messages'], tools=None, add_generation_prompt=True, enable_thinking=False)
             ids = tokenizer.encode(rendered, parse_special=True)
             n = body['max_tokens']
             if len(ids) + n + 8 > 8192:
-                print(json.dumps({'error': 'context budget exceeded'}), flush=True)
+                print(json.dumps({'error': 'context budget exceeded', **identity}), flush=True)
                 continue
             engine.stdin.write('GEN ' + str(n) + ' temperature=0 ' + ','.join(map(str, ids)) + '\n')
             engine.stdin.flush()
@@ -81,7 +123,7 @@ def main():
                             raise RuntimeError('stop without stop token')
                     print(json.dumps({'content': tokenizer.decode(presentation, errors='strict'),
                                       'finish_reason': finish, 'prompt_tokens': len(ids),
-                                      'completion_tokens': len(tokens)}), flush=True)
+                                      'completion_tokens': len(tokens), **identity}), flush=True)
                     break
             else:
                 raise RuntimeError('Strata exited during generation')

@@ -20,6 +20,9 @@
 
 
 # Added 2026-11-12: always-run, offline minimum CI; not hardware or release acceptance.
+# Modified 2026-11-15: include installed-acceptance offline refusal regressions.
+# Modified 2026-11-15: provision FD-bind-capable Bubblewrap on the hosted source runner.
+# Modified 2026-11-15: create protected SDK test fixtures with an explicit caller umask.
 
 name: Minimum source CI
 
@@ -36,7 +39,7 @@ permissions:
 jobs:
   minimum:
     name: Minimum source checks
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,8 +71,151 @@ jobs:
               raise SystemExit('No source files checked')
           print(f'Syntax checked: {checked} files')
           PYCODE
+      - name: Enforce English and ASCII source with explicit Unicode test data
+        run: python3 -B scripts/check_english_source.py
+      - name: Enforce LAF-only release names
+        run: |
+          python3 -I -B scripts/check_release_names.py --checkout .
+          python3 -B scripts/build-integrated-source.py --output "$RUNNER_TEMP/laf-release-check.zip"
+          python3 -I -B scripts/check_release_names.py "$RUNNER_TEMP/laf-release-check.zip"
+      - name: Install hosted source-test isolation prerequisite
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends bubblewrap
+          bwrap --version
+          help="$(bwrap --help)"
+          for option in --ro-bind-fd --size --unshare-all; do
+            if ! grep -Fq -- "$option" <<<"$help"; then
+              echo "::error::Bubblewrap lacks required option $option"
+              exit 1
+            fi
+          done
       - name: Run full offline Python regressions, including Unix sockets
         run: python3 -B scripts/check-laf.py --suite full
+      - name: Validate the local stdio plugin source boundary
+        run: python3 -B scripts/check-laf-plugin.py
+      - name: Run MCP source safety checks without installing an SDK
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHONPATH: mcp/src:mcp/tests
+        run: |
+          python3 -B - <<'PYCODE'
+          import json
+          import unittest
+
+          SCOPE = 'MCP source/mock/manifest only; excludes actual SDK and package builds'
+          names = ['test_application', 'test_attempts', 'test_contracts',
+                   'test_receipts', 'test_router', 'test_sdk_gate',
+                   'test_integrated_router.IntegratedApplicationTests',
+                   'test_package.PackageTests.test_manifest']
+          suite = unittest.defaultTestLoader.loadTestsFromNames(names)
+
+          def cases(group):
+              for item in group:
+                  if isinstance(item, unittest.TestSuite):
+                      yield from cases(item)
+                  else:
+                      yield item
+
+          ids = [case.id() for case in cases(suite)]
+          planned = len(ids)
+          if not planned or len(set(ids)) != planned:
+              raise SystemExit('Empty or duplicate selected tests')
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          passed = (result.wasSuccessful() and result.testsRun == planned
+                    and not result.skipped and not result.expectedFailures
+                    and not result.unexpectedSuccesses)
+          print(json.dumps({'scope': SCOPE, 'planned': planned,
+                            'run': result.testsRun, 'failures': len(result.failures),
+                            'errors': len(result.errors), 'skipped': len(result.skipped),
+                            'expected_failures': len(result.expectedFailures),
+                            'unexpected_successes': len(result.unexpectedSuccesses),
+                            'passed': passed}, sort_keys=True))
+          raise SystemExit(0 if passed else 1)
+          PYCODE
+      - name: Run SDK installer regressions without installing the SDK
+        run: |
+          umask 0022
+          python3 -B - <<'PYCODE'
+          import json
+          import unittest
+
+          SCOPE = 'SDK installer regressions only; no SDK acquisition or install'
+          suite = unittest.defaultTestLoader.discover('scripts', pattern='test_sdk_installer.py')
+
+          def cases(group):
+              for item in group:
+                  if isinstance(item, unittest.TestSuite):
+                      yield from cases(item)
+                  else:
+                      yield item
+
+          ids = [case.id() for case in cases(suite)]
+          planned = len(ids)
+          if not planned or len(set(ids)) != planned:
+              raise SystemExit('Empty or duplicate selected tests')
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          passed = (result.wasSuccessful() and result.testsRun == planned
+                    and not result.skipped and not result.expectedFailures
+                    and not result.unexpectedSuccesses)
+          print(json.dumps({'scope': SCOPE, 'planned': planned,
+                            'run': result.testsRun, 'failures': len(result.failures),
+                            'errors': len(result.errors), 'skipped': len(result.skipped),
+                            'expected_failures': len(result.expectedFailures),
+                            'unexpected_successes': len(result.unexpectedSuccesses),
+                            'passed': passed}, sort_keys=True))
+          raise SystemExit(0 if passed else 1)
+          PYCODE
+      - name: Check tunnel-only operator transaction without services
+        shell: bash
+        run: |
+          python3 -B - <<'PYCODE'
+          import sys
+          import unittest
+          sys.path.insert(0, 'ops')
+          suite = unittest.defaultTestLoader.loadTestsFromName('test_frontend_cutover')
+          def flatten(group):
+              for item in group:
+                  if isinstance(item, unittest.TestSuite):
+                      yield from flatten(item)
+                  else:
+                      yield item
+          tests = list(flatten(suite))
+          ids = [test.id() for test in tests]
+          if len(ids) != 28 or len(set(ids)) != 28:
+              raise SystemExit('Expected 28 unique operator tests')
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          rejected = (result.failures, result.errors, result.skipped,
+                      result.expectedFailures, result.unexpectedSuccesses)
+          if result.testsRun != 28 or any(rejected) or not result.wasSuccessful():
+              raise SystemExit('Incomplete or non-green operator tests')
+          PYCODE
+      - name: Strict ACK and source-builder checks with negative gate oracles
+        run: python3 -B scripts/run_integrated_source_checks.py
+      - name: Verify portable integrated package source without services
+        run: python3 -B packaging/run_packaging_checks.py
+      - name: Check installed-acceptance interruption and refusal logic offline
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_installed_acceptance --expected-tests 47
+      - name: Check explicit owner-daemon metadata binding offline
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_bootstrap_orchestrator --expected-tests 20
+      - name: Check correlated Codex reads and notification races offline
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_codex_read_reliability --expected-tests 14
+      - name: Check explicit production policy import offline
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_bootstrap_production_policy --expected-tests 36
+      - name: Check fresh-prefix notification activation offline
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_notification_fresh_prefix --expected-tests 31
+      - name: Check narrow daemon notification-reference handoff offline
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_daemon_notification_environment --expected-tests 11
+      - name: Check HTTP bootstrap binding and denial parity offline
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_http_bootstrap_bindings --expected-tests 25
+      - name: Check combined resource setup and history proof fences offline
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_combined_setup_resources --expected-tests 12
+      - name: Check private resource scheduler-policy selection offline
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_bootstrap_resource_policy --expected-tests 28
+      - name: Check protected policy metadata and read-open boundaries offline
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_resource_policy_file_pins --expected-tests 5
 
   license:
     name: License policy checks

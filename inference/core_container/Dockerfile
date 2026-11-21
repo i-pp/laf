@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-15: explicit resource-owned Flash identity and source boundary.
+
 # Supply an already-inspected immutable base through the reviewed build wrapper.
 # No package installation or model/vendor bytes are included in this source image.
 ARG LAF_CORE_BASE
@@ -33,6 +35,8 @@ COPY inference/laf_service/lifecycle_uds.py inference/laf_service/lifecycle_uds.
 COPY inference/laf_service/core_backends.py inference/laf_service/core_backends.py
 COPY inference/laf_service/core_flash_worker.py inference/laf_service/core_flash_worker.py
 COPY inference/laf_service/core_server.py inference/laf_service/core_server.py
+COPY inference/laf_service/swap_window.py inference/laf_service/swap_window.py
+COPY inference/laf_service/flash_resources.py inference/laf_service/flash_resources.py
 ENV PYTHONDONTWRITEBYTECODE=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 USER 1000:1000
 ENTRYPOINT ["python3", "-B", "-m", "inference.laf_service.core_server"]

@@ -140,11 +140,12 @@ class HttpTests(unittest.TestCase):
     def request(self, method, path, value=None, headers=None):
         conn = UnixConnection(str(self.path))
         data = None if value is None else json.dumps(value)
-        conn.request(method, path, body=data, headers=headers or {})
-        response = conn.getresponse()
-        result = response.status, json.loads(response.read())
-        conn.close()
-        return result
+        try:
+            conn.request(method, path, body=data, headers=headers or {})
+            response = conn.getresponse()
+            return response.status, json.loads(response.read())
+        finally:
+            conn.close()
 
     def test_socket_private(self):
         self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
@@ -162,9 +163,15 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(self.request("POST", "/v1/classify", {"input": [0] * 3072}, {"Content-Type": "application/json"})[0], 200)
 
     def test_invalid_body(self):
-        self.assertEqual(self.request("POST", "/v1/classify", {"input": []}, {"Content-Type": "application/json"})[0], 400)
-        self.assertEqual(self.request("POST", "/v1/classify", {}, {"Content-Type": "text/plain"})[0], 415)
-        self.assertEqual(self.request("POST", "/v1/classify", {}, {"Content-Length": "100001"})[0], 413)
+        with patch.object(self.worker, 'classify', side_effect=AssertionError('Invalid input reached the worker')) as classify:
+            self.assertEqual(self.request("POST", "/v1/classify", {"input": []}, {"Content-Type": "application/json"})[0], 400)
+            # Send only headers for header-level rejection. A separate body send
+            # races an immediate 415/413 response and can fail with BrokenPipe.
+            # Positive Content-Length without payload also proves early refusal;
+            # waiting to read the declared body would time out instead of pass.
+            self.assertEqual(self.request("POST", "/v1/classify", headers={"Content-Type": "text/plain", "Content-Length": "2"})[0], 415)
+            self.assertEqual(self.request("POST", "/v1/classify", headers={"Content-Type": "application/json", "Content-Length": "100001"})[0], 413)
+            classify.assert_not_called()
 
     def test_busy_and_unavailable(self):
         for error, code in ((BlockingIOError(), 429), (RuntimeError("private error"), 503)):
@@ -293,6 +300,39 @@ for line in sys.stdin:
                 self.assertIsNotNone(w.process.poll())
             finally:
                 w.close()
+
+
+class HeaderRejectionFixtureTests(unittest.TestCase):
+    def test_header_rejections_do_not_send_an_unnecessary_body(self):
+        subject = HttpTests(methodName="test_invalid_body")
+        subject.worker = FakeWorker()
+        calls = []
+        def request(method, path, value=None, headers=None):
+            calls.append((method, path, value, headers))
+            return (400, 415, 413)[len(calls) - 1], {}
+        subject.request = request
+        subject.test_invalid_body()
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[0][2], {"input": []})
+        self.assertIsNone(calls[1][2])
+        self.assertEqual(calls[1][3], {"Content-Type": "text/plain", "Content-Length": "2"})
+        self.assertIsNone(calls[2][2])
+        self.assertEqual(calls[2][3], {"Content-Type": "application/json", "Content-Length": "100001"})
+
+    def test_request_failure_is_not_hidden_and_connection_is_closed(self):
+        class FailedConnection:
+            closed = False
+            def request(self, *_args, **_kwargs):
+                raise BrokenPipeError("synthetic send failure")
+            def close(self):
+                self.closed = True
+        connection = FailedConnection()
+        subject = HttpTests(methodName="test_invalid_body")
+        subject.path = Path('/synthetic.sock')
+        with patch(__name__ + '.UnixConnection', return_value=connection):
+            with self.assertRaises(BrokenPipeError):
+                subject.request('POST', '/v1/classify', {})
+        self.assertTrue(connection.closed)
 
 
 if __name__ == "__main__":

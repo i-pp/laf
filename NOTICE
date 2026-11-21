@@ -19,3 +19,5 @@ No third-party runtime or model payload is included in this source snapshot.
 This NOTICE supplies attribution information only. It does not add conditions to
 or modify KISS Open License Version 1.0. Attribution does not imply endorsement.
 Applicable original notices must be preserved.
+
+Integrated runtime provenance and modifications: see SOURCE_ORIGIN.md, notices/agent-orchestrator and docs/integrated-plugin-install.md. The mcp/ component notice is component-scoped, not a denial of integrated HTTP source.

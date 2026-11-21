@@ -1,0 +1,6 @@
+[
+  {"function":"safe_divide","args":[6,2],"expected":3},
+  {"function":"safe_divide","args":[1,0],"expected":null},
+  {"function":"safe_divide","args":[0,5],"expected":0},
+  {"function":"safe_divide","args":[-4,2],"expected":-2}
+]

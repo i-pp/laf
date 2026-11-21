@@ -24,6 +24,326 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
+## Unreleased: ordinary provider-feedback execution (2026-11-15)
+
+Support bounded ordinary Runner metadata recovery and provider waiting without
+new attempts, released-grant reuse or fixed LAF slots. Persist exact negative
+facts through ACK/events/history and charge a separate current recovery probe
+without changing original receipt identity. Validate response correlation and
+actual send-time cancellation, deadlines, account age and notification epoch.
+Retain UNKNOWN on lost ACK, failed delivery or unresolved evidence. Persist
++host capture uncertainty without inventing native IDs, and exclude pre-intent
++turn notifications from the new execution. Schema3
+protocol13 fences older participants; finite quotas retain their enforcement.
+No live policy, ledger, service, model, authentication or publication is changed.
+
+
+## Unreleased: preserve terminal-history provider restrictions (2026-11-15)
+
+Persist exact terminal and matching pre-ACK error negatives through refresh,
+early completion and direct reap before new authorization or release. Refuse
+malformed history as a resolution of uncertainty. Use a durable private outbox and atomic
+shared receipts; preserve uncertainty on failure and deduplicate old terminal
+facts after valid provider recovery. Fence earlier unpublished schema3 clients
+while retaining finite quotas and no replay. No live state is changed.
+
+## Unreleased: isolated source-test resource ledgers (2026-11-15)
+
+Run supported source suites in verified disposable namespaces, hiding the real
+OS home and host temporary/runtime state. Mount source and an empty default
+ledger placeholder read-only; reject missing isolation and unexpected SQLite
+paths before fixture effects. Preserve production state and earlier incident
+evidence; no runtime policy, service, quota or resource guard is changed.
+
+## Unreleased: provider-owned acceptance without inferred slots (2026-11-15)
+
+Added an explicit schema3 pipeline-only external provider-feedback contract alongside retained
+finite quota policies. Local resource and account/owner guards remain enforced;
+external concurrency stays unknown rather than becoming an arbitrary LAF cap.
+Shared durable restrictions, causal full-read recovery and correlated native
+rate feedback preserve UNKNOWN and no replay. Usage/account metadata is narrowly
+read without reserve fallback or payment capabilities. Selector metadata errors
+now refuse rather than masquerading as missing resource configuration. Ordinary
+and standalone online feedback work waits before claim without launching a
+worker; existing finite-quota ordinary execution remains supported.
+
+## Unreleased: protected policy discovery and reader fixes (2026-11-15)
+
+Treat only a missing selector as absence; denied or indeterminate metadata
+must refuse configuration instead of selecting legacy defaults. Pin the
+operator policy with O_PATH and verify its regular-file type and identity
+before any read-open callback, then read the pinned inode and retain the
+existing coherent-source checks. Close the private SQLite regression snapshot
+explicitly. Add five offline denial, FIFO/type and replacement regressions to
+the minimum source workflow. These generic fixes add no NPU implementation,
+device operation, policy calibration or live-service change.
+
+## Unreleased: publication candidate scope record (2026-11-15)
+
+Clarify README.md and SOURCE_ORIGIN.md for the combined resource/setup source
+and private policy selector. Preserve predecessor-specific installed evidence
+and distinguish legacy canaries, synthetic selector setup, resource admission
+and production stdio Tunnel acceptance. Retain external-asset licensing and
+future OAuth/provider boundaries. This documentation change adds no runtime
+behavior, configuration, dependency, backend authority or service operation.
+
+## Unreleased: private resource scheduler policy selection (2026-11-15)
+
+Add an explicit new-prefix configure-resource-policy action that retains a
+protected raw-hash-pinned resource-only scheduler document in immutable backend
+state. Preserve packaged scheduler source and acceptance byte verification.
+Select through the copied project across scheduler entrypoints; preserve raw
+input while normalizing ordinary/pipeline settings. Pin the entire binding in
+the scheduler generation and refuse missing/malformed bootstrap state. Import
+enables no backend, account, model, daemon, resource ledger or new authority.
+Calibration, actual provider limits and normal generation adoption remain
+independent prerequisites. Add offline import, mutation, composition and copied
+CLI regressions. No existing service or configuration is changed by this source.
+
+## Unreleased: combined setup and resource proof fences (2026-11-15)
+
+Combine the complete resource candidate with the protected-policy/Events/HTTP
+setup changes. Construct the resource-aware Pipeline and validate its mode
+before activating the same deferred Events runtime. Preserve controller,
+ownership, uncertainty and binding guards. Pin resource mode into new Pipeline
+ledger identity while retaining the existing legacy hash; switching modes must
+use a new ledger instead of silently adopting history. Absence of a held grant
+does not verify a terminal turn: require matching provider history. Add joint
+offline regressions, including rejection and retained-state checks.
+
+This source merge does not select calibrated resource inputs, adopt a shared
+ledger generation, switch services or establish resource-only/NPU acceptance.
+The existing stdio Tunnel path and future OAuth/receiver scope stay separate.
+
+## Unreleased: guarded remote composition setup (2026-11-15)
+
+Forward only existing Events/OAuth/credential references through the supported
+daemon resource path when the Codex pipeline and Events are explicitly enabled.
+Keep default environments minimal; do not forward account overrides, tokens or
+unrelated variables. Add HTTP bootstrap-binding mode with exact state/hash and
+socket identity forwarding. Reject raw Router arguments for explicit bootstrap
+states, retain deny-all schemas without opening endpoints/receipts, and fence
+tool/Events calls after configuration mutation. Existing principal and legacy
+contracts remain unchanged. Add strict offline handoff/HTTP refusal regressions
+and document protected policy export and remaining real authentication inputs.
+No live service, credential provisioning or public endpoint is configured here.
+
+## Unreleased: first-ledger notification initialization (2026-11-15)
+
+Retain the same fully validated notification runtime when its private source
+ledger is genuinely absent. Consume its one-time deferral after HostGateway
+creates the real Pipeline, then enable the existing worker factory. Pin the
+runtime directory identity and recheck storage; other disabled states, unsafe
+existing files, interruption and failed storage cannot gain delivery authority
+through a retry. Keep provider/credential loading, principal scope and worker
+start under their existing gates. Add guarded temporary-SQLite regressions and
+remote acceptance prerequisites. No live service or callback is changed.
+
+## Unreleased: explicit operator schema2 policy import (2026-11-15)
+
+Add a separate configure-codex mode for a protected, raw-hash-pinned operator
+schema2 policy. Preserve validated workspace/model/bound values and record
+immutable source provenance; do not reconstruct defaults or copy old runtime,
+authentication, grants or history. Keep the schema1 canary scope unchanged.
+Report the selected daemon policy schema/ceiling and retain atomic unused-prefix,
+source-drift, owner, byte-bound and frontend/executor snapshot fences. Add strict
+offline source/CLI/Gateway regression cases and configuration documentation.
+This setup path does not establish provider quota, resource-led admission,
+remote authentication/Events delivery or production cutover acceptance.
+
+## Unreleased: current task state after rejected reads (2026-11-15)
+
+Return the authoritative current task state if a native read fails after an
+interleaved completion, interruption or approval notification. Preserve UNKNOWN
+reconciliation, history verification, executor cleanup and no-replay fences.
+Add fixed, private diagnostic code/category labels and dedicated offline
+protocol/Gateway race regressions. The recorded native thread/read rejection's
+cause remains unknown; this fixes the separately reproduced stale-status race.
+Update the acceptance guide, minimum CI and explicit license path declaration.
+
+## Unreleased: explicit owner-daemon metadata binding (2026-11-15)
+
+Add a new-prefix orchestrator binding using the existing owner control socket.
+The portable profile retains its three read-only metadata tools and creates no
+task-write policy, mailbox authority or model selection. Old schema2 bindings
+remain valid. Configuration keeps the same atomic publication, immutable
+snapshot and unused-prefix checks.
+
+The printed daemon command can now select ordinary metadata mode without a
+Codex binding or native/account probe. Codex mode retains its explicit native
+pin and opt-in. Add configuration/refusal/source-fixture checks and document
+which optional backends need separate operator inputs. This updates
+the bootstrap, backend-state validator, license path declarations and minimum
+CI; it does not change scheduler implementation or configure a running service.
+
+## Unreleased: bounded installed-package acceptance (2026-11-15)
+
+Add a private append-only receipt/request-key acceptance runner, regression
+oracles and an existing-host procedure. It verifies the source archive, installed
+cache and copied runtime, exact catalog and parameter forwarding before claiming
+bounded execution success. Unknown replies retain the same identifiers; observed
+cancellation never claims physical stop. Codex task completion also requires
+executor-release confirmation. The runner retains all operational state.
+
+Add a read-only bootstrap admission observation without starting a process,
+probing an account or weakening the normal-host guard. Document the verified
+legacy API/no-autoload mismatch rather than translating calls into Router jobs.
+Classify the new source in the license policy and select the offline regressions
+in minimum CI. These changes do not establish actual installation/account/model
+acceptance, provision dependencies or change a running service.
+
+## Unreleased: versioned resource-only admission
+
+Added optional resource-only cloud and pipeline dispatch using one durable
+OS-account ledger, verified owners/controllers, incremental atomic CPU/RAM/GPU/VRAM
+reservations, fresh observations, pinned provider identity and finite quota
+evidence. This mode replaces fixed LAF worker/session envelopes while retaining
+workspace, generation, isolation, process, storage and uncertain-execution guards.
+Direct uncharged standalone parents are refused. Saved-result verification uses
+bounded reserved capacity, and native account reads are revalidated before turns.
+
+Connected the split Router's manifest-pinned Ollama and explicit owned Flash
+paths to shared controllers, model residency and incremental loading/job grants.
+Added bounded read-only AMD device/DRM telemetry, conservative UMA coupling,
+fixed queue wait reasons and correlated no-replay resource replies. NPU resource
+admission and GPU partitions remain refused. Legacy checked-in configuration is
+unchanged; no live policy, model, service or resource-branch publication is changed.
+
+## Unreleased: eligible ordinary queue dispatch
+
+Updated the vendored daemon to scan a finite FIFO horizon across independent
+SQLite pages, skip busy/protected workspaces and preserve no-workspace exclusive
+barriers. Retained dispatches, UNKNOWN recovery, policy generations, provider and
+resource guards remain enforced. Added fixed `scheduler_wait_reason` diagnostics
+to task status/list and both MCP facades, with fake-worker/SQLite and redaction
+regressions in the ordinary-pool and adapter boundary scripts. Updated the strict
+source inventory accordingly.
+
+`docs/ordinary-session-pool.md` describes the correction;
+`docs/resource-led-admission.md` defines the staged atomic CPU/RAM/GPU/VRAM and
+provider admission contract. The latter is not implemented by this change:
+existing local slots and whole-pool memory admission remain until a complete
+reservation protocol is verified. No live service, configuration or external
+state is changed by this source correction.
+
+## Unreleased: optional shared rolling-pressure policy
+
+Add versioned opt-in Host/Core rolling swap policy, fresh admission and provider
+checks, capacity-aware quiet/cooldown recovery, and owned-provider stop wiring.
+Keep the existing bounded lifetime policy as the default and preserve hard
+reserves, epoch/generation fences, ownership, no-replay and explicit recovery.
+Include the policy module in the Core image source allowlist. Top-level and
+bundled source and regression selections are kept together.
+
+`docs/validation/rolling-policy-lab.md` records the isolated Docker/UDS/owned-stop
+trial and its stand-in-provider limits. Real model load calibration, complete
+Core application acceptance and live configuration replacement remain unverified.
+No running service is changed by this source update.
+
+## Unreleased: observed new-prefix frontend installation
+
+Added a curated validation record at
+`docs/validation/bootstrap-frontend-20261113.json`, its KOL metadata declaration
+and an installation-evidence section in `docs/bootstrap.md`. It records source
+commit `ad0b133` and its exact tested source archive, real Codex/SDK catalog and
+owned cleanup, without raw logs, host paths, process/account identifiers or a
+claim that unconfigured backends are ready. Existing commands, runtime source,
+authority, limits and historical evidence remain unchanged. Later metadata/docs
+are not presented as a whole-source rerun.
+
+## Unreleased: bounded resource policy and explicit host recovery
+
+Updated the top-level and bundled `inference/laf_service` Core, server,
+lifecycle client/host/UDS and host-supervisor source, corresponding regressions,
+`README.md`/host-supervisor guides and `scripts/check-laf.py` selections.
+The Core and host share an explicitly bounded swap policy (512 MiB by default,
+operator selection up to 2048 MiB); read-only policy and epoch agreement is
+required before provider operations. Explicit quiet recovery preserves provider
+stop barriers, ownership, absolute RAM/VRAM/PSI checks and unknown outcomes.
+Host latch renewal requires an owner-triggered request and confirmed stopped
+providers plus quiet telemetry, not a Core-side privilege or automatic restart.
+Pending panic or a superseded epoch remains fenced; no uncertain job is replayed.
+
+Added `test_resource_policy.py` in both source trees and its KOL declarations in
+`.github/license-policy.json`. These are reviewed source and fake-clock/thread
+regressions, not acceptance of the split service, real signal recovery, all
+providers or larger hardware capacity. No live configuration, service, model,
+authentication or host swap settings are changed by this source update. Further
+pressure-aware time-window/unload accounting remains separate work in
+[Issue 13](https://github.com/i-pp/laf/issues/13); no automatic `swapoff` is added.
+
+## Unreleased: tunnel-only operator transaction
+
+Added `ops/frontend_cutover.py`, `ops/test_frontend_cutover.py` and
+`docs/frontend-only-transition.md`. The original operator code imports an existing
+owned recipe; it does not bundle that recipe, private machine configuration,
+credentials or runtime data. Added a strict28-unique fake-only selection in
+`.github/workflows/minimum-ci.yml` and classified the three new files in
+`.github/license-policy.json`. This `CHANGES.md` entry records the affected paths.
+The change does not install, enable, deploy or publish a service when checked out.
+
+
+
+## 2026-11-11: exact MCP SDK 1.30.0 source selection
+
+Changed the adapter startup guard and package dependency from 1.29.0 to 1.30.0,
+and recorded the official SDK wheel/sdist identities. Added mocked wrong/missing
+SDK startup regressions and real launcher initialization coverage; real protocol
+and integration tests now reject any SDK other than 1.30.0. Updated operator,
+license-boundary and SDK-only installer descriptions. Historical 1.29.0 evidence
+is retained separately from user-reported 1.30.0 installation checks. No Router,
+receipt, lifecycle, provider, resource, authority, dependency-installer behavior,
+or model code changed. All 29 installer pins remain unchanged. No installed
+environment, host configuration, service or catalog was modified. The initial
+source freeze does not claim native 1.30.0 protocol or live-runtime acceptance.
+
+## 2026-11-11: combined catalog and MCP source checks
+
+Combined the reviewed configured-catalog/provider-policy source and standalone
+MCP source without changing their production modules. Added
+`mcp/tests/integrated_router_fixture.py` and `test_integrated_router.py` to check
+real Handler/Controller/CoreBackends behavior with synthetic lifecycle/provider
+inputs. Checks cover exact configured IDs, Flash-off catalogs, legacy metadata,
+caller-owned attempt recovery, readiness, completion and cancellation, including
+an actual SDK stdio session. The bridge replaces HTTP/socket transport and peer
+authentication. These are local source checks, not live UDS, model, hardware,
+clean-host or install-ready acceptance. Added `mcp/MANIFEST.in` and an offline
+sdist-content regression so the source package retains SDK pin/audit metadata,
+launcher, notices and test helpers. Integration and full package tests still
+require the complete LAF source tree. Existing source-change notices remain.
+
+## 2026-11-11: normal configured model catalogs and optional Flash
+
+Added a strict normal Core catalog with pinned Ollama manifest identities, an
+explicit selected default and `flash_enabled`. Flash-free mode omits Strata
+paths/process recovery; mixed mode retains the existing Flash lifecycle while
+using configured small-model options. Legacy and isolated acceptance catalogs
+remain separate. Core inventory/loaded-manifest checks reject identity drift;
+empty-engine evidence now requires an actual list, and cancellation/provider
+generation is checked before chat. Model/capabilities responses include default
+and Flash metadata.
+
+The CLI discovers and validates the catalog before each job, supports selected
+IDs consistently across chat/ask/get/status/repair/development, and separates
+known no-submit failures/interrupts from uncertain submissions. A conversation
+resolves its default lazily and keeps its selected model. Added focused Core and
+client regressions and updated existing fixtures, aggregate registration, API,
+README and operator/client guides. No model acquisition, runtime deployment,
+hardware suitability or public-source publication is implied.
+
+## 2026-11-11: explicit host Ollama provider policy
+
+Added an opt-in host-only `ollama_provider` policy in `backends.py` for an already-
+installed immutable image, explicit version and bounded RAM/CPU/PID limits.
+Repository digests are resolved by local image inspection; no image pull/build,
+mutable tag fallback or new client/lifecycle authority is added. Legacy defaults
+and physical safety guards remain. Container inspection now checks CPU/PID limits,
+exact existing AMD devices and no added capabilities/device requests, and runs
+before a newly created container starts. Added deterministic provider tests and
+runner registration, a portability/smaller-VRAM acceptance guide, and updates to
+the existing supervisor/source-preview guides. No installed configuration,
+service, model or hardware acceptance changed.
+
 ## 2026-11-10: isolated terminal-client package
 
 Added `pyproject.toml` with a standard `laf` console entrypoint and no third-party
@@ -195,3 +515,363 @@ Open the existing interactive chat when no subcommand is supplied, including an
 explicit global socket override. Keep the canonical private socket, environment
 override, chat defaults, explicit subcommands, help and all socket safety checks.
 No installed command, PATH entry, service, model or permission is changed.
+
+## 2026-11-11: independent public Router MCP source candidate
+
+Added root plugin manifests, the separate `mcp/` Python adapter package and tests,
+`skills/laf-router/SKILL.md`, `docs/laf-mcp.md` and source/package checks. The five
+local stdio tools use only the public Router API and owned receipts. No private
+orchestrator source was imported. Existing Router, Core, host lifecycle, CLI and
+resource limits are unchanged. SDK/dependency licenses remain separate from KOL.
+This local candidate does not authorize installation, live switching or publication.
+
+## 2026-11-12: native SDK 1.30.0 evidence and general installer guide
+
+Record the recovered native SDK 1.30.0 stdio/fake-provider checks and remaining
+live-client, hardware, distribution and deployment gates. Preserve the missing
+full-suite command and package-log limitations without rerunning completed work.
+Replace operator-specific SDK retry paths and review hash with the generic
+inspect/prepare/printed-command workflow. Runtime source, tests, dependency pins,
+SDK installation and services are unchanged. No public release is made.
+
+## 2026-11-12: align the local candidate with Minimum CI
+
+Integrate public main 963133b's source/license CI and upstream oversized-request
+test race fix without changing production runtime. Classify the added candidate
+paths explicitly, preserve the external MIT SDK license, and separate generated
+dependency metadata from first-party licensing. Record rebased-tree static checks
+without presenting the earlier native 513/86 results as a rerun of this tree.
+SDK installation, services, models, catalog and public branches are unchanged.
+
+## 2026-11-12: explicit SDK-free CI coverage
+
+Integrate main03ddf8b's reviewed shared license Action and test-only early-Origin
+rejection race fix. Add explicit Minimum CI steps for 74 MCP source/mock/manifest
+cases and 56 installer regressions without SDK/dependency acquisition or install.
+Keep 12 actual SDK cases and two package-build cases as separate gates. Check
+the added commands locally and preserve scoped results without claiming native
+SDK, live client, hardware, deployment or public-release acceptance.
+
+The SDK-free CI steps also reject empty/duplicate selections, incomplete run
+counts, skips, expected failures and unexpected successes. Actual 74/56 runs
+passed; synthetic pass/skip/xfail/error/early-stop witnesses checked fail-closed
+result accounting without installing SDK packages or starting real providers.
+
+2026-11-12 proposed integrated source layout: root manifests/launcher select 27 legacy/Codex plus Router5; runtime/ is the reviewed compatibility snapshot. Root Core/CLI sources remain current public baseline. See SOURCE_ORIGIN.md. No deployment or rights grant implied.
+
+
+## Owner-authorized experimental integrated source proposal
+
+Publish the reviewed local compatibility/integration source and operator tooling
+in one personal-fork PR, preserving public PR11 ancestry and third-party notices.
+Update the root plugin description, README, install guides and origin records
+to distinguish authorized source publication from acceptance gates still open at
+that proposal stage: clean-host setup, plugin loading, complete 32-tool
+functionality and directory release. The later loader/discovery result below
+supersedes only that historical plugin-loading gap for its exact source archive.
+No credential, runtime state, private Git history, model, SDK, service unit binding
+or operational evidence is included. This source change does not install, switch
+or merge anything.
+
+
+## 2026-11-13: Codex package and version alignment
+
+Set the root plugin and both integrated MCP SERVER_INFO versions to 0.1.0.
+Add Codex compatibility/marketplace metadata and existing-owner-host registration
+instructions. Correct the portable OpenAI extension nesting. These are explicit
+local source changes beyond the pinned compatibility snapshot; guards, schemas,
+authentication, runtime behavior and model configuration remain unchanged.
+ChatGPT connection listing metadata is separate and not claimed changed here.
+
+Codex local marketplace documentation uses source-only archive extraction, not
+a Git checkout: the CLI otherwise copies a .git worktree pointer into its cache.
+The source builder already excludes Git metadata; no guard is weakened.
+
+
+## 2026-11-13: English public source and explicit Unicode test fixtures
+
+Translate the SDK installation guide and its bundled copy, chat examples and
+generated policy preamble to English; normalize English typography to ASCII.
+Retain intentional Unicode byte/path regression data with English explanations
+and a literal-only allowlist. Preserve the historical policy heading bytes using
+Unicode escapes; the verified body, hash/pin checks and parsing contract are
+unchanged. Add CI enforcement and negative controls. These documented language
+changes supersede the prior byte-frozen snapshot only in the affected source and
+documentation paths; no deployment, SDK install, auth or model change occurs.
+
+
+## 2026-11-13: deterministic header-rejection test transport
+
+A hosted Python 3.12 run exposed a pre-existing test-client race: the NPU fake
+HTTP server can return 415 after headers before http.client sends an unnecessary
+body. Keep production service/guards unchanged; send only declared headers for
+415/413 cases and assert no worker dispatch. Preserve the real body for the
+400 input-validation case. Close the test connection even if sending fails,
+and propagate unexpected send failures. Two RED-to-GREEN fixture regressions
+cover payload omission and cleanup without suppressing errors. Synchronize the
+bundled source-test copy. The original failed hosted run remains recorded.
+
+## 2026-11-13: test evidence is not a count specification
+
+Updated `docs/testing.md`, `docs/laf-sdk-install.md`, `docs/laf-mcp-validation.md`
+and their `runtime/public_laf/docs/` copies. Removed manually maintained test
+inventory totals from normative guide prose, described the verification behavior,
+and linked public GitHub checks with their tested commit. Dated historical results
+remain explicitly historical; mechanical empty/duplicate/incomplete-selection
+guards are unchanged. No runtime, dependency, service, permission or model change
+is made by this documentation correction.
+
+## 2026-11-13: guarded configurable ordinary sessions
+
+Modified the project-authored ordinary scheduler, daemon and concurrency source
+under `runtime/private_codex/src/`, its `scheduler-config.json`, and both MCP
+status projections. Added `docs/ordinary-session-pool.md`, its source-preview
+reference, dedicated ordinary-pool and status-boundary regressions, and explicit
+license/aggregate-check registration. Configuration selects a bounded local limit,
+with pinned generations, serialized complete-slot accounting and conservative
+memory admission. Missing or invalid observed status limits remain unknown.
+
+Per-worker resources and existing auth/capability boundaries are unchanged. This
+source proposal does not install or restart services, adopt an existing runtime,
+prove provider entitlement, or accept real parallel models. Verification results
+belong to their executed revision and public CI evidence, not a test-total
+specification. New Codex catalog/effort work is a separate unintegrated candidate.
+
+
+## 2026-11-13: provider catalog and immutable reasoning effort
+
+Feature-only port in `runtime/private_codex/src/codex_app_protocol.py`,
+`codex_host.py`, `codex_pipeline.py`, `mcp_adapter.py` and
+`notification_outbox.py`. Add `codex_models_list`, optional `reasoning_effort`,
+fresh advertised defaults, stored selection provenance and bounded full-wire
+catalog/owner pages. Admit the deliberately inspected 0.167 stable subset through
+the shared compatibility gate. Keep existing tools, OAuth/shared-tool ACLs,
+notify-only approvals, ordinary-pool configuration and version 0.1.0.
+
+Add fake protocol/ledger/dispatch/gateway/OAuth HTTP/notification regressions and
+the versioned method fixture under `scripts/`, with explicit strict-runner and
+license-policy registration. Update current tool-discovery descriptions and add
+`docs/codex-model-selection.md`; the `integrated-32` configuration key is preserved.
+Selected source behavior is not proof of provider execution, entitlement or
+billing. No runtime, service, account, SDK, model or deployment is changed.
+Independent adapted-source review and exact-commit CI are separate gates.
+
+
+## 2026-11-13: keep OAuth access to proven persisted blocked inputs
+
+Correct the adapted catalog feature's composed submission path in
+`runtime/private_codex/src/mcp_adapter.py` and `notification_outbox.py`. A new
+pre-turn BLOCKED input can receive its original owner's binding only after a
+bounded read-only match of the same runtime ledger, caller-intent operation,
+resource IDs and immutable selection. Preserve the existing Events authorizer,
+foreign-origin conflict checks, error result and no-replay rules. Do not bind
+unknown, failed, forged or mismatched results through this new path.
+
+Add direct and proxy/daemon/HostGateway OAuth regressions to
+`scripts/test_codex_catalog_effort.py`, update its strict runner selection and
+the model-selection/testing/origin guides. Tests use only temporary databases
+and fake transports. No new RPC, live auth/config, service, SDK, model or ordinary
+pool change is made. Independent re-review remains required.
+
+
+## 2026-11-13: record scoped Codex loader and discovery evidence
+
+Update `README.md`, `docs/codex-install.md`, `docs/integrated-plugin-install.md`
+and the matching `packaging/INTEGRATED_PLUGIN_GUIDE.md` to replace the open loader
+gate with completed historical evidence for source commit
+`b531d31b6db9206a5a5c15ba2efb7d406931fc64`. Official Codex CLI 0.167.0 loaded the
+source-only package from a new isolated cache, resolved its relative launcher
+from an empty working directory, and discovered the exact 33-tool catalog through
+an existing SDK 1.30.0 with synthetic private runtime/UDS fixtures. The Codex
+install guide records the archive identity, public evidence links and boundaries.
+
+This documentation correction is not a rerun of any later source ZIP. It does
+not accept clean-host provisioning, all tool actions, real-account/provider
+model or effort execution, billing, hardware, live backend adoption or directory
+release. The unresolved legacy-helper transport limit and existing private
+configuration prerequisites remain. Commands, source/header rights and third-party
+terms are unchanged; no runtime, manifest, dependency, service or account changes
+are made.
+
+
+## 2026-11-13: record bounded Sol/max application-path completion
+
+Update `docs/codex-model-selection.md`, the README and both install guides,
+including `packaging/INTEGRATED_PLUGIN_GUIDE.md`, with a source-bound one-turn
+result through a private bounded native carrier. The public b531 Pipeline/protocol
+path (unchanged at df24c5c) requested exact `gpt-6.1-sol`/`max`, persisted matching
+selection/fingerprints and reached `COMPLETED` with `LAF_EFFORT_OK`. Thread-start
+echo matched; actual-turn effort echo was unavailable and execution-verification
+flags remain false. The model-selection guide links the public evidence and
+separate exact-commit source CI, and records the normal-context and sampled scope.
+
+This is not proof of internal reasoning strength or billing, nor acceptance of
+all models/tools, normal installation, clean-host setup or live backend adoption.
+The historical b531 loader/archive boundary remains unchanged. No private paths,
+identifiers, logs, instructions or account details are published. Commands,
+source/header rights and third-party terms are unchanged; this documentation
+change does not modify runtime, manifests, dependencies, tests or services.
+
+
+## 2026-11-13: prepare a new private integrated runtime prefix
+
+Add the standard-library `runtime/integration/laf_bootstrap.py` preparation,
+dry-run, doctor and explicit new-config activation flow. A new independent
+private prefix receives the real runtime source and tracked configuration, not
+a placeholder daemon or copied production state. Existing prefixes and config
+files are preserved; activation does not register Codex or start a service.
+
+Add a strictly verified, self-contained canonical policy snapshot for new
+schema-2 prefixes, with source/license/notice provenance and no fabricated Git
+checkout attestation. Existing schema-1 policy selection and guards retain their
+previous behavior. Explicit unconfigured/deny-all backend state keeps the full
+33-tool schemas visible without creating fake helper, mailbox/grant or experiment
+records or dispatching operations against missing backends.
+
+Cover source, path, permission, umask, failure-cleanup and policy boundaries,
+including the exact copied doctor command from a separate working directory
+without a checkout-specific Python path. Preserve the original upstream license
+bytes even where their existing trailing blank line triggers a whitespace warning.
+This is runtime preparation, not operational installation or all-backend
+acceptance. At this preparation milestone, backend binding was not implemented.
+The `prepare` command does not install or copy SDK/dependency binaries, model
+data, authentication secrets or personal user-instruction files, and does not
+change an existing daemon, service, account or live configuration.
+
+
+## 2026-11-13: explicit new-prefix Router and Codex bindings
+
+Extend `runtime/integration/laf_bootstrap.py` with metadata-only
+`configure-router`, `configure-codex` and explicit command emission. Update
+`backend_state.py`, the stdio/shared/legacy adapters and both launcher copies
+to consume one atomically published private binding record through the immutable
+plugin anchor. Pin Router filesystem identity and Codex native/policy/common
+policy snapshots; refuse changed, existing, used or uncertain binding state.
+The Codex gateway uses its existing finite read-only schema1/concurrency1 path,
+not a change to ordinary maximum_sessions8 or a provider-quota guarantee.
+Existing schema1 configuration, OAuth/ACL, ownership, resource and UNKNOWN/
+no-replay behavior remains. The unpinned builder cannot select this new path.
+
+Add the separate user-run `snapshot-codex` operation: explicit existing source
+plus expected SHA256, bounded512MiB streaming and coherent source/copy checks,
+NEW owner0500 `PREFIX/bin/codex` under0700. This optional copy does not execute
+the native, change its original0775 installation, copy authentication/model/
+user-instruction data, or include the private binary in the public source ZIP.
+It is an explicit exception to preparation's no-dependency-copy scope, not an
+automatic dependency installer or permission repair.
+
+Add `scripts/test_bootstrap_bindings.py`, strict source selection and license
+classification, and document the actual commands in `docs/bootstrap.md`, linked
+from `README.md` and `docs/codex-install.md` without changing historical evidence.
+Source/tempfile tests cover atomic publication and uncertain durability, active
+anchor consistency, guarded composition, native/hash/path/swap/fault bounds and
+fake-only gateway metadata. No new real native, SDK, socket, service, account or
+model execution is asserted by those tests. Prior phase1/loader/model evidence
+remains historical rather than acceptance for this new source.
+
+## Local resource owner completion (2026-11-15)
+
+Resource-only CLI execution now enters a verified private scope and charges its
+standalone coordinator before Runner/native creation. Existing direct unbounded
+APIs continue to refuse. The coordinator remains charged until known exit and
+empty-scope evidence; provider and UNKNOWN execution evidence is retained.
+
+An explicit host-only dead-Router reconciliation command uses the existing
+ownership locks, unchanged exact candidate, stopped fixed providers, empty
+scopes and fresh paired physical GPU/resource evidence. It never starts/stops a
+provider, never clears a cloud grant and never authorizes replay. Its read-only
+command planner and staged hardware calibration procedure execute no device or
+service changes. The new paths have offline boundary regressions; real device,
+systemd, calibration, Flash/NPU integration and live adoption remain separate.
+
+## Local resource-owned Flash connection (2026-11-15)
+
+The split Core/host resource path now supports an explicitly pinned Flash model
+with separate loading/residency/execution demands. Complete bounded asset and
+command verification runs in both Core and its worker before native load; a
+parent artifact pin and per-generation terminal request identity prevent stale
+or substituted native replies from releasing a grant. Existing process-group,
+fixed-provider, GPU release and emergency-stop barriers remain. Live controllers
+stay charged; lost/unknown outcomes never authorize replay. The new helper is
+explicitly allowed into the Core source image and imports no host authority.
+
+Offline tests use only synthetic assets, pipes and native/lifecycle objects.
+Actual Flash peaks, model assets, GPU behavior and hardware acceptance remain
+unverified. Default configuration is unchanged and NPU resource mode remains
+refused pending independent device ownership/accounting integration.
+
+## Non-admitting NPU calibration collector (2026-11-15)
+
+Added a bounded, read-only pinned sysfs/DRM-fdinfo collector for an already owned
+NPU scope. It requires a private hard-limited reader, validates fresh
+PCI/driver/firmware/PID/start/UID/scope evidence and rejects unknown or stale
+observations. Empty or quiet owned counters never prove global device ownership:
+every result remains ineligible for admission. No device, ioctl, vendor SDK,
+native model, service action or ledger mutation is invoked. NPU shared-ledger
+admission, Router binding and positive uncertain-device recovery remain
+unimplemented; the existing resource-only NPU refusal is preserved. Tests use
+synthetic kernel files and do not establish hardware acceptance.
+
+## Local public/resource integration (2026-11-15)
+
+Combine the published installed-acceptance/backend binding and rejected-read
+reliability paths with the reviewed resource admission implementation. A failed
+native read returns current interleaved task state while resource grants remain
+held until exact account/history or existing positive cleanup proof. Resource
+tokens, provider limits, generation and UNKNOWN/no-replay fences remain.
+This is an isolated source integration, not production configuration or a live
+service transition; NPU shared admission and real calibrated adoption are still
+separate requirements.
+
+## Correct counterless accelerator observations (2026-11-15)
+
+Resolve the pinned NPU's actual accelerator device numbers through sysfs and
+check each observed descriptor before and after its fdinfo read. A matching
+open accelerator with missing counters is unknown, rather than an empty client
+set. Reject descriptor substitution and device rebindings. The collector still
+never opens a device and never grants admission or proves global idle.
+
+## Preserve GPU grants with counterless device handles (2026-11-15)
+
+Use pinned sysfs DRM device numbers and before/after descriptor identity when
+reading owned GPU counters. Missing counters, descriptor/device substitution
+and over-age final reads retain uncertainty instead of proving zero residency.
+A KFD handle has no implemented per-device allocation/release proof and also
+retains reservations. This conservative refusal can block Flash/ROCm resource
+mode; it does not change the running legacy service or enable another route.
+
+Pin the stricter descriptor semantics in the shared resource protocol generation.
+Earlier unpublished resource owners cannot join while grants remain held; no
+automatic migration, grant discard or running-service adoption is performed.
+
+Distinguish absent KFD support from denied kernel metadata. A denied KFD stat
+never becomes proof of absence. The final unpublished generation also fences
+earlier descriptor collectors with weaker metadata visibility.
+
+## Retain reservations on unreadable scope metadata (2026-11-15)
+
+Replace error-suppressing existence checks in positive GPU, Router, shared-owner
+and ordinary-worker release proofs. Only a verified missing scope or stable
+valid zero-population event proves cleanup. Denied metadata, partial files and
+changed scope identity remain unknown; exact model/job/controller grants stay
+held. Prospective worker cleanup also refuses unreadable scope state. Old
+unpublished resource participants are fenced by the stricter generation.
+
+Modified 2026-11-15: serialize ordinary capture-marker materialization with local acknowledgements, clean exact acknowledged markers idempotently, and retain permanent overflow uncertainty through checkpoint-only recovery.
+
+
+## 2026-11-16: explicitly pinned native Code Mode companion
+
+Add an opt-in paired `snapshot-codex` copy and `configure-codex` binding for a
+trusted existing `codex-code-mode-host` ELF. A native release using this helper
+can generate a proposal while workspace tools fail when only its main ELF was
+copied. Both expected hashes are explicit; source bytes and permissions remain
+unchanged. New files stay private, and a partial pair is rolled back without
+removing unrelated data.
+
+New Codex bindings record either the selected sibling's identity/hash or its
+explicit absence. Executor preparation refuses changed, missing, replaced or
+newly unpinned helpers. Existing bindings without the field keep legacy
+compatibility. Native protocol methods, tool contracts, resource/provider
+admission, UNKNOWN protection and live configuration are unchanged. Source
+archives include none of the operator's native binaries, credentials or logs.

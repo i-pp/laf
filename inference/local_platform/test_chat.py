@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-11: preserve job safety assertions with required catalog discovery.
+
 """Offline chat and bounded filename-search checks. No real model or Router."""
 import io
 import json
@@ -40,7 +42,7 @@ class DefaultEntryTests(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True), patch.object(chat, 'run_chat', return_value=0) as run, patch.object(cli, 'request') as request:
             self.assertEqual(cli.main(argv), 0)
         run.assert_called_once_with('/run/user/'+str(os.getuid())+'/laf-inference/service.sock',
-                                    'gpt-oss-120b', 512, 180, None)
+                                    None, 512, 180, None)
         request.assert_not_called()
         self.assertEqual(argv, [])
 
@@ -63,7 +65,7 @@ class DefaultEntryTests(unittest.TestCase):
     def test_global_socket_override_without_a_subcommand_enters_chat(self):
         with patch.dict(os.environ, {'LOCAL_INFERENCE_SOCKET':'/ignored/service.sock'}), patch.object(chat, 'run_chat', return_value=0) as run:
             self.assertEqual(cli.main(['--socket','/explicit/private/service.sock']), 0)
-        run.assert_called_once_with('/explicit/private/service.sock', 'gpt-oss-120b', 512, 180, None)
+        run.assert_called_once_with('/explicit/private/service.sock', None, 512, 180, None)
 
     def test_help_and_invalid_commands_never_enter_chat(self):
         for argv, expected in [(['--help'],0), (['not-a-command'],2)]:
@@ -465,12 +467,15 @@ class JSONJobCompatibilityTests(unittest.TestCase):
         calls = []
         def call(path, method, route, body=None):
             calls.append((method, route, body))
+            if route == '/v1/models':
+                return {'models':['flash'], 'context_limit':8192,
+                        'max_output_tokens':1024, 'max_large_models_loaded':1}
             if method == 'POST':
                 return {'id':JOB}
             return {'id':JOB,'model':'flash','status':'completed','result':{'content':'yes'}}
         result = cli.converse('/unused', 'flash', messages, call=call)
-        self.assertEqual([entry[0] for entry in calls], ['POST','GET'])
-        self.assertEqual(calls[0][2]['messages'], messages)
+        self.assertEqual([entry[0] for entry in calls], ['GET','POST','GET'])
+        self.assertEqual(calls[1][2]['messages'], messages)
         self.assertEqual(result['content'], 'yes')
         self.assertFalse(result['automatic_retry'])
 

@@ -18,13 +18,15 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-11: allow configured bounded model IDs without expanding workflow capabilities.
+
 """Structured client tools over approved snapshots; project tests require bounded Docker."""
 import argparse
 import json
 import math
 from pathlib import Path
 import time
-from .cli import ask, ClientError, MODELS
+from .cli import ask, ClientError, ClientNotSubmitted, ClientPreflightInterrupted, is_model_id
 from .workspace import Workspace, WorkspaceIntegrityError, validate_manifest, strict_json
 
 TOOLS = {
@@ -89,7 +91,7 @@ def make_prompt(manifest,events):
 
 def develop(socket_path,source,manifest,workdir,runner,model='coder-next',max_turns=6,
             deadline_seconds=300,adviser=ask,clock=time.monotonic):
-    if model not in MODELS or type(max_turns) is not int or not 1<=max_turns<=8:
+    if not is_model_id(model) or type(max_turns) is not int or not 1<=max_turns<=8:
         raise ValueError('supported model and1..8 turns required')
     if type(deadline_seconds) is not int or not 60<=deadline_seconds<=600:
         raise ValueError('deadline must be60..600 seconds')
@@ -204,8 +206,12 @@ def develop(socket_path,source,manifest,workdir,runner,model='coder-next',max_tu
                     else:result['reason']='tool turn budget exhausted'
         except WorkspaceIntegrityError:
             boundary_failure('snapshot integrity lost; further inference stopped')
+        except ClientNotSubmitted as exc:
+            result.update(status='failed',reason=str(exc),job_id=None)
         except ClientError as exc:
             result.update(status='uncertain',reason='inference outcome uncertain; not replayed',job_id=exc.job_id)
+        except ClientPreflightInterrupted as exc:
+            result.update(status='cancelled',reason=str(exc),job_id=None,submission_attempted=False)
         except KeyboardInterrupt as exc:
             result.update(status='cancelled',reason='client interrupted; inference stop not confirmed',
                           job_id=getattr(exc,'job_id',None),stop_confirmed=False)
@@ -229,7 +235,7 @@ def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--socket',required=True);p.add_argument('--source',required=True)
     p.add_argument('--manifest',required=True);p.add_argument('--workdir',required=True)
-    p.add_argument('--model',choices=MODELS,default='coder-next');p.add_argument('--max-turns',type=int,default=6)
+    p.add_argument('--model',default='coder-next');p.add_argument('--max-turns',type=int,default=6)
     p.add_argument('--deadline',type=int,default=300)
     p.add_argument('--test-image',required=True,help='operator-reviewed cached exact sha256 image; never a model option')
     p.add_argument('--test-python',choices=['/usr/bin/python3','/usr/local/bin/python3'],default='/usr/local/bin/python3')

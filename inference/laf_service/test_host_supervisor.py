@@ -85,6 +85,122 @@ class SupervisorTest(unittest.TestCase):
         sup.close()
         self.assertFalse((self.root / 'runtime/lifecycle.sock').exists())
 
+    def test_rolling_recovery_honors_policy_quiet_and_cooldown(self):
+        from dataclasses import asdict
+        from .test_swap_window import monitor, sample as pressure_sample
+        self.config['rolling_swap_policy'] = dict(asdict(monitor().policy), quiet_seconds=6, cooldown_seconds=8)
+        resources=pressure_sample(swap_used=48*(1<<30))
+        self.kwargs['pressure_reader'] = lambda: dict(resources)
+        sup=self.make()
+        sup.panic('test emergency')
+        old=sup.port.epoch
+        started=self.now[0]
+        with patch('inference.laf_service.host_supervisor.time.sleep', side_effect=lambda seconds: self.now.__setitem__(0,self.now[0]+seconds)):
+            sup.recover()
+        self.assertGreaterEqual(self.now[0]-started,8)
+        self.assertNotEqual(sup.port.epoch,old)
+        self.assertEqual(sup.resource_authority.decision['action'],'warmup')
+
+    def test_rolling_recovery_rejects_swap_topology_change(self):
+        from dataclasses import asdict
+        from .test_swap_window import monitor, sample as pressure_sample
+        self.config['rolling_swap_policy'] = dict(asdict(monitor().policy), cooldown_seconds=8)
+        resources=pressure_sample(swap_used=48*(1<<30))
+        self.kwargs['pressure_reader'] = lambda: dict(resources)
+        sup=self.make();sup.panic('test emergency');old=sup.port.epoch
+        def sleep(seconds):
+            self.now[0]+=seconds
+            if self.now[0]==101:
+                resources['swap_total']+=1<<30
+                resources['swap_free']+=1<<30
+        with patch('inference.laf_service.host_supervisor.time.sleep',side_effect=sleep):
+            with self.assertRaises(ServiceError):sup.recover()
+        self.assertEqual(sup.port.epoch,old)
+        self.assertTrue(sup.port.safety_fault)
+
+    def test_rolling_recovery_rejects_low_free_swap(self):
+        from dataclasses import asdict
+        from .test_swap_window import monitor, sample as pressure_sample
+        self.config['rolling_swap_policy'] = asdict(monitor().policy)
+        self.kwargs['pressure_reader'] = lambda: pressure_sample(swap_used=64*(1<<30),swap_free=0)
+        sup=self.make();sup.panic('test emergency');old=sup.port.epoch
+        with self.assertRaises(ServiceError):sup.recover()
+        self.assertEqual(sup.port.epoch,old)
+        self.assertTrue(sup.port.safety_fault)
+
+    def test_shared_authority_warmup_and_owned_stop(self):
+        from dataclasses import asdict
+        from .test_swap_window import monitor, sample as pressure_sample
+        policy = asdict(monitor().policy)
+        self.config['rolling_swap_policy'] = policy
+        resources = pressure_sample(swap_used=48 * (1 << 30))
+        self.kwargs['pressure_reader'] = lambda: dict(resources)
+        sup = self.make()
+        returned = sup.port.dispatch({'operation': 'resource_policy'})
+        self.assertEqual(returned['policy_version'], 2)
+        self.assertEqual(returned['rolling_swap_policy'], policy)
+        for step in range(9):
+            self.now[0] = 100 + step * .5
+            sup.tick()
+        self.assertFalse(sup.port.safety_fault)
+        self.now[0] = 104.5
+        resources['pswpout'] = 2
+        sup.tick()
+        self.assertTrue(sup.port.safety_fault)
+        self.assertEqual(self.events, ['core', 'ollama'])
+
+    def test_rolling_pressure_uses_owned_stop_barrier(self):
+        from .test_swap_window import monitor, sample as pressure_sample
+        sup = self.make()
+        window = monitor()
+        self.assertEqual(sup.observe_pressure(window, 0, pressure_sample())['action'], 'warmup')
+        result = sup.observe_pressure(window, 1, pressure_sample(pswpout=2))
+        self.assertEqual(result['action'], 'stopped')
+        self.assertEqual(self.events, ['core', 'ollama'])
+        self.assertTrue(sup.port.safety_fault)
+        sup.observe_pressure(window, 2, pressure_sample())
+        self.assertEqual(self.events, ['core', 'ollama'])
+
+    def test_pressure_advisory_rejects_concurrent_emergency(self):
+        sup = self.make()
+        fenced = threading.Event()
+        worker = None
+        original_lock = sup.port.state_lock
+
+        def observe(*args, **kwargs):
+            nonlocal worker
+            def emergency():
+                # Establish the same state fence that panic creates before
+                # waiting for panic_lock; complete cleanup after hook returns.
+                with original_lock:
+                    sup.panic_serial += 1
+                    sup.port.generation += 1
+                    sup.port.safety_fault = 'new emergency'
+                    sup.port.stopping = True
+                fenced.set()
+                sup.panic('new emergency')
+            worker = threading.Thread(target=emergency, daemon=True)
+            worker.start()
+            self.assertTrue(fenced.wait(2))
+            return {'action': 'admit', 'reason': 'old healthy observation'}
+
+        window = Mock()
+        window.observe.side_effect = observe
+        result = sup.observe_pressure(window, 0, {})
+        worker.join(2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(result['action'], 'stop')
+        self.assertTrue(sup.port.safety_fault)
+
+    def test_rolling_pressure_unconfirmed_stop_keeps_latch(self):
+        from .test_swap_window import monitor, sample as pressure_sample
+        sup = self.make()
+        self.provider.stop.side_effect = RuntimeError('stop failed')
+        result = sup.observe_pressure(monitor(), 0, pressure_sample(mem_available=0))
+        self.assertEqual(result['action'], 'stop_unconfirmed')
+        self.assertTrue(sup.port.safety_fault)
+        self.assertFalse(sup.cleanup_confirmed)
+
     def test_locks_nontruncating_and_contention(self):
         self.make()
         with self.assertRaises(BlockingIOError):
@@ -171,10 +287,10 @@ class SupervisorTest(unittest.TestCase):
             self.events.append('core')
         self.core.stop.side_effect = stop_core
         # Deterministic monitor turns without sleeping or real services. If the
-        # loop fails to stop after confirmed cleanup, fail on the third wait.
-        with patch.object(sup.closed, 'wait', side_effect=[False, False, AssertionError('extra monitor turn')]) as wait:
+        # cleanup is not repeated; the monitor stays alive for owner recovery.
+        with patch.object(sup.closed, 'wait', side_effect=[False, False, False, True]) as wait:
             sup._monitor()
-        self.assertEqual(wait.call_count, 2)
+        self.assertEqual(wait.call_count, 4)
         self.assertEqual(attempts, ['core', 'core'])
         self.assertEqual(self.events, ['core', 'ollama'])
         self.assertEqual(sup.port.read_resources.call_count, 1)
@@ -185,12 +301,129 @@ class SupervisorTest(unittest.TestCase):
         sup = self.make()
         self.now[0] = 104
         self.provider.stop.side_effect = [ServiceError('physical barrier uncertain'), None]
-        with patch.object(sup.closed, 'wait', side_effect=[False, False, AssertionError('extra monitor turn')]):
+        with patch.object(sup.closed, 'wait', side_effect=[False, False, False, True]):
             sup._monitor()
         self.assertEqual(self.core.stop.call_count, 2)
         self.assertEqual(self.provider.stop.call_count, 2)
         self.assertTrue(sup.cleanup_confirmed)
         self.assertTrue(sup.port.safety_fault)
+
+    def test_explicit_host_recovery_updates_epoch_and_keeps_core_stopped(self):
+        self.config['swap_limit_mib'] = 2048
+        sup = self.make(); sup.panic('initial resource fault'); old_epoch = sup.port.epoch
+        with patch(__package__ + '.host_supervisor.time.sleep'):
+            result = sup.recover()
+        self.assertNotEqual(result['epoch'], old_epoch)
+        self.assertTrue(result['core_restart_required'])
+        self.assertIsNone(sup.port.safety_fault)
+        self.assertTrue(sup.awaiting_core)
+        self.assertEqual(sup.port.swap_limit_mib, 2048)
+        self.provider.ensure.assert_not_called()
+        self.now[0] += 100; sup.tick()
+        self.assertIsNone(sup.port.safety_fault)
+        self.core.running.return_value = True; sup.tick()
+        self.assertFalse(sup.awaiting_core)
+        self.core.running.return_value = False
+        self.now[0] += 3; sup.tick()
+        self.assertTrue(sup.port.safety_fault)
+
+    def test_recovered_host_keeps_lease_exception_limited_to_stopped_providers(self):
+        sup = self.make()
+        sup.panic('initial resource fault')
+        with patch(__package__ + '.host_supervisor.time.sleep'):
+            sup.recover()
+        self.provider.running.return_value = True
+        sup.tick()
+        self.assertTrue(sup.port.safety_fault)
+        self.provider.running.return_value = False
+
+    def test_host_recovery_stops_on_pressure_and_preserves_epoch(self):
+        sup = self.make(); sup.panic('initial resource fault'); old_epoch = sup.port.epoch
+        sup.port.read_resources = lambda: {**sample(), 'psi_full_avg10': 2}
+        with patch(__package__ + '.host_supervisor.time.sleep'):
+            with self.assertRaises(ServiceError): sup.recover()
+        self.assertEqual(sup.port.epoch, old_epoch)
+        self.assertTrue(sup.port.safety_fault)
+
+    def test_host_recovery_uncertain_stop_never_rebases(self):
+        sup = self.make(); sup.panic('initial resource fault'); baseline = dict(sup.port.baseline)
+        self.provider.stop.reset_mock()
+        self.core.stop.side_effect = ServiceError('unknown stop')
+        with self.assertRaises(ServiceError): sup.recover()
+        self.assertEqual(sup.port.baseline, baseline)
+        self.assertTrue(sup.port.safety_fault)
+        self.provider.stop.assert_not_called()
+
+    def test_host_recovery_rejects_cancel_and_new_panic(self):
+        for cancel in (True, False):
+            with self.subTest(cancel=cancel):
+                sup = self.make(); sup.panic('initial resource fault'); old_epoch = sup.port.epoch
+                cancelled = [False]
+                def interrupt(_):
+                    if cancel: cancelled[0] = True
+                    else: sup.panic_serial += 1
+                with patch(__package__ + '.host_supervisor.time.sleep', side_effect=interrupt):
+                    with self.assertRaises(ServiceError): sup.recover(cancelled=lambda: cancelled[0])
+                self.assertEqual(sup.port.epoch, old_epoch)
+                self.assertTrue(sup.port.safety_fault)
+                sup.close()
+
+    def test_core_cannot_request_host_recovery(self):
+        sup = self.make()
+        with self.assertRaises(ValueError):
+            sup.port.dispatch({'operation': 'recover', 'epoch': sup.port.epoch, 'generation': 0})
+        self.core.stop.assert_not_called()
+
+    def test_host_policy_readonly_and_bounded(self):
+        self.config['swap_limit_mib'] = 2048
+        sup = self.make()
+        self.assertEqual(sup.port.dispatch({'operation':'resource_policy'})['swap_limit_mib'], 2048)
+        self.provider.ensure.assert_not_called()
+        with self.assertRaises(ValueError):
+            sup.port.dispatch({'operation':'resource_policy','swap_limit_mib':512})
+
+    def test_healthy_host_recovery_is_rejected_before_stop(self):
+        sup = self.make()
+        with self.assertRaisesRegex(ServiceError, 'existing safety latch'):
+            sup.recover()
+        self.core.stop.assert_not_called()
+        self.provider.stop.assert_not_called()
+
+    def test_panic_between_recovery_cleanup_and_admission_is_not_cleared(self):
+        sup = self.make(); sup.panic('initial resource fault')
+        old_epoch = sup.port.epoch
+        original = sup.panic
+        def racing_panic(reason):
+            result = original(reason)
+            with sup.port.state_lock:
+                sup.panic_serial += 1
+                sup.port.safety_fault = 'new emergency'
+            return result
+        with patch.object(sup, 'panic', side_effect=racing_panic):
+            with self.assertRaises(ServiceError): sup.recover()
+        self.assertEqual(sup.port.epoch, old_epoch)
+        self.assertEqual(sup.port.safety_fault, 'new emergency')
+
+    def test_owner_signal_coalesces_recovery_and_shutdown(self):
+        import signal
+        from . import host_supervisor as module
+        handlers = {}
+        supervisor = Mock()
+        supervisor.start.side_effect = lambda: handlers[signal.SIGUSR1](None, None)
+        def recover(*, cancelled):
+            handlers[signal.SIGUSR1](None, None)
+            handlers[signal.SIGUSR1](None, None)
+            handlers[signal.SIGTERM](None, None)
+            self.assertTrue(cancelled())
+            raise ServiceError('cancelled')
+        supervisor.recover.side_effect = recover
+        with patch.object(module.signal, 'signal', side_effect=lambda sig, fn: handlers.__setitem__(sig, fn)), \
+                patch.object(module, 'read_config', return_value={}), \
+                patch.object(module, 'HostSupervisor', return_value=supervisor), \
+                patch.object(module.sys, 'argv', ['host-supervisor', '--config', '/unused']):
+            module.main()
+        supervisor.recover.assert_called_once()
+        supervisor.close.assert_called_once()
 
     def test_sample_refresh_and_expiry(self):
         sup = self.make()

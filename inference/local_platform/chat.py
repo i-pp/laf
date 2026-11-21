@@ -19,6 +19,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Modified 2026-11-10: separate model text from client observations and preserve complete turns.
+# Modified 2026-11-11: defer Router default selection and pin the first returned model.
 
 """Conversation display over the existing JSON job API, with no shell or writes."""
 import fnmatch
@@ -30,7 +31,7 @@ import stat
 import sys
 import unicodedata
 
-from .cli import ClientError, converse, response_json
+from .cli import ClientError, ClientPreflightInterrupted, converse, is_model_id, response_json
 from .workspace import FORBIDDEN, open_absolute_dir, relative_path
 
 MAX_ENTRIES = 4096
@@ -211,12 +212,15 @@ def run_chat(path, model, max_tokens=512, timeout=180, workspace=None,
     history = []
     try:
         # Validate before reading input or making a network request.
+        if model is not None and not is_model_id(model):
+            raise ClientError('invalid model identifier')
         context([], {'role':'user', 'content':'check'}, max_tokens, workspace is not None)
         if type(timeout) is not int or not 1 <= timeout <= 300:
             raise ClientError('timeout must be 1..300')
         if workspace is not None:
             search = FilenameSearch(workspace)
-        out.write('LAF chat (' + model + '). Generated advice is unverified. /help for commands.\n')
+        out.write('LAF chat (' + (model or 'Router default, resolved on first message')
+                  + '). Generated advice is unverified. /help for commands.\n')
         if search is not None:
             out.write('Filename search enabled inside the explicit workspace. No file contents or shell.\n'
                       'Model-requested results join this in-memory chat and may be sent on your next message.\n')
@@ -267,6 +271,11 @@ def run_chat(path, model, max_tokens=512, timeout=180, workspace=None,
             if dropped:
                 out.write('Client> Context limit: dropped ' + str(dropped) + ' oldest turn(s).\n')
             result = generate(path, model, messages, max_tokens, timeout)
+            selected = result.get('model', model)
+            if not is_model_id(selected) or model is not None and selected != model:
+                raise ClientError('conversation model identity mismatch', result.get('job_id'))
+            # Keep this selection even after /reset or a truncated response.
+            model = selected
             content = result['content']
             if result.get('finish_reason') == 'length':
                 out.write(model_text(content))
@@ -298,6 +307,8 @@ def run_chat(path, model, max_tokens=512, timeout=180, workspace=None,
         return 1
     except KeyboardInterrupt as exc:
         err.write('\nChat interrupted. No request was automatically retried.\n')
+        if isinstance(exc, ClientPreflightInterrupted):
+            err.write(str(exc) + '.\n')
         identifier = getattr(exc, 'job_id', None)
         if identifier:
             err.write('Job ID: ' + identifier + '. Cancellation requested or uncertain; stop is not confirmed.\n')

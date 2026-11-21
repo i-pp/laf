@@ -18,6 +18,13 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Changed 2026-11-13: bounded swap policy and explicit quiet resource recovery.
+
+# Modified 2026-11-15: optional shared resource admission and guarded queue waits.
+# Modified 2026-11-20: request-driven Flash loading in resource mode.
+# Modified 2026-11-20: reconcile unused residency when its pre-load wait ends.
+# Modified 2026-11-20: distinguish read-only Flash preparation from abortable work.
+
 """Bounded single-lane scheduling and fail-closed resource admission."""
 from __future__ import annotations
 import dataclasses
@@ -29,12 +36,33 @@ from pathlib import Path
 
 GIB = 1 << 30
 MODELS = {"flash", "coder-next", "gpt-oss-120b"}
+JOB_STOPPED = 'cancelled, expired, or resource safety latch set'
 
 class ServiceError(Exception):
     pass
 
 
-def snapshot():
+class JobInterrupted(ServiceError):
+    """Job-local cancellation or expiry."""
+
+
+RESOURCE_WAIT_CODES = frozenset({'resource_observation_unknown', 'resource_observation_stale',
+    'resource_usage_unknown', 'resource_gpu_topology_unknown'} | {
+    'resource_' + dimension + '_' + reason
+    for dimension in ('cpu_millicores','ram_bytes','gpu_milliunits','vram_bytes')
+    for reason in ('unknown','headroom','budget')})
+
+
+class ResourceWait(ServiceError):
+    """A correlated pre-dispatch refusal, never an uncertain execution result."""
+    def __init__(self, code, *, release_unused=None):
+        if not isinstance(code,str) or code not in RESOURCE_WAIT_CODES:raise ValueError('Unknown resource wait code')
+        self.code=code
+        self.release_unused = release_unused  # Local only. The wire reply carries just the refusal code.
+        super().__init__(code)
+
+
+def snapshot(*, swap_capacity=False):
     mem = {}
     for line in Path('/proc/meminfo').read_text().splitlines():
         k, v = line.split(':', 1)
@@ -46,22 +74,27 @@ def snapshot():
     gpu = devices[0].parent
     full = next(l for l in Path('/proc/pressure/memory').read_text().splitlines() if l.startswith('full '))
     psi = dict(x.split('=') for x in full.split()[1:])
-    return {'mem_available': mem['MemAvailable'], 'swap_used': mem['SwapTotal'] - mem['SwapFree'],
+    result = {'mem_available': mem['MemAvailable'], 'swap_used': mem['SwapTotal'] - mem['SwapFree'],
             'vram_total': int((gpu / 'mem_info_vram_total').read_text()),
             'vram_used': int((gpu / 'mem_info_vram_used').read_text()),
             'pswpin': int(vm['pswpin']), 'pswpout': int(vm['pswpout']), 'psi_full_avg10': float(psi['avg10'])}
+    if swap_capacity:
+        result.update(swap_total=mem['SwapTotal'], swap_free=mem['SwapFree'])
+    return result
 
 
-def check_resources(s, baseline):
+def check_resources(s, baseline, swap_limit_mib=512):
+    if type(swap_limit_mib) is not int or not 512 <= swap_limit_mib <= 2048:
+        raise ValueError("swap_limit_mib must be 512..2048")
     if s['mem_available'] < 8 * GIB:
         raise ServiceError('RAM reserve below 8 GiB')
     if s['vram_total'] - s['vram_used'] < 2 * GIB:
         raise ServiceError('VRAM reserve below 2 GiB')
-    if s['swap_used'] - baseline['swap_used'] > 512 * 1024**2:
-        raise ServiceError('swap growth exceeds 512 MiB')
+    if s['swap_used'] - baseline['swap_used'] > swap_limit_mib * 1024**2:
+        raise ServiceError(f'swap growth exceeds {swap_limit_mib} MiB')
     page = __import__('os').sysconf('SC_PAGE_SIZE')
-    if any((s[key] - baseline[key]) * page > 512 * 1024**2 for key in ['pswpin', 'pswpout']):
-        raise ServiceError('swap I/O exceeds 512 MiB since service start')
+    if any((s[key] - baseline[key]) * page > swap_limit_mib * 1024**2 for key in ['pswpin', 'pswpout']):
+        raise ServiceError(f'swap I/O exceeds {swap_limit_mib} MiB since resource baseline')
     if s['psi_full_avg10'] > 10:
         raise ServiceError('memory PSI full avg10 above 10 percent')
 
@@ -107,20 +140,34 @@ class Job:
     cancel: threading.Event = dataclasses.field(default_factory=threading.Event)
     done: threading.Event = dataclasses.field(default_factory=threading.Event)
     abort_requested: bool = False
+    wait_reason: str | None = None
+    phase_lock: threading.Lock = dataclasses.field(default_factory=threading.Lock, repr=False, compare=False)
+    preparing_flash: bool = False
+
+    def cancellation_due(self):
+        return self.cancel.is_set() or time.monotonic() >= self.deadline
+
+    def check_lifetime(self):
+        if self.cancellation_due():
+            raise JobInterrupted(JOB_STOPPED)
 
     def public(self):
         return {'id': self.id, 'model': self.model, 'status': self.status,
-                'result': self.result, 'error': self.error}
+                'result': self.result, 'error': self.error,
+                **({'resource_wait_reason': self.wait_reason} if self.status == 'queued' and self.wait_reason in RESOURCE_WAIT_CODES else {})}
 
 
 class Controller:
-    def __init__(self, backend, read_resources=snapshot, start=True):
+    def __init__(self, backend, read_resources=snapshot, start=True, swap_limit_mib=512, host_admission=False):
         self.backend = backend
+        self.host_admission = host_admission
+        self.swap_limit_mib = swap_limit_mib
         self.models = frozenset(getattr(backend, 'models', MODELS))
         self.requires_flash = getattr(backend, 'requires_flash', True)
+        self.prewarm_flash = self.requires_flash and not getattr(backend, 'resource_mode', False)
         self.read_resources = read_resources
         self.baseline = read_resources()
-        check_resources(self.baseline, self.baseline)
+        check_resources(self.baseline, self.baseline, self.swap_limit_mib)
         self.queue = queue.Queue(maxsize=8)
         self.jobs = {}
         self.lock = threading.RLock()
@@ -143,6 +190,8 @@ class Controller:
 
     def submit(self, body):
         model, messages, n, timeout = validate_request(body, self.models)
+        if self.host_admission:
+            self.safety()
         with self.lock:
             self.prune()
             if self.stop.is_set() or self.fault:
@@ -158,25 +207,44 @@ class Controller:
             return job
 
     def safety(self):
+        # Backend lifecycle callbacks call this while holding their own lock.
+        # Never acquire Controller.lock here (it would invert lock ordering).
         s = self.read_resources()
         self.latest = s
-        check_resources(s, self.baseline)
+        # A split host reader has already enforced the shared rolling verdict.
+        # Keep hard local reserves; never bypass admission in the reader.
+        check_resources(s, s if self.host_admission else self.baseline, self.swap_limit_mib)
         return s
 
     def watch(self):
         while not self.stop.wait(0.5):
             try:
                 self.safety()
+            except Exception:
                 with self.lock:
-                    job = self.active
-                    abort = job and not job.abort_requested and (job.cancel.is_set() or time.monotonic() >= job.deadline)
+                    if not self.fault:
+                        # Recovery may have renewed the baseline while the
+                        # observation waited. Only resource errors are retried.
+                        try:
+                            self.safety()
+                        except Exception as current_error:
+                            self.trip(str(current_error))
+                continue
+            with self.lock:
+                job = self.active
+                if job is None:
+                    continue
+                with job.phase_lock:
+                    abort = not job.preparing_flash and not job.abort_requested and job.cancellation_due()
                     if abort:
                         job.abort_requested = True
-                        # Keep active-job identity stable until its stop barrier.
+                if abort:
+                    try:
                         self.backend.abort()
-            except Exception as exc:
-                if not self.fault:
-                    self.trip(str(exc))
+                    except Exception:
+                        # A successful resource reading never proves a failed
+                        # provider stop safe. Preserve the fail-closed latch.
+                        self.trip('provider stop unconfirmed')
 
     def trip(self, reason):
         with self.lock:
@@ -190,16 +258,34 @@ class Controller:
                 self.fault += '; provider stop unconfirmed'
 
     def cancelled(self, job):
-        if self.stop.is_set() or job.cancel.is_set() or time.monotonic() >= job.deadline or self.fault:
-            raise ServiceError('cancelled, expired, or resource safety latch set')
+        if self.stop.is_set() or self.fault:
+            raise ServiceError(JOB_STOPPED)
+        job.check_lifetime()
         self.safety()
 
+    def _end_resource_wait(self, job, release_unused):
+        error = JOB_STOPPED
+        # Do not hold the controller lock across the host reconciliation.
+        # Independent hard-stop observation remains active during cleanup.
+        if release_unused is not None and not self.stop.is_set() and not self.fault:
+            try:
+                release_unused()
+            except Exception:
+                error = 'unused Flash residency release unconfirmed'
+        with self.lock:
+            job.status = 'cancelled' if job.cancel.is_set() or self.stop.is_set() else 'failed'
+            job.error = error
+            job.wait_reason = None
+
     def run(self):
+        pending = None
+        release_unused = None
         while not self.stop.is_set():
             try:
-                job = self.queue.get(timeout=.2)
+                job = pending if pending is not None else self.queue.get(timeout=.2)
+                pending = None
             except queue.Empty:
-                if self.requires_flash and not self.fault and not self.stop.is_set() and not self.backend.health()['flash_resident']:
+                if self.prewarm_flash and not self.fault and not self.stop.is_set() and not self.backend.health()['flash_resident']:
                     now = time.monotonic()
                     self.restarts = [t for t in self.restarts if now - t < 600]
                     if len(self.restarts) >= 2:
@@ -211,27 +297,59 @@ class Controller:
                     except Exception as exc:
                         self.trip('Flash recovery failed: ' + str(exc))
                 continue
-            try:
-                with self.lock:
+            with self.lock:
+                cancelled = job.cancel.is_set() or self.stop.is_set()
+                finished_wait = job.wait_reason is not None and (
+                    cancelled or time.monotonic() >= job.deadline or self.fault)
+                if not finished_wait:
                     self.active = job
                     job.status = 'running'
+                    job.wait_reason = None
+            if finished_wait:
+                self._end_resource_wait(job, release_unused)
+                release_unused = None
+                job.messages = []
+                job.done.set()
+                self.queue.task_done()
+                continue
+            try:
                 self.cancelled(job)
                 job.result = self.backend.generate(job, lambda: self.cancelled(job))
                 self.cancelled(job)
                 job.status = 'completed'
+            except ResourceWait as exc:
+                # ResourceWait is confined to verified pre-dispatch refusals.
+                # Keep this oldest job in front of new arrivals until admission,
+                # cancellation or its existing deadline; never replay a turn.
+                job.wait_reason = exc.code
+                pending = job
+                if exc.release_unused is not None:
+                    release_unused = exc.release_unused
             except Exception as exc:
-                job.status = 'cancelled' if job.cancel.is_set() or self.stop.is_set() else 'failed'
-                job.error = str(exc)[:240]
-                try:
-                    self.backend.abort()
-                except Exception:
-                    self.fault = 'provider stop unconfirmed'
+                if isinstance(exc, JobInterrupted) and job.preparing_flash:
+                    self._end_resource_wait(job, release_unused)
+                else:
+                    job.status = 'cancelled' if job.cancel.is_set() or self.stop.is_set() else 'failed'
+                    job.error = str(exc)[:240]
+                    try:
+                        self.backend.abort()
+                    except Exception:
+                        self.fault = 'provider stop unconfirmed'
             finally:
-                job.messages = []
-                job.done.set()
                 with self.lock:
                     self.active = None
-                self.queue.task_done()
+                    job.preparing_flash = False
+                    if pending is not None:
+                        job.status = 'queued'
+                if pending is None:
+                    release_unused = None
+                    job.messages = []
+                    job.done.set()
+                    self.queue.task_done()
+            if pending is not None: self.stop.wait(.2)
+        if pending is not None:
+            pending.status='cancelled';pending.messages=[];pending.done.set()
+            self.queue.task_done()
 
     def cancelled_idle(self):
         if self.stop.is_set() or self.fault:
@@ -239,11 +357,28 @@ class Controller:
         return self.safety()
 
     def recover(self):
+        """Rebase only explicit, idle recovery after five seconds of quiet telemetry."""
         with self.lock:
-            if self.active:
-                raise ServiceError('wait for active request to stop')
-            self.safety()
+            if self.stop.is_set() or self.active or any(not job.done.is_set() for job in self.jobs.values()):
+                raise ServiceError('wait for all requests to stop')
+            self.fault = self.fault or "explicit recovery pending"
+            # A failed stop barrier must never clear the existing fault.
             self.backend.abort()
+            first = self.read_resources()
+            for _ in range(10):
+                time.sleep(0.5)
+                current = self.read_resources()
+                # Absolute reserves and PSI protections remain in force. The
+                # old cumulative I/O counter is deliberately not a new budget.
+                check_resources(current, current, self.swap_limit_mib)
+                if current['psi_full_avg10'] > 1 or any(
+                    current[key] != first[key] for key in ('swap_used', 'pswpin', 'pswpout')
+                ):
+                    raise ServiceError('resource recovery requires five quiet seconds')
+            if self.stop.is_set():
+                raise ServiceError("service stopping")
+            self.baseline = current
+            self.latest = current
             self.fault = None
             self.restarts = []
 

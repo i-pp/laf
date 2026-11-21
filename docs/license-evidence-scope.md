@@ -41,3 +41,19 @@ assessed by a successful automated evidence check.
 - `LICENSING.md`
 - `THIRD_PARTY_NOTICES.md`
 - `NOTICE`
+
+## Independent MCP and SDK candidate metadata
+
+The independent adapter, installer, plugin configuration, SDK pin selection and
+their project-authored tests/documentation are first-party LicenseRef-KOL-v1
+material. No private orchestrator implementation is included. The copy of the
+MCP SDK license at `mcp/licenses/MCP-SDK-LICENSE.txt` retains its original MIT
+terms and provenance; it is not relicensed under KOL. SDK/dependency/model
+implementations and binary archives are not bundled into this source candidate.
+
+`mcp/dependency-review.json` and `scripts/fixtures/laf-sdk-pypi-20261111.json`
+record dependency names, versions, archive identities, declared licenses,
+advisories and scoped observations. They are generated metadata, not ownership
+claims or a license grant to external packages. The fixture is an offline test
+input, not a current security clearance. The automated license check verifies
+these recorded declarations only; it does not grant redistribution permission.
