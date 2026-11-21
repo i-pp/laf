@@ -60,6 +60,7 @@ MODULES = (
     'inference.local_platform.test_cli_responses',
     'inference.local_platform.test_developer',
     'inference.local_platform.test_models',
+    'inference.local_platform.test_model_setup',
     'inference.local_platform.test_model_catalog',
     'inference.local_platform.test_project_runner',
     'inference.local_platform.test_repair',

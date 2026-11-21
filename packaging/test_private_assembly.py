@@ -97,8 +97,11 @@ class Assembly(unittest.TestCase):
    with self.assertRaises(p.PackageError):p.assemble(z,h,root/'out',root)
  def test_synthetic_private_assembly_and_existing_output_retained(self):
   with tempfile.TemporaryDirectory(dir=Path.home()) as d:
-   root=Path(d);z,h=self.fixture(root);templates=root/'templates';templates.mkdir();(templates/'portable_launcher.py').write_text('# synthetic');(templates/'INTEGRATED_PLUGIN_GUIDE.md').write_text('not ready');(templates/'upstream-orchestrator').mkdir();[(templates/'upstream-orchestrator'/n).write_text('synthetic notice') for n in ('LICENSE','NOTICE')];[(templates/n).write_text('synthetic changes') for n in ('CHANGES.md','SOURCE_ORIGIN.md')]
+   root=Path(d);z,h=self.fixture(root);templates=root/'templates';templates.mkdir();(templates/'INTEGRATED_PLUGIN_GUIDE.md').write_text('not ready');(templates/'upstream-orchestrator').mkdir();[(templates/'upstream-orchestrator'/n).write_text('synthetic notice') for n in ('LICENSE','NOTICE')];[(templates/n).write_text('synthetic changes') for n in ('CHANGES.md','SOURCE_ORIGIN.md')]
+   launcher=Path(__file__).with_name('portable_launcher.py').read_bytes()
+   (templates/'portable_launcher.py').write_bytes(launcher)
    out=root/'assembled';r=p.assemble(z,h,out,templates)
+   self.assertEqual((out/'launcher.py').read_bytes(),launcher)
    self.assertFalse(r['submission_ready']);self.assertEqual(json.loads((out/'mcp.json').read_text()),p.mcp_manifest());self.assertEqual((out/'runtime/integration/launch.py').read_text(),'# synthetic source only\n')
    with self.assertRaises(p.PackageError):p.assemble(z,h,out,templates)
    self.assertTrue((out/'ASSEMBLY_STATUS.json').exists())

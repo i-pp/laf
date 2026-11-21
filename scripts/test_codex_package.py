@@ -25,7 +25,7 @@
 
 """Pure metadata contracts for Codex packaging; never installs or connects."""
 import ast,io,json,runpy,struct,sys,tempfile,tomllib,unittest,zipfile
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr,redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 import build_workspace_plugin as workspace
@@ -38,13 +38,14 @@ class CodexPackage(unittest.TestCase):
    with self.subTest(manifest=manifest):
     project=tomllib.loads((ROOT/manifest).read_text())['project']
     self.assertEqual(project['requires-python'],'>=3.12')
-  for path in ('launcher.py','runtime/integration/laf_stdio_cli.py','runtime/integration/laf_bootstrap.py'):
+  for path in ('launcher.py','packaging/portable_launcher.py','runtime/integration/laf_stdio_cli.py','runtime/integration/laf_bootstrap.py'):
    with self.subTest(path=path):
     main=runpy.run_path(str(ROOT/path))['main']
     errors=io.StringIO()
-    with patch.object(sys,'version_info',(3,11,9)),redirect_stderr(errors):
-     self.assertEqual(main([]),1)
+    with patch.object(sys,'version_info',(3,11,9)),redirect_stderr(errors),redirect_stdout(io.StringIO()):
+     self.assertEqual(main(['--help']),1)
     self.assertIn('Python 3.12 or later',errors.getvalue())
+  self.assertEqual((ROOT/'launcher.py').read_bytes(),(ROOT/'packaging/portable_launcher.py').read_bytes())
  def test_release_identity_and_both_protocol_versions(self):
   self.assertEqual(read('plugin.json')['version'],'0.1.0')
   for name in ('mcp_adapter.py','legacy_tool_adapter.py'):
@@ -75,6 +76,10 @@ class CodexPackage(unittest.TestCase):
   self.assertEqual((ROOT/skill).read_bytes(),(ROOT/'runtime/public_laf'/skill).read_bytes())
   names={p for rule in read('.github/license-policy.json')['rules'] for p in rule['paths']}
   self.assertIn(Path(skill).as_posix(),names)
+  bundled=ast.parse((ROOT/'runtime/public_laf/scripts/check-laf.py').read_text())
+  modules=next(node.value for node in bundled.body if isinstance(node,ast.Assign)
+               and any(isinstance(target,ast.Name) and target.id=='MODULES' for target in node.targets))
+  self.assertIn('inference.local_platform.test_model_setup',ast.literal_eval(modules))
  def test_workspace_zip_kinds_and_version_match_without_direct_mcp(self):
   with tempfile.TemporaryDirectory() as tmp:
    directory=Path(tmp)
