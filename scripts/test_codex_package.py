@@ -49,6 +49,15 @@ class CodexPackage(unittest.TestCase):
   self.assertEqual(struct.unpack('>IIBB',image[16:26]),(512,512,8,6))
   self.assertEqual(compat['mcpServers'],'./.mcp.json');self.assertEqual(compat['skills'],'./skills')
   self.assertNotIn('apps',compat)
+ def test_model_setup_skill_is_packaged_in_both_forms(self):
+  portable=read('plugin.json')['extensions']['com.openai']
+  compat=read('.codex-plugin/plugin.json')
+  skill='./skills/laf-model-setup/SKILL.md'
+  self.assertEqual(portable['onboardingSkill'],skill)
+  self.assertEqual(compat['onboardingSkill'],skill)
+  self.assertEqual((ROOT/skill).read_bytes(),(ROOT/'runtime/public_laf'/skill).read_bytes())
+  names={p for rule in read('.github/license-policy.json')['rules'] for p in rule['paths']}
+  self.assertIn(Path(skill).as_posix(),names)
  def test_codex_mcp_is_local_stdio_without_auth_or_auto_install(self):
   self.assertEqual(read('.mcp.json'),{'mcpServers':{'laf':{'command':'python3','args':['-B','./launcher.py'],'cwd':'.'}}})
   self.assertTrue((ROOT/'launcher.py').is_file())

@@ -50,6 +50,12 @@ Local Core/Router inference itself requires no OpenAI account. Codex operations
 use the operator's separately installed and authorized Codex integration; this
 package does not create accounts or authenticate them.
 
+The plugin's model setup skill guides the owner through
+[public model discovery, selecting an Ollama artifact or an existing model, and
+persistent storage](laf-model-management.md#model-setup-from-the-local-ai-fabric-plugin).
+Install the plugin before acquiring any weights. After selecting a model,
+configure its Router profile on the host and connect the same plugin.
+
 ## Existing owner-host update flow
 
 Prerequisites must already be real, not inferred from these instructions:
