@@ -23,8 +23,11 @@
 
 """English/ASCII source policy guard; intentional Unicode test data is explicit."""
 import ast,io,json,subprocess,tokenize
+from hashlib import sha256
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
+LOGO_PATH='assets/laf-neural-fabric.png'
+LOGO_SHA256='1b57976cbdb79f8a24f645cfa4c7f2f4525967d33b20a2025a319750ec65f86f'
 UNICODE_FIXTURES=frozenset({
  'mcp/tests/test_contracts.py','mcp/tests/test_integrated_router.py',
  'mcp/tests/test_package.py','mcp/tests/test_sdist.py',
@@ -52,6 +55,10 @@ def main():
   path=ROOT/name
   if path.is_symlink() or not path.is_file():
    issues.append({'path':name,'line':0,'reason':'Nonregular/symlink source is not inspected'});continue
+  if name==LOGO_PATH:
+   if sha256(path.read_bytes()).hexdigest()!=LOGO_SHA256:
+    issues.append({'path':name,'line':0,'reason':'Plugin logo differs from the approved PNG'})
+   continue
   text=path.read_text(encoding='utf-8');issues.extend(check_text(name,text))
   fixture_lines+=sum(not line.isascii() for line in text.splitlines())
  print(json.dumps({'status':'failed' if issues else 'passed','tracked_files':len(names),'violations':issues,'intentional_unicode_fixture_lines':fixture_lines,'scope':'English/ASCII checked source; explicit literal-only Unicode regression data is retained'}))

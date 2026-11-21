@@ -21,14 +21,35 @@
 
 # Added 2026-11-12: integrated source-tree archive preparation.
 
-"""Negative controls for English source and literal-only Unicode fixtures."""
+"""Controls for English source, Unicode fixtures, and the pinned logo."""
+from contextlib import redirect_stdout
+from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 import check_english_source as c
 class EnglishSource(unittest.TestCase):
  fixture='mcp/tests/test_contracts.py'
  marker='# Unicode test fixture: exercise multi-byte data.\n'
  unicode='\u3042'
- def test_ascii_source_allowed(self):self.assertEqual(c.check_text('src/main.py','value = "English"\n'),[])
+ def test_ascii_source_and_pinned_logo_allowed(self):
+  logo_bytes=(c.ROOT/c.LOGO_PATH).read_bytes()
+  with TemporaryDirectory() as temp:
+   root=Path(temp)
+   (root/'source.py').write_text('value = "English"\n',encoding='utf-8')
+   logo=root/c.LOGO_PATH
+   logo.parent.mkdir()
+   logo.write_bytes(logo_bytes)
+   tracked=f'source.py\0{c.LOGO_PATH}\0'.encode()
+   with patch.object(c,'ROOT',root),patch.object(c.subprocess,'check_output',return_value=tracked):
+    with redirect_stdout(StringIO()):
+     self.assertEqual(c.main(),0)
+    for replacement in (logo_bytes+b'\0',b'ASCII text'):
+     with self.subTest(replacement_size=len(replacement)),redirect_stdout(StringIO()) as output:
+      logo.write_bytes(replacement)
+      self.assertEqual(c.main(),1)
+      self.assertIn('Plugin logo differs from the approved PNG',output.getvalue())
  def test_non_english_document_refused(self):self.assertTrue(c.check_text('docs/guide.md',self.unicode))
  def test_production_string_refused_even_with_marker(self):self.assertTrue(c.check_text('src/main.py',self.marker+'value="'+self.unicode+'"\n'))
  def test_marked_test_literal_allowed(self):self.assertEqual(c.check_text(self.fixture,self.marker+'value="'+self.unicode+'"\n'),[])
