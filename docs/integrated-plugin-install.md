@@ -20,6 +20,8 @@ This header is a summary, not a separate license or an amendment to KOL-v1.
 All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
+
+Modified 2026-11-21 to document the private 0.0.1 workspace package.
 -->
 
 # LAF integrated plugin: experimental source
@@ -55,6 +57,56 @@ The plugin's model setup skill guides the owner through
 persistent storage](laf-model-management.md#model-setup-from-the-local-ai-fabric-plugin).
 Install the plugin before acquiring any weights. After selecting a model,
 configure its Router profile on the host and connect the same plugin.
+
+## Private workspace setup for 0.0.1
+
+The host uses the [integrated source archive](laf-release-names.md). ChatGPT
+and Codex workspace users are intended to select one **Local AI Fabric** entry
+with a single App reference. Assemble its 0.0.1 ZIP after the owner sets up the
+new host and verifies the App identity.
+
+1. Use the [private bootstrap](bootstrap.md#run-from-the-downloaded-source)
+   to prepare a fresh prefix. Use the [model setup guide](laf-model-management.md#model-setup-from-the-local-ai-fabric-plugin)
+   to select an installed model or explicitly acquire one for a persistent
+   store outside the plugin cache. For a CPU host, configure the
+   [CPU Router](laf-configured-models.md#explicit-cpu-only-router) and bind
+   its socket and model with `configure-router`. Configure and start the
+   new [owner daemon](bootstrap.md#atomic-configuration-and-explicit-daemon-launch)
+   through the same prefix where needed for Codex operations. Run the
+   frontend locally with `launcher.py --config` and the prepared config.
+2. The owner creates a private Tunnel using the
+   [Secure MCP Tunnel guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
+   and points its stdio command at that frontend. Register the App with that
+   connection through the [ChatGPT connection flow](https://developers.openai.com/plugins/deploy/connect-chatgpt).
+   Keep access and authentication within the intended workspace. Record the
+   verified App ID in an owner-only binding file outside the checkout.
+3. Build and open the ZIP in the eligible private workspace workflow. Use the
+   App as the package's managed dependency. Confirm the setup presents a
+   single entry before offering it to workspace users. The generated archive
+   has version 0.0.1 and contains one `.app.json` binding, two skills, the
+   icon, and notices. Its connection is supplied by the App.
+
+Save a binding like the following in a directory with mode 0700. Set the
+file to mode 0600 and replace the placeholder with the verified App ID.
+Keep both the input and generated ZIP outside source control.
+
+```json
+{"apps":{"laf":{"id":"<VERIFIED_APP_ID>","required":true}}}
+```
+
+```sh
+python3 -B scripts/build_workspace_plugin.py \
+  --app-binding /PRIVATE_WORKSPACE/app-binding.json \
+  --output /PRIVATE_WORKSPACE/laf-workspace-0.0.1.zip
+python3 -B scripts/check_release_names.py /PRIVATE_WORKSPACE/laf-workspace-0.0.1.zip
+```
+
+Acceptance for this package requires a new session in each client with one
+entry, 29 tools, and a successful `laf_router_status` over the same
+connection. For a tool description update, use
+[Refresh on the existing App](https://developers.openai.com/plugins/deploy/connect-chatgpt#refresh-metadata).
+Verify propagation to fresh sessions in both clients with the same identity
+and access. The host source archive remains available for local stdio use.
 
 ## Existing owner-host update flow
 

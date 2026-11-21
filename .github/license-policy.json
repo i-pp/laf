@@ -481,6 +481,7 @@
         "runtime/public_laf/skills/laf-router/SKILL.md",
         "runtime/public_laf/skills/laf-model-setup/SKILL.md",
         "scripts/build-integrated-source.py",
+        "scripts/build_workspace_plugin.py",
         "scripts/test_integrated_source.py",
         ".agents/plugins/marketplace.json",
         ".codex-plugin/plugin.json",
