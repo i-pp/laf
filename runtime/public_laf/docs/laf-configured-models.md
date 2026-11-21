@@ -20,6 +20,8 @@ This header is a summary, not a separate license or an amendment to KOL-v1.
 All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
+
+Modified 2026-11-21 to document the explicit CPU-only Router.
 -->
 
 # Configured models and optional Flash
@@ -158,3 +160,62 @@ for the remaining measured-hardware gates and independent AI test-quality work.
 
 Software tests use synthetic providers. No new deployment, actual small-model
 generation, 8-16 GB GPU or clean-host acceptance is claimed.
+
+## Explicit CPU-only Router
+
+On a Linux host with operator-authorized local Docker access, the separate CPU
+entry point serves one preinstalled Ollama profile using the ordinary
+owner-only Router socket. Prepare the model store through
+[model setup](laf-model-management.md). Use a dedicated store containing that
+one exact tag, the store's existing owner-only `generation.lock`, a locally
+installed digest-pinned Ollama image, and a new owner-only runtime directory.
+Keep the store outside directories replaced by plugin updates.
+
+Save this example with mode 0600 under a directory owned by your user with mode
+0700. Set the three paths and both digest placeholders to verified values.
+The profile accepts `num_gpu: 0` and a thread count within the provider's CPU
+limit.
+
+```json
+{
+  "mode": "cpu-only",
+  "runtime_dir": "/PRIVATE_RUNTIME",
+  "model_store": "/PRIVATE_MODEL_STORE",
+  "generation_lock": "/PRIVATE_MODEL_STATE/generation.lock",
+  "ollama_provider": {
+    "image": "ollama/ollama@sha256:IMAGE_REPOSITORY_DIGEST",
+    "version": "0.40.15",
+    "memory_bytes": 1073741824,
+    "cpus": 1,
+    "pids_limit": 96
+  },
+  "ollama_profile": {
+    "id": "smollm2-135m",
+    "reference": "smollm2:135m-instruct-q4_K_M",
+    "digest": "sha256:OLLAMA_MANIFEST_DIGEST",
+    "options": {
+      "num_ctx": 8192,
+      "num_thread": 1,
+      "num_batch": 32,
+      "num_gpu": 0,
+      "temperature": 0,
+      "seed": 42
+    }
+  }
+}
+```
+
+Run `python3 -B -m inference.laf_service.cpu_server --config /PRIVATE_CONFIG/router.json`
+from an extracted source tree. The runtime directory must be short enough for
+its `service.sock` Unix socket. Bind the plugin to that socket and the selected
+profile ID with the existing [`configure-router` command](bootstrap.md#bind-existing-backends-before-starting-a-frontend).
+
+The provider runs in its own loopback-only container without host GPU devices
+or published ports. The model store is mounted read-only and image pulling is
+disabled. Cold startup checks the 8 GiB host RAM reserve plus the configured
+container memory limit. The running Router monitors RAM, swap growth and I/O,
+and memory pressure. Docker enforces the configured CPU, RAM and process limits
+with no container swap allowance. Completion requires the pinned manifest and
+zero VRAM reported for the loaded model. The one-job lane reuses the existing
+deadlines and cancellation handling. A normal shutdown stops and removes the
+verified owned CPU provider. Unknown ownership or stop status blocks cleanup.
