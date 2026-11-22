@@ -28,7 +28,10 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 The LAF plugin is independently developed by I-plusplus Inc.; the integration
 does not imply affiliation or endorsement.
 
-LAF 0.1.0 is experimental source, not a self-provisioning inference stack.
+The [LAF 0.0.1 tag](https://github.com/i-pp/laf/tree/0.0.1) is an experimental
+source preview, not a self-provisioning inference stack. The plugin manifests
+and integrated MCP server report the component version `0.1.0`, which is
+separate from the source-preview tag.
 The fully opted-in catalog contains 29 tools, including the read-only
 `codex_models_list` and five owner-scoped Router tools.
 First satisfy the [existing owner-host prerequisites](integrated-plugin-install.md):

@@ -44,15 +44,18 @@ Local AI Fabric (LAF) is an independent project developed by I-plusplus Inc.
 It is not an OpenAI product. References to third-party products describe
 interoperability; they do not imply affiliation or endorsement.
 
-Ask a configured local model to summarize a short passage you provide. From
-ChatGPT or Codex, submit the job through LAF, check its status, and retrieve
-the summary.
+Ask a configured local model to summarize a short passage you provide. Use
+[Codex](https://openai.com/codex/) CLI on the same host over standard input/output
+(stdio), or use [ChatGPT](https://chatgpt.com/) or Codex in a supported private
+workspace where an operator has configured the LAF app through OpenAI's
+[Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels).
+A regular ChatGPT session cannot connect directly to a localhost MCP server.
+Submit the job through LAF, check its status, and retrieve the summary.
 
-[ChatGPT](https://chatgpt.com/) and [Codex](https://openai.com/codex/) are
-third-party OpenAI products. They act as clients for LAF and are not replaced
-by it.
-The LAF Router sends the jobs you submit through LAF to a local engine running
-a configured third-party model. Obtain model weights separately from LAF.
+ChatGPT and Codex are third-party OpenAI products. They act as clients for LAF
+and are not replaced by it. The LAF Router sends jobs submitted through LAF to
+a local engine running a configured third-party model. Obtain model weights
+separately from LAF.
 
 ## Goal and current scope
 
@@ -64,9 +67,7 @@ Router job tools through MCP. Its documented CPU-only path uses the third-party 
 
 ## Architecture
 
-Local Codex connects over stdio. ChatGPT and Codex in a private workspace
-connect through a private app and OpenAI's
-[Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels).
+The local CLI and private workspace paths converge at the LAF MCP server.
 
 ```mermaid
 flowchart LR
