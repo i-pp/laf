@@ -118,15 +118,15 @@ The listed sizes are downloads. Shared graphics memory draws from system DRAM.
 
 ## Installation
 
-Start from the [experimental 0.0.1 source tag](https://github.com/i-pp/laf/tree/0.0.1)
-on Linux with Python 3.12 or later. Install [MCP SDK 1.30.0](docs/laf-sdk-install.md)
-before preparing the private runtime. The SDK installer supports CPython 3.12
-and 3.14 on Linux x86-64.
+Use Linux with Python 3.12 or later and install [MCP SDK 1.30.0](docs/laf-sdk-install.md).
+The SDK installer supports CPython 3.12 and 3.14 on Linux x86-64.
 
-- [Local Codex installation](docs/codex-install.md#codex-local-marketplace-option)
-  installs the source-built plugin from a local marketplace.
-- [Private workspace installation](docs/integrated-plugin-install.md#private-workspace-setup-for-001)
-  sets up one app for ChatGPT and Codex.
+- [Standalone local Codex plugin](docs/laf-codex-local-marketplace.md):
+  build the local-only marketplace from this source tree and connect Codex to
+  your own Router over a local Unix socket.
+- [Private workspace installation](docs/integrated-plugin-install.md#private-workspace-setup-for-001):
+  start from the [experimental 0.0.1 source tag](https://github.com/i-pp/laf/tree/0.0.1)
+  to set up the integrated app for ChatGPT and Codex.
 
 ## Documentation
 
