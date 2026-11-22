@@ -30,13 +30,16 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 <!-- Modified 2026-11-22: summarize requirements and the two source setup paths. -->
 
+<!-- Modified 2026-11-22: describe client roles, local inference, and example hardware. -->
+
 # Local AI Fabric
 
 **Your hardware. Your models. Your AI.**
 
-Local AI Fabric (LAF) lets Codex and ChatGPT use models running on your own
-hardware. The LAF Router serves the models you configure through a private
-connection.
+ChatGPT and Codex are control clients for Local AI Fabric (LAF). They send
+requests to LAF over MCP. The LAF Router can pass inference requests to a
+configured engine running a third-party model on your hardware. LAF ships
+without model weights. Obtain the model artifact separately.
 
 `0.0.1` is an experimental source preview. Public one-click plugin installation
 is unavailable for this version.
@@ -47,10 +50,30 @@ is unavailable for this version.
   runtime.
 - [MCP SDK 1.30.0](docs/laf-sdk-install.md) for the plugin frontend. The SDK
   installer supports CPython 3.12 and 3.14 on Linux x86_64.
-- RAM and disk space for the model you choose. The
-  [CPU-only Router](docs/laf-configured-models.md#explicit-cpu-only-router)
-  uses local Docker, a digest-pinned Ollama image, and an installed model pinned
-  by its manifest digest. This path can run without a GPU.
+- RAM and disk space for the engine and model you choose. The documented
+  CPU-only example uses a digest-pinned Ollama image and model manifest.
+
+## Hardware and model examples
+
+Host CPU core counts and installed capacities are planning examples.
+
+| Path | CPU | System DRAM | Dedicated GPU VRAM | Model and Ollama download |
+| --- | --- | --- | --- | --- |
+| [CPU-only with local Docker](docs/laf-configured-models.md#explicit-cpu-only-router) | x86-64, about 4 host cores. The example container is capped at 1 CPU. | 16 GiB installed as a planning example. Cold start checks 8 GiB of available host RAM in addition to the 1 GiB container cap. | None needed | [SmolLM2-135M-Instruct][smollm2-card], [Q4_K_M (105 MB)][smollm2-tag] |
+| [AMD GPU candidates (untested)](docs/laf-provider-portability.md#8-16-gb-vram-the-next-bounded-path) | x86-64, about 4 host cores | The current GPU path checks at least 8 GiB available. | 8-16 GB nominal candidate range. The current guard checks at least 2 GiB free. | [Qwen2.5-Coder-1.5B-Instruct][qwen15-card], [Q4_K_M (986 MB)][qwen15-tag]<br>[Qwen2.5-Coder-7B-Instruct][qwen7-card], [Q4_K_M (4.7 GB)][qwen7-tag] |
+
+The listed sizes are downloads. Shared graphics memory draws from system DRAM.
+For the GPU candidates, verify device and driver compatibility and measure DRAM
+and VRAM headroom during model load and generation. The
+[CPU-only smoke test](https://github.com/i-pp/laf/pull/25) recorded one
+completed SmolLM2 job with zero VRAM reported by the provider.
+
+[smollm2-card]: https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct
+[smollm2-tag]: https://ollama.com/library/smollm2:135m-instruct-q4_K_M
+[qwen15-card]: https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct
+[qwen15-tag]: https://ollama.com/library/qwen2.5-coder:1.5b-instruct-q4_K_M
+[qwen7-card]: https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct
+[qwen7-tag]: https://ollama.com/library/qwen2.5-coder:7b-instruct-q4_K_M
 
 ## Architecture
 
@@ -61,7 +84,8 @@ flowchart LR
     App --> Tunnel["Secure MCP Tunnel"]
     Tunnel --> MCP
     MCP --> Router["LAF Router"]
-    Router --> Models["Local models"]
+    Router --> Engine["Configured local inference engine"]
+    Engine --> Model["Third-party model running locally"]
 ```
 
 See the [component guide](docs/public-source-component-guide.md) for the
