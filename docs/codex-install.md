@@ -22,9 +22,18 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
+<!-- Modified 2026-11-22: identify the third-party client and distinguish source-preview and component versions. -->
+
 # Install the experimental LAF plugin in Codex
 
-LAF 0.1.0 is experimental source, not a self-provisioning inference stack.
+[Codex](https://openai.com/codex/) is an OpenAI product used as a client.
+The LAF plugin is independently developed by I-plusplus Inc.; the integration
+does not imply affiliation or endorsement.
+
+The [LAF 0.0.1 tag](https://github.com/i-pp/laf/tree/0.0.1) is an experimental
+source preview, not a self-provisioning inference stack. The plugin manifests
+and integrated MCP server report the component version `0.1.0`, which is
+separate from the source-preview tag.
 The fully opted-in catalog contains 29 tools, including the read-only
 `codex_models_list` and five owner-scoped Router tools.
 First satisfy the [existing owner-host prerequisites](integrated-plugin-install.md):
