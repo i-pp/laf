@@ -24,6 +24,10 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Install the experimental LAF plugin in Codex
 
+[Codex](https://openai.com/codex/) is an OpenAI product used as a client.
+The LAF plugin is independently developed by I-plusplus Inc.; the integration
+does not imply affiliation or endorsement.
+
 LAF 0.1.0 is experimental source, not a self-provisioning inference stack.
 The fully opted-in catalog contains 29 tools, including the read-only
 `codex_models_list` and five owner-scoped Router tools.

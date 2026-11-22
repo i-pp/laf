@@ -40,26 +40,33 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 **Your hardware. Your models. Your AI.**
 
+Local AI Fabric (LAF) is an independent project developed by I-plusplus Inc.
+It is not an OpenAI product. References to third-party products describe
+interoperability; they do not imply affiliation or endorsement.
+
 Ask a configured local model to summarize a short passage you provide. From
 ChatGPT or Codex, submit the job through LAF, check its status, and retrieve
 the summary.
 
-ChatGPT and Codex keep their own models and act as control clients for LAF.
+[ChatGPT](https://chatgpt.com/) and [Codex](https://openai.com/codex/) are
+third-party OpenAI products. They act as clients for LAF and are not replaced
+by it.
 The LAF Router sends the jobs you submit through LAF to a local engine running
 a configured third-party model. Obtain model weights separately from LAF.
 
 ## Goal and current scope
 
-Local AI Fabric (LAF) aims to make local models usable through a common job
+LAF aims to make local models usable through a common job
 interface while operators choose their engine and manage model storage. The
 experimental `0.0.1` source preview exposes the configured model catalog and
-Router job tools through MCP. Its documented CPU-only path uses one pinned
-Ollama model.
+Router job tools through MCP. Its documented CPU-only path uses the third-party inference engine
+[Ollama](https://ollama.com/) with one pinned model.
 
 ## Architecture
 
 Local Codex connects over stdio. ChatGPT and Codex in a private workspace
-connect through a private app and Secure MCP Tunnel.
+connect through a private app and OpenAI's
+[Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels).
 
 ```mermaid
 flowchart LR
@@ -129,7 +136,8 @@ and 3.14 on Linux x86-64.
 LAF's source is public. The first-party source uses the
 [KISS Open License v1.0](LICENSE), which permits use, modification, and
 redistribution, including commercial use, subject to its terms. Third-party
-models and engine artifacts have their own terms.
+models and engine artifacts have their own terms. Third-party product names
+and marks belong to their respective owners.
 
 Anyone can [open an issue](https://github.com/i-pp/laf/issues) or
 [submit a pull request](https://github.com/i-pp/laf/pulls).

@@ -26,6 +26,11 @@ Modified 2026-11-21 to document the private 0.0.1 workspace package and Python r
 
 # LAF integrated plugin: experimental source
 
+Local AI Fabric is developed independently by I-plusplus Inc.
+[ChatGPT](https://chatgpt.com/) and [Codex](https://openai.com/codex/) are
+third-party OpenAI clients for the setups described below. Compatibility does
+not imply affiliation or endorsement.
+
 The integrated catalog contains 29 tools, including `codex_models_list` and five
 owner-scoped Router tools. See the repository license and source origin for
 project-authored changes and retained third-party terms.
@@ -75,7 +80,7 @@ new host and verifies the App identity.
    through the same prefix where needed for Codex operations. Run the
    frontend locally with `launcher.py --config` and the prepared config.
 2. The owner creates a private Tunnel using the
-   [Secure MCP Tunnel guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
+   [OpenAI Secure MCP Tunnel guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
    and points its stdio command at that frontend. Register the App with that
    connection through the [ChatGPT connection flow](https://developers.openai.com/plugins/deploy/connect-chatgpt).
    Keep access and authentication within the intended workspace. Record the
