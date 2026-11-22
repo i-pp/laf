@@ -22,6 +22,8 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
+<!-- Modified 2026-11-22: confirm the Codex model ID before the first binding. -->
+
 # Prepare a new private LAF runtime
 
 This source-only bootstrap prepares an independent runtime and the standard
@@ -128,15 +130,37 @@ python3 -B "$BOOT" snapshot-codex --prefix "$PREFIX" \
   --code-mode-host-sha256 "$CODE_MODE_HOST_SHA256"
 NATIVE="$PREFIX/bin/codex"
 CODE_MODE_HOST="$PREFIX/bin/codex-code-mode-host"
+```
 
+Before the first LAF binding, use your already signed-in official Codex CLI:
+open a normal interactive session, enter `/model`, and inspect the choices
+shown for that account. The [official command guide](https://learn.chatgpt.com/docs/developer-commands#built-in-slash-commands)
+documents the picker and `/status`. If you select a candidate, `/status` shows
+the active model; record its exact model ID, not only a display label, then exit
+without submitting a prompt. This uses the normal account/cache path and does
+not require LAF, a new login, an API key, or a model generation. It can change
+the interactive session's selected model. No fixed example ID is guaranteed
+for every account. If the UI does not expose a raw ID, use the official
+app-server `model/list` metadata interface described in the
+[app-server reference](https://learn.chatgpt.com/docs/app-server). Use the
+selected entry's `model` field as the raw model ID. Do not guess an ID from a
+role alias or run a diagnostic generation to discover one.
+
+Set `CODEX_MODEL_ID` in the same shell to the exact raw ID you recorded. Both
+commands require a nonempty value. To allow additional verified IDs, repeat
+`--model` for each one.
+
+```sh
 python3 -B "$BOOT" configure-codex --prefix "$PREFIX" \
   --native "$NATIVE" --sha256 "$NATIVE_SHA256" \
   --code-mode-host "$CODE_MODE_HOST" --code-mode-host-sha256 "$CODE_MODE_HOST_SHA256" \
-  --workspace "$PREFIX/workspace" --model gpt-6.1-sol --dry-run
+  --workspace "$PREFIX/workspace" \
+  --model "${CODEX_MODEL_ID:?Set CODEX_MODEL_ID to the confirmed raw model ID}" --dry-run
 python3 -B "$BOOT" configure-codex --prefix "$PREFIX" \
   --native "$NATIVE" --sha256 "$NATIVE_SHA256" \
   --code-mode-host "$CODE_MODE_HOST" --code-mode-host-sha256 "$CODE_MODE_HOST_SHA256" \
-  --workspace "$PREFIX/workspace" --model gpt-6.1-sol
+  --workspace "$PREFIX/workspace" \
+  --model "${CODEX_MODEL_ID:?Set CODEX_MODEL_ID to the confirmed raw model ID}"
 ```
 
 The observed Codex 0.167.0 Code Mode tool path starts the sibling
@@ -164,20 +188,7 @@ The release's other prerequisites, including supported host Bubblewrap, remain.
 Skip the copy when existing protected native and selected helper paths already pass their guards;
 set `NATIVE` and `CODE_MODE_HOST` to those paths. Configuration never executes a version/account probe,
 reads or copies authentication, global AGENTS, model data or existing databases.
-Before the first LAF binding, use your already signed-in official Codex CLI:
-open a normal interactive session, enter `/model`, and inspect the choices
-shown for that account. The [official command guide](https://learn.chatgpt.com/docs/developer-commands#built-in-slash-commands)
-documents the picker and `/status`. If you select a candidate, `/status` shows
-the active model; record its exact model ID, not only a display label, then exit
-without submitting a prompt. This uses the normal account/cache path and does
-not require LAF, a new login, an API key, or a model generation. It can change
-the interactive session's selected model. No fixed example ID is guaranteed
-for every account. If the UI does not expose a raw ID, use the official
-app-server `model/list` metadata interface described in the
-[app-server reference](https://learn.chatgpt.com/docs/app-server); do not guess
-an ID from a role alias or run a diagnostic generation to discover one.
 
-Pass that raw ID to `configure-codex --model`; repeat the flag for more.
 After the guarded daemon and frontend are connected, call LAF
 `codex_models_list` before starting a thread or task. This freshly revalidates
 the operator allowlist against provider model/effort advertisements. It does
