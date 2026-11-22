@@ -142,8 +142,9 @@ not require LAF, a new login, an API key, or a model generation. It can change
 the interactive session's selected model. No fixed example ID is guaranteed
 for every account. If the UI does not expose a raw ID, use the official
 app-server `model/list` metadata interface described in the
-[app-server reference](https://learn.chatgpt.com/docs/app-server); do not guess
-an ID from a role alias or run a diagnostic generation to discover one.
+[app-server reference](https://learn.chatgpt.com/docs/app-server). Use the
+selected entry's `model` field as the raw model ID. Do not guess an ID from a
+role alias or run a diagnostic generation to discover one.
 
 Set `CODEX_MODEL_ID` in the same shell to the exact raw ID you recorded. Both
 commands require a nonempty value. To allow additional verified IDs, repeat
