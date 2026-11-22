@@ -34,15 +34,19 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 <!-- Modified 2026-11-22: organize the README around use, installation, and contribution. -->
 
+<!-- Modified 2026-11-22: give a first job example and separate planning from startup checks. -->
+
 # Local AI Fabric
 
 **Your hardware. Your models. Your AI.**
 
-Use a local model from ChatGPT or Codex. Submit inference jobs, check their
-status, and retrieve results in the client where you already work. ChatGPT
-and Codex act as control clients. The LAF Router sends inference requests
-to a configured local engine running a third-party model. Obtain model
-weights separately from LAF.
+Ask a configured local model to summarize a short passage you provide. From
+ChatGPT or Codex, submit the job through LAF, check its status, and retrieve
+the summary.
+
+ChatGPT and Codex keep their own models and act as control clients for LAF.
+The LAF Router sends the jobs you submit through LAF to a local engine running
+a configured third-party model. Obtain model weights separately from LAF.
 
 ## Goal and current scope
 
@@ -70,16 +74,22 @@ flowchart LR
 
 ## Hardware and model examples
 
-Host CPU core counts and installed capacities are planning examples.
+The table gives planning examples for host CPU and installed memory.
 
 | Path | CPU | System DRAM | Dedicated GPU VRAM | Model and Ollama download |
 | --- | --- | --- | --- | --- |
-| [CPU-only with local Docker](docs/laf-configured-models.md#explicit-cpu-only-router) | x86-64, about 4 host cores. The example container is capped at 1 CPU. | 16 GiB installed as a planning example. Cold start checks 8 GiB of available host RAM in addition to the 1 GiB container cap. | None needed | [SmolLM2-135M-Instruct][smollm2-card], [Q4_K_M (105 MB)][smollm2-tag] |
-| [AMD GPU candidates (untested)](docs/laf-provider-portability.md#8-16-gb-vram-the-next-bounded-path) | x86-64, about 4 host cores | The current GPU path checks at least 8 GiB available. | 8-16 GB nominal candidate range. The current guard checks at least 2 GiB free. | [Qwen2.5-Coder-1.5B-Instruct][qwen15-card], [Q4_K_M (986 MB)][qwen15-tag]<br>[Qwen2.5-Coder-7B-Instruct][qwen7-card], [Q4_K_M (4.7 GB)][qwen7-tag] |
+| [CPU-only with local Docker](docs/laf-configured-models.md#explicit-cpu-only-router) | x86-64, about 4 host cores | 16 GiB installed | None needed | [SmolLM2-135M-Instruct][smollm2-card], [Q4_K_M (105 MB)][smollm2-tag] |
+| [AMD GPU candidates (untested)](docs/laf-provider-portability.md#8-16-gb-vram-the-next-bounded-path) | x86-64, about 4 host cores | Size for the model and engine | 8-16 GB nominal | [Qwen2.5-Coder-1.5B-Instruct][qwen15-card], [Q4_K_M (986 MB)][qwen15-tag]<br>[Qwen2.5-Coder-7B-Instruct][qwen7-card], [Q4_K_M (4.7 GB)][qwen7-tag] |
 
 The listed sizes are downloads. Shared graphics memory draws from system DRAM.
-For the GPU candidates, verify device and driver compatibility and measure DRAM
-and VRAM headroom during model load and generation.
+
+### Startup checks
+
+- In the CPU-only Docker example, Ollama is limited to 1 CPU and 1 GiB of RAM.
+  At cold start, available host RAM must cover the 1 GiB limit plus an 8 GiB reserve.
+- The existing GPU path checks for at least 8 GiB of available system DRAM
+  and 2 GiB of free VRAM. For the untested GPU candidates, verify device and
+  driver compatibility and measure headroom during model load and generation.
 
 [smollm2-card]: https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct
 [smollm2-tag]: https://ollama.com/library/smollm2:135m-instruct-q4_K_M
@@ -90,17 +100,18 @@ and VRAM headroom during model load and generation.
 
 ## Getting Started
 
-[Choose a model and prepare persistent storage](docs/laf-model-management.md#model-setup-from-the-local-ai-fabric-plugin),
-then [configure and start the Router](docs/laf-configured-models.md). Follow the
-installation path for your client. Once connected, use `laf_router_status`
-and look for `ready`.
+1. **Model.** [Choose a model and prepare persistent storage](docs/laf-model-management.md#model-setup-from-the-local-ai-fabric-plugin).
+2. **Router and runtime.** [Configure and start the Router](docs/laf-configured-models.md).
+   Use the host prerequisites below to [prepare a private runtime](docs/bootstrap.md).
+3. **Client connection.** Choose the local Codex or private workspace path in [Installation](#installation).
+4. **First check.** In the connected client, use `laf_router_status` and look for `ready`.
 
 ## Installation
 
 Start from the [experimental 0.0.1 source tag](https://github.com/i-pp/laf/tree/0.0.1)
 on Linux with Python 3.12 or later. Install [MCP SDK 1.30.0](docs/laf-sdk-install.md)
-before you [prepare a private runtime](docs/bootstrap.md). The SDK installer
-supports CPython 3.12 and 3.14 on Linux x86-64.
+before preparing the private runtime. The SDK installer supports CPython 3.12
+and 3.14 on Linux x86-64.
 
 - [Local Codex installation](docs/codex-install.md#codex-local-marketplace-option)
   installs the source-built plugin from a local marketplace.
