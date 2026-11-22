@@ -36,6 +36,8 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 <!-- Modified 2026-11-22: give a first job example and separate planning from startup checks. -->
 
+<!-- Modified 2026-11-22: identify third-party clients and distinguish local and private-workspace setup. -->
+
 # Local AI Fabric
 
 **Your hardware. Your models. Your AI.**

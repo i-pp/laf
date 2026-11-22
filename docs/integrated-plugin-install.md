@@ -24,6 +24,8 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 Modified 2026-11-21 to document the private 0.0.1 workspace package and Python requirements.
 -->
 
+<!-- Modified 2026-11-22: identify third-party clients and link official private-workspace setup documentation. -->
+
 # LAF integrated plugin: experimental source
 
 Local AI Fabric is developed independently by I-plusplus Inc.

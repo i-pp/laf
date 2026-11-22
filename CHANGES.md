@@ -24,16 +24,6 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 # Source changes
 
-## Unreleased: clarify third-party references and setup (2026-11-22)
-
-- `README.md`: identify LAF as an independent I-plusplus Inc. project, link
-  the third-party products and connection guide, and distinguish local CLI
-  setup from a configured private workspace.
-- `docs/codex-install.md`: identify the client and distinguish the
-  experimental source-preview tag from the internal component version.
-- `docs/integrated-plugin-install.md`: identify third-party clients and the
-  provider of Secure MCP Tunnel without implying endorsement.
-
 ## Unreleased: ordinary provider-feedback execution (2026-11-15)
 
 Support bounded ordinary Runner metadata recovery and provider waiting without

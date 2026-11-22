@@ -22,6 +22,8 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
+<!-- Modified 2026-11-22: identify the third-party client and distinguish source-preview and component versions. -->
+
 # Install the experimental LAF plugin in Codex
 
 [Codex](https://openai.com/codex/) is an OpenAI product used as a client.
