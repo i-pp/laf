@@ -102,6 +102,8 @@ jobs:
         run: python3 -B scripts/check-laf.py --suite full
       - name: Validate the local stdio plugin source boundary
         run: python3 -B scripts/check-laf-plugin.py
+      - name: Check the standalone Codex Git marketplace offline
+        run: python3 -B scripts/source_test_isolation.py --suite focused --module test_local_codex_marketplace --expected-tests 12
       - name: Run MCP source safety checks without installing an SDK
         env:
           PYTHONDONTWRITEBYTECODE: '1'
