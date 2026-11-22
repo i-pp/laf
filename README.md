@@ -30,29 +30,36 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 <!-- Modified 2026-11-22: summarize requirements and the two source setup paths. -->
 
+<!-- Modified 2026-11-22: describe client roles, local inference, and example hardware. -->
+
+<!-- Modified 2026-11-22: organize the README around use, installation, and contribution. -->
+
+<!-- Modified 2026-11-22: give a first job example and separate planning from startup checks. -->
+
 # Local AI Fabric
 
 **Your hardware. Your models. Your AI.**
 
-Local AI Fabric (LAF) lets Codex and ChatGPT use models running on your own
-hardware. The LAF Router serves the models you configure through a private
-connection.
+Ask a configured local model to summarize a short passage you provide. From
+ChatGPT or Codex, submit the job through LAF, check its status, and retrieve
+the summary.
 
-`0.0.1` is an experimental source preview. Public one-click plugin installation
-is unavailable for this version.
+ChatGPT and Codex keep their own models and act as control clients for LAF.
+The LAF Router sends the jobs you submit through LAF to a local engine running
+a configured third-party model. Obtain model weights separately from LAF.
 
-## Requirements
+## Goal and current scope
 
-- A Linux host for the documented setup and Python 3.12 or later for the LAF
-  runtime.
-- [MCP SDK 1.30.0](docs/laf-sdk-install.md) for the plugin frontend. The SDK
-  installer supports CPython 3.12 and 3.14 on Linux x86_64.
-- RAM and disk space for the model you choose. The
-  [CPU-only Router](docs/laf-configured-models.md#explicit-cpu-only-router)
-  uses local Docker, a digest-pinned Ollama image, and an installed model pinned
-  by its manifest digest. This path can run without a GPU.
+Local AI Fabric (LAF) aims to make local models usable through a common job
+interface while operators choose their engine and manage model storage. The
+experimental `0.0.1` source preview exposes the configured model catalog and
+Router job tools through MCP. Its documented CPU-only path uses one pinned
+Ollama model.
 
 ## Architecture
+
+Local Codex connects over stdio. ChatGPT and Codex in a private workspace
+connect through a private app and Secure MCP Tunnel.
 
 ```mermaid
 flowchart LR
@@ -61,36 +68,69 @@ flowchart LR
     App --> Tunnel["Secure MCP Tunnel"]
     Tunnel --> MCP
     MCP --> Router["LAF Router"]
-    Router --> Models["Local models"]
+    Router --> Engine["Configured local inference engine"]
+    Engine --> Model["Third-party model running locally"]
 ```
 
-See the [component guide](docs/public-source-component-guide.md) for the
-standalone client and other components.
+## Hardware and model examples
 
-## Set up from source
+The table gives planning examples for host CPU and installed memory.
 
-1. Check out the experimental source tag.
+| Path | CPU | System DRAM | Dedicated GPU VRAM | Model and Ollama download |
+| --- | --- | --- | --- | --- |
+| [CPU-only with local Docker](docs/laf-configured-models.md#explicit-cpu-only-router) | x86-64, about 4 host cores | 16 GiB installed | None needed | [SmolLM2-135M-Instruct][smollm2-card], [Q4_K_M (105 MB)][smollm2-tag] |
+| [AMD GPU candidates (untested)](docs/laf-provider-portability.md#8-16-gb-vram-the-next-bounded-path) | x86-64, about 4 host cores | Size for the model and engine | 8-16 GB nominal | [Qwen2.5-Coder-1.5B-Instruct][qwen15-card], [Q4_K_M (986 MB)][qwen15-tag]<br>[Qwen2.5-Coder-7B-Instruct][qwen7-card], [Q4_K_M (4.7 GB)][qwen7-tag] |
 
-   ```sh
-   git clone --branch 0.0.1 --single-branch https://github.com/i-pp/laf.git
-   cd laf
-   ```
+The listed sizes are downloads. Shared graphics memory draws from system DRAM.
 
-2. [Select or install a model](docs/laf-model-management.md#model-setup-from-the-local-ai-fabric-plugin)
-   and [configure and start its Router](docs/laf-configured-models.md).
-   Keep weights in persistent storage outside the plugin. Install the SDK, then
-   [prepare a private LAF runtime and bind it to the Router](docs/bootstrap.md).
-3. Choose a connection.
-   - **Local Codex.** Follow the [local marketplace instructions](docs/codex-install.md#codex-local-marketplace-option)
-     to install the source-built plugin and connect over stdio.
-   - **Private workspace.** Follow the [workspace setup guide](docs/integrated-plugin-install.md#private-workspace-setup-for-001)
-     to connect ChatGPT and Codex through one private App and its Secure MCP
-     Tunnel.
-4. With the Router running, use `laf_router_status` in the connected plugin or
-   run this command from the checkout with your Router's socket path.
+### Startup checks
 
-   ```sh
-   ./laf --socket /absolute/owner-private/router/service.sock status
-   ```
+- In the CPU-only Docker example, Ollama is limited to 1 CPU and 1 GiB of RAM.
+  At cold start, available host RAM must cover the 1 GiB limit plus an 8 GiB reserve.
+- The existing GPU path checks for at least 8 GiB of available system DRAM
+  and 2 GiB of free VRAM. For the untested GPU candidates, verify device and
+  driver compatibility and measure headroom during model load and generation.
 
-   Look for `ready` in the returned status.
+[smollm2-card]: https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct
+[smollm2-tag]: https://ollama.com/library/smollm2:135m-instruct-q4_K_M
+[qwen15-card]: https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct
+[qwen15-tag]: https://ollama.com/library/qwen2.5-coder:1.5b-instruct-q4_K_M
+[qwen7-card]: https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct
+[qwen7-tag]: https://ollama.com/library/qwen2.5-coder:7b-instruct-q4_K_M
+
+## Getting Started
+
+1. **Model.** [Choose a model and prepare persistent storage](docs/laf-model-management.md#model-setup-from-the-local-ai-fabric-plugin).
+2. **Router and runtime.** [Configure and start the Router](docs/laf-configured-models.md).
+   Use the host prerequisites below to [prepare a private runtime](docs/bootstrap.md).
+3. **Client connection.** Choose the local Codex or private workspace path in [Installation](#installation).
+4. **First check.** In the connected client, use `laf_router_status` and look for `ready`.
+
+## Installation
+
+Start from the [experimental 0.0.1 source tag](https://github.com/i-pp/laf/tree/0.0.1)
+on Linux with Python 3.12 or later. Install [MCP SDK 1.30.0](docs/laf-sdk-install.md)
+before preparing the private runtime. The SDK installer supports CPython 3.12
+and 3.14 on Linux x86-64.
+
+- [Local Codex installation](docs/codex-install.md#codex-local-marketplace-option)
+  installs the source-built plugin from a local marketplace.
+- [Private workspace installation](docs/integrated-plugin-install.md#private-workspace-setup-for-001)
+  sets up one app for ChatGPT and Codex.
+
+## Documentation
+
+- [Router tools and job flow](docs/laf-mcp.md#five-tools-one-bounded-job-path)
+- [Standalone terminal client](docs/client-install.md)
+- [Source preview scope](docs/source-preview.md)
+
+## License and contributions
+
+LAF's source is public. The first-party source uses the
+[KISS Open License v1.0](LICENSE), which permits use, modification, and
+redistribution, including commercial use, subject to its terms. Third-party
+models and engine artifacts have their own terms.
+
+Anyone can [open an issue](https://github.com/i-pp/laf/issues) or
+[submit a pull request](https://github.com/i-pp/laf/pulls).
+See the [contribution rules](AGENTS.md).
