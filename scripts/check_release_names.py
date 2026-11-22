@@ -45,6 +45,8 @@ PRESERVED = {
         'c2c45b2812fca303d6cc994c763960a8a9d94d6b04fe97936ed7485ba9ca5af7',
     },
     'mcp/NOTICE': {COMPONENT_NOTICE},
+    # Modified 2026-11-22: preserve the exact component notice in the local marketplace.
+    'plugins/laf-local/mcp/NOTICE': {COMPONENT_NOTICE},
     'runtime/public_laf/NOTICE': {COMPONENT_NOTICE},
     'runtime/public_laf/mcp/NOTICE': {COMPONENT_NOTICE},
     'CHANGES.md': {'aa547c41d9a158c51f5d6e490cd6018a0fea1b252ae3698f6916e4ad1fb26518'},
