@@ -20,6 +20,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Added 2026-11-12: original portable integrated package preparation.
+# Modified 2026-11-21: enforce the supported Python runtime before opening configuration.
 
 """Local integrated MCP launcher; never installs, starts services or repairs guards."""
 # Modified 2026-11-13: explicit NEW-prefix bootstrap/deny-all setup; legacy behavior retained.
@@ -107,6 +108,8 @@ def check_entrypoint(args):
  # This launcher does not replace those checks or import/install an SDK itself.
 
 def main(argv=None):
+ if sys.version_info<(3,12):
+  print('LAF requires Python 3.12 or later.',file=sys.stderr);return 1
  parser=argparse.ArgumentParser(description=__doc__)
  parser.add_argument('--config',type=Path,default=Path.home()/'.config/laf/plugin.json')
  parser.add_argument('--check',action='store_true',help='Static configuration/source check, not SDK or service acceptance')

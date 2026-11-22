@@ -38,6 +38,7 @@ IMAGE = 'sha256:d4ae7c574945c7432c8c02ae63fa81ad555854d9fcbc29d02542a4dd69833a85
 NAMES = {'coder-next': 'laf-coder-next', 'gpt-oss-120b': 'laf-gpt-oss-120b'}
 
 # Changed 2026-11-11: optional fixed host policy; no client-supplied image or limits.
+# Changed 2026-11-21: share installed image verification with explicit CPU Router.
 _IMAGE_ID = re.compile(r'sha256:[0-9a-f]{64}\Z')
 _IMAGE_REF = re.compile(r'[a-z0-9][a-z0-9._-]*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*){0,2}@sha256:[0-9a-f]{64}\Z')
 
@@ -56,6 +57,32 @@ def provider_policy(value):
         if type(value[key]) is not int or not minimum <= value[key] <= maximum:
             raise ServiceError('bounded integer Ollama resource limits required')
     return dict(value)
+
+
+def installed_provider_image(reference, docker):
+    # GET-only local image inspection. Never pull, build, infer a tag or stop a provider.
+    try:
+        objects = json.loads(docker('image', 'inspect', '--', reference))
+        if type(objects) is not list or len(objects) != 1 or type(objects[0]) is not dict:
+            raise ValueError()
+        image = objects[0]
+        identifier = image['Id']
+        if (type(identifier) is not str or not _IMAGE_ID.fullmatch(identifier)
+                or image.get('Os') != 'linux' or type(image.get('Config')) is not dict):
+            raise ValueError()
+        volumes = image['Config'].get('Volumes')
+        if volumes is not None and (type(volumes) is not dict or volumes):
+            raise ValueError()
+        if _IMAGE_ID.fullmatch(reference):
+            if identifier != reference:
+                raise ValueError()
+        else:
+            digests = image.get('RepoDigests')
+            if type(digests) is not list or not all(type(item) is str for item in digests) or reference not in digests:
+                raise ValueError()
+        return identifier
+    except (ValueError, TypeError, KeyError):
+        raise ServiceError('installed Ollama image identity or implicit mounts rejected') from None
 
 
 class Backends:
@@ -81,33 +108,9 @@ class Backends:
         self.lifecycle_lock = threading.RLock()
 
     def resolve_provider_image(self):
-        if self.provider_image_id is not None:
-            return self.provider_image_id
-        # GET-only local image inspection. Never pull, build, infer a tag or stop a provider.
-        reference = self.provider['image']
-        try:
-            objects = json.loads(self.docker('image', 'inspect', '--', reference))
-            if type(objects) is not list or len(objects) != 1 or type(objects[0]) is not dict:
-                raise ValueError()
-            image = objects[0]
-            identifier = image['Id']
-            if (type(identifier) is not str or not _IMAGE_ID.fullmatch(identifier)
-                    or image.get('Os') != 'linux' or type(image.get('Config')) is not dict):
-                raise ValueError()
-            volumes = image['Config'].get('Volumes')
-            if volumes is not None and (type(volumes) is not dict or volumes):
-                raise ValueError()
-            if _IMAGE_ID.fullmatch(reference):
-                if identifier != reference:
-                    raise ValueError()
-            else:
-                digests = image.get('RepoDigests')
-                if type(digests) is not list or not all(type(item) is str for item in digests) or reference not in digests:
-                    raise ValueError()
-        except (ValueError, TypeError, KeyError):
-            raise ServiceError('installed Ollama image identity or implicit mounts rejected') from None
-        self.provider_image_id = identifier
-        return identifier
+        if self.provider_image_id is None:
+            self.provider_image_id = installed_provider_image(self.provider['image'], self.docker)
+        return self.provider_image_id
 
     def docker(self, *args, timeout=30):
         p = subprocess.run(['docker', '--host=unix:///var/run/docker.sock', *args],

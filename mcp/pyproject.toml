@@ -27,7 +27,7 @@ name = "local-ai-fabric-mcp"
 version = "0.1.0"
 description = "Owner-only local LAF Router-job MCP stdio interface"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = "LicenseRef-KOL-v1"
 license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "licenses/MCP-SDK-LICENSE.txt"]
 # Modified 2026-11-11: exact SDK 1.30.0 selection; no automatic installation.

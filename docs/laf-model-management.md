@@ -22,7 +22,93 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
+<!-- Modified 2026-11-22: document the isolated client wheel as an alternative to the module entry point. -->
+
 # LAF model management: offline-tested first slice
+
+## Model setup from the Local AI Fabric plugin
+
+Open the plugin's model setup workflow and run the owner-side CLI from the
+verified LAF source directory on the Linux host. Plugin installation and
+updates require no model weights. The setup skill and the Router tools belong
+to the same plugin. The remote Router tools do not manage model files.
+
+```sh
+python3 -B -m inference.local_platform.cli model discover --publisher HuggingFaceTB
+python3 -B -m inference.local_platform.cli model discover --publisher Qwen --limit 15
+python3 -B -m inference.local_platform.cli model artifact HuggingFaceTB/SmolLM2-135M-Instruct
+```
+
+Discovery uses bounded anonymous GETs to the supported Hugging Face publisher
+catalogs, sorted by the publisher's most recently updated model records.
+Use `--search` to find a named family. Results include the public model name,
+card URL, update time and Hub revision. The separate artifact lookup verifies
+the selected mapping to an exact Ollama tag and returns the format, quantization,
+license, size and full manifest SHA-256. The Hub revision identifies the public
+model card. The manifest digest identifies the Ollama artifact.
+
+Choose an Ollama process with an explicit numeric-loopback address and a
+persistent model store. Verify that its actual `OLLAMA_MODELS` or container
+mount points to that store. Put the new private configuration in an existing
+0700 owner directory. Select the exact 0600 `generation.lock` for the same
+Router. For a fresh dedicated Router, the owner may create this new lock once
+in its private runtime directory before starting the service. Existing
+deployments must use their actual lock. Owner setup never starts an engine.
+
+```sh
+python3 -B -m inference.local_platform.cli model --config "$PRIVATE/model.json" setup \
+  --engine-url "$ENGINE_URL" --generation-lock "$GENERATION_LOCK"
+python3 -B -m inference.local_platform.cli model --config "$PRIVATE/model.json" download \
+  HuggingFaceTB/SmolLM2-135M-Instruct --digest "$SELECTED_MANIFEST_SHA256"
+```
+
+The default model store is `~/.local/share/laf/models`. Pass `--model-store`
+with another protected absolute directory, including an existing private
+Ollama store. The separate registry defaults to `~/.local/state/laf-models`;
+use `--state-dir` for an independent engine or test. Keep both outside the
+plugin installation. Setup refuses to replace a configuration file. Complete
+any upstream login or license acceptance directly with the provider before
+obtaining artifacts that require it.
+
+The explicit download command rechecks the selected digest and delegates to
+the existing locked and journaled installer. A mutable tag can still change
+between the recheck and Ollama's name-based pull. The final digest check fences
+any mismatch and preserves the uncertain operation. The CLI does not register
+it as installed or retry it. Use an independent store or a different verified
+tag when adopting a new artifact without replacing existing data.
+
+For an existing Ollama store, point the operator's engine and model setup at
+that store. Read the identities and select a specific installed model:
+
+```sh
+python3 -B -m inference.local_platform.cli model --config "$PRIVATE/model.json" inventory
+python3 -B -m inference.local_platform.cli model --config "$PRIVATE/model.json" use-installed \
+  --reference "$EXACT_TAG" --digest "$INSTALLED_MANIFEST_SHA256" --profile "$ROUTER_MODEL_ID"
+```
+
+Selection checks the observed engine tag and full digest. It creates no
+management record or deletion right. For an individually downloaded
+owner-controlled GGUF, first verify its file SHA-256 and prepare a new Modelfile:
+
+```sh
+python3 -B -m inference.local_platform.cli model use-file "$EXISTING_GGUF" \
+  --digest "$WEIGHTS_FILE_SHA256" --modelfile "$PRIVATE/Modelfile"
+```
+
+The file verification is a read of the chosen original. Use the official
+[Ollama import procedure](https://docs.ollama.com/import) to import from
+that Modelfile into the intended local engine, with the Router offline, its
+generation lock held, no models loaded, and a fresh destination tag. Then use
+`inventory` and `use-installed` to select the actual engine manifest. Verify
+the GGUF compatibility and any needed template before using it for inference.
+The setup path covers the reviewed Ollama mappings and local GGUF preparation.
+Strata artifacts still require their own reviewed format and provenance.
+
+Finally, use the installed identity to configure
+[the owner's Router profile](laf-configured-models.md) and
+`configure-router` allowlist. This is when the installed model becomes a Router
+candidate. The owner supplies measured runtime options and verifies readiness
+through the same plugin after startup.
 
 ## Busy-reader summary
 
@@ -42,9 +128,12 @@ python3 -B -m unittest -v inference.local_platform.test_models
 python3 -B scripts/check-laf.py --suite portable
 ```
 
-The implementation uses the existing module entry point. A packaged `laf`
-executable, engine provisioning and complete Docker Compose installation remain
-separate work. These commands are not a complete Quick Start for a running LAF.
+The examples use the module entry point from the checkout. After the
+[isolated wheel installation](client-install.md#offline-wheel-and-isolated-install),
+run the same model commands through `laf` in the activated virtual environment
+or through that environment's `bin/laf` path. For example, run `laf model catalog`.
+The wheel installs the Python client only. Engine provisioning and complete
+Docker Compose installation remain separate work.
 The existing `status` command still queries the private Router and now includes
 an independent local `model_storage` summary. Use `LAF_MODEL_STATE_DIR` to select
 the same registry used by model operations; otherwise it reads

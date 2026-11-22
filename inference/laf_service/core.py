@@ -24,10 +24,12 @@
 # Modified 2026-11-20: request-driven Flash loading in resource mode.
 # Modified 2026-11-20: reconcile unused residency when its pre-load wait ends.
 # Modified 2026-11-20: distinguish read-only Flash preparation from abortable work.
+# Modified 2026-11-21: share host RAM, swap and pressure checks with explicit CPU Router.
 
 """Bounded single-lane scheduling and fail-closed resource admission."""
 from __future__ import annotations
 import dataclasses
+import math
 import queue
 import threading
 import time
@@ -62,34 +64,39 @@ class ResourceWait(ServiceError):
         super().__init__(code)
 
 
-def snapshot(*, swap_capacity=False):
+def snapshot_cpu(*, swap_capacity=False):
     mem = {}
     for line in Path('/proc/meminfo').read_text().splitlines():
         k, v = line.split(':', 1)
         mem[k] = int(v.split()[0]) * 1024
     vm = dict(line.split() for line in Path('/proc/vmstat').read_text().splitlines())
-    devices = list(Path('/sys/class/drm').glob('card*/device/mem_info_vram_total'))
-    if len(devices) != 1:
-        raise ServiceError('exactly one GPU telemetry source required')
-    gpu = devices[0].parent
     full = next(l for l in Path('/proc/pressure/memory').read_text().splitlines() if l.startswith('full '))
     psi = dict(x.split('=') for x in full.split()[1:])
     result = {'mem_available': mem['MemAvailable'], 'swap_used': mem['SwapTotal'] - mem['SwapFree'],
-            'vram_total': int((gpu / 'mem_info_vram_total').read_text()),
-            'vram_used': int((gpu / 'mem_info_vram_used').read_text()),
             'pswpin': int(vm['pswpin']), 'pswpout': int(vm['pswpout']), 'psi_full_avg10': float(psi['avg10'])}
     if swap_capacity:
         result.update(swap_total=mem['SwapTotal'], swap_free=mem['SwapFree'])
     return result
 
 
-def check_resources(s, baseline, swap_limit_mib=512):
+def snapshot(*, swap_capacity=False):
+    devices = list(Path('/sys/class/drm').glob('card*/device/mem_info_vram_total'))
+    if len(devices) != 1:
+        raise ServiceError('exactly one GPU telemetry source required')
+    gpu = devices[0].parent
+    return {**snapshot_cpu(swap_capacity=swap_capacity),
+            'vram_total': int((gpu / 'mem_info_vram_total').read_text()),
+            'vram_used': int((gpu / 'mem_info_vram_used').read_text())}
+
+
+def _check_ram_reserve(s, swap_limit_mib):
     if type(swap_limit_mib) is not int or not 512 <= swap_limit_mib <= 2048:
         raise ValueError("swap_limit_mib must be 512..2048")
     if s['mem_available'] < 8 * GIB:
         raise ServiceError('RAM reserve below 8 GiB')
-    if s['vram_total'] - s['vram_used'] < 2 * GIB:
-        raise ServiceError('VRAM reserve below 2 GiB')
+
+
+def _check_swap_and_pressure(s, baseline, swap_limit_mib):
     if s['swap_used'] - baseline['swap_used'] > swap_limit_mib * 1024**2:
         raise ServiceError(f'swap growth exceeds {swap_limit_mib} MiB')
     page = __import__('os').sysconf('SC_PAGE_SIZE')
@@ -97,6 +104,23 @@ def check_resources(s, baseline, swap_limit_mib=512):
         raise ServiceError(f'swap I/O exceeds {swap_limit_mib} MiB since resource baseline')
     if s['psi_full_avg10'] > 10:
         raise ServiceError('memory PSI full avg10 above 10 percent')
+
+
+def check_resources(s, baseline, swap_limit_mib=512):
+    _check_ram_reserve(s, swap_limit_mib)
+    if s['vram_total'] - s['vram_used'] < 2 * GIB:
+        raise ServiceError('VRAM reserve below 2 GiB')
+    _check_swap_and_pressure(s, baseline, swap_limit_mib)
+
+
+def check_cpu_resources(s, baseline, swap_limit_mib=512):
+    counters = ('mem_available', 'swap_used', 'pswpin', 'pswpout')
+    if (any(type(s[key]) is not int or s[key] < 0 for key in counters)
+            or any(s[key] < baseline[key] for key in ('pswpin', 'pswpout'))
+            or not math.isfinite(s['psi_full_avg10']) or not 0 <= s['psi_full_avg10'] <= 100):
+        raise ServiceError('host CPU Router resource observation unconfirmed')
+    _check_ram_reserve(s, swap_limit_mib)
+    _check_swap_and_pressure(s, baseline, swap_limit_mib)
 
 
 def validate_request(body, models=MODELS):
@@ -158,7 +182,8 @@ class Job:
 
 
 class Controller:
-    def __init__(self, backend, read_resources=snapshot, start=True, swap_limit_mib=512, host_admission=False):
+    def __init__(self, backend, read_resources=snapshot, start=True, swap_limit_mib=512, host_admission=False,
+                 *, check_limits=None):
         self.backend = backend
         self.host_admission = host_admission
         self.swap_limit_mib = swap_limit_mib
@@ -166,8 +191,9 @@ class Controller:
         self.requires_flash = getattr(backend, 'requires_flash', True)
         self.prewarm_flash = self.requires_flash and not getattr(backend, 'resource_mode', False)
         self.read_resources = read_resources
+        self.check_limits = check_limits or check_resources
         self.baseline = read_resources()
-        check_resources(self.baseline, self.baseline, self.swap_limit_mib)
+        self.check_limits(self.baseline, self.baseline, self.swap_limit_mib)
         self.queue = queue.Queue(maxsize=8)
         self.jobs = {}
         self.lock = threading.RLock()
@@ -213,7 +239,7 @@ class Controller:
         self.latest = s
         # A split host reader has already enforced the shared rolling verdict.
         # Keep hard local reserves; never bypass admission in the reader.
-        check_resources(s, s if self.host_admission else self.baseline, self.swap_limit_mib)
+        self.check_limits(s, s if self.host_admission else self.baseline, self.swap_limit_mib)
         return s
 
     def watch(self):
@@ -370,7 +396,7 @@ class Controller:
                 current = self.read_resources()
                 # Absolute reserves and PSI protections remain in force. The
                 # old cumulative I/O counter is deliberately not a new budget.
-                check_resources(current, current, self.swap_limit_mib)
+                self.check_limits(current, current, self.swap_limit_mib)
                 if current['psi_full_avg10'] > 1 or any(
                     current[key] != first[key] for key in ('swap_used', 'pswpin', 'pswpout')
                 ):

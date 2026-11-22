@@ -40,7 +40,7 @@ service names and the source migration boundary.
 
 This client procedure assumes the [GPU service](../laf_service/README.md) is
 already configured and healthy. It is not a fresh-host installation guide. Run
-from this repository root, with Python 3.11+ on Linux:
+from this repository root, with Python 3.12 or later on Linux:
 
 ```sh
 SOCKET="$XDG_RUNTIME_DIR/laf-inference/service.sock"

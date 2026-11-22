@@ -28,87 +28,69 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 <!-- Modified 2026-11-10: link client-only packaging while retaining the separate runtime-provisioning boundary. -->
 
-# Local AI Fabric integrated plugin (experimental source)
+<!-- Modified 2026-11-22: summarize requirements and the two source setup paths. -->
 
-With four explicit operator opt-ins, the root plugin exposes 29 tools,
-including `codex_models_list` and five owner-scoped Router tools. Local
-Core/Router inference needs no OpenAI account. Codex is an optional separately
-authorized integration. The portable manifest launches stdio, and the source
-retains the HTTP frontend.
+# Local AI Fabric
 
-See [existing-owner-host setup](docs/integrated-plugin-install.md). This is not a
-complete clean-host Quick Start. Model/SDK/vendor assets and private account,
-service, tunnel and runtime state are not included. The installation guide keeps
-the [historical loader evidence](docs/codex-install.md#completed-local-loader-and-discovery-evidence)
-scoped to its original source. Later local predecessors were checked separately:
-`c2ab056` completed installed stdio Flash and Codex canaries, correlated terminal
-history and same-runtime restart/reconciliation; `438b2aa` passed installed
-private-policy setup and 33-tool discovery with an expired synthetic policy.
-`e42ebd1` later completed installed Flash/Codex canaries, original-key restart
-replay, active Codex cancellation and owned local executor cleanup. The model
-canaries used compatibility admission with resource mode off. Those observations
-do not accept a newer package, production resource policy, provider quota or
-the production Tunnel/client path. Use the [installed acceptance procedure](docs/installed-acceptance.md)
-for the selected package. Raw account, process and receipt evidence stays private.
+**Your hardware. Your models. Your AI.**
 
-For Codex registration and the local marketplace option, see [Codex install](docs/codex-install.md).
+Local AI Fabric (LAF) lets Codex and ChatGPT use models running on your own
+hardware. The LAF Router serves the models you configure through a private
+connection.
 
-Choose a model from the Router's [configured catalog](docs/laf-configured-models.md).
-Keep its weights in persistent operator-managed storage outside the installed
-plugin. Point the Router at an existing model, or explicitly install the
-selected artifact using its [model-management procedure](docs/laf-model-management.md)
-after reviewing its source and terms. Plugin installation and updates do not
-fetch, install or replace model weights.
+`0.0.1` is an experimental source preview. Public one-click plugin installation
+is unavailable for this version.
 
-The optional [provider-feedback contract](docs/provider-feedback-admission.md)
-supports resource-admission schema3 for bounded Codex pipeline and ordinary
-Runner execution without inferring a provider concurrency limit. Local resources,
-account ownership, durable provider restrictions and UNKNOWN/no-replay guards
-still apply. Ordinary pre-turn waiting retains one execution, reservation and
-workspace lock; it never requeues a dispatched task. Existing schema1/2 finite
-provider quotas retain their enforcement. This staged source path
-does not select a calibrated policy or establish live resource-mode acceptance.
+## Requirements
 
-For a NEW independent private prefix, use the [prepare and configure guide](docs/bootstrap.md).
-It connects explicit existing Router/Codex prerequisites without copying another
-runtime's state. Unconfigured backends remain denied; this is not complete
-clean-host provisioning or acceptance of all backend actions.
+- A Linux host for the documented setup and Python 3.12 or later for the LAF
+  runtime.
+- [MCP SDK 1.30.0](docs/laf-sdk-install.md) for the plugin frontend. The SDK
+  installer supports CPython 3.12 and 3.14 on Linux x86_64.
+- RAM and disk space for the model you choose. The
+  [CPU-only Router](docs/laf-configured-models.md#explicit-cpu-only-router)
+  uses local Docker, a digest-pinned Ollama image, and an installed model pinned
+  by its manifest digest. This path can run without a GPU.
 
-For provider-advertised Codex models and immutable reasoning effort, see
-[model selection](docs/codex-model-selection.md). One bounded `gpt-6.1-sol`/`max`
-application-path turn completed; its [verification scope](docs/codex-model-selection.md#bounded-solmax-application-path-result)
-does not verify provider effort or normal installation. The existing configuration
-profile name `integrated-32` is retained for compatibility.
+## Architecture
 
-## Source layout and package build
-
-`runtime/` retains the reviewed compatibility base plus the explicit changes
-recorded in [CHANGES.md](CHANGES.md) and [SOURCE_ORIGIN.md](SOURCE_ORIGIN.md).
-Top-level `inference/`, `laf` and `mcp/` remain separate development/component
-source. The shared resource protocol and selected Core/Router changes are
-mirrored in top-level and bundled inference source.
-The standalone five-tool `mcp/` is retained as an optional component, not the root
-plugin. Changes to root source do not silently change the pinned runtime subset.
-The previous public component guide is preserved at [component source guide](docs/public-source-component-guide.md). See [origin and changes](SOURCE_ORIGIN.md). Future consolidation must preserve
-the supported tool schemas and runtime guards.
-
-Build source-only from this checkout without a private input ZIP:
-
-```sh
-python3 -B scripts/build-integrated-source.py --output /absolute/new/laf-source.zip
+```mermaid
+flowchart LR
+    Local["Local Codex"] -->|stdio| MCP["LAF MCP server"]
+    Workspace["ChatGPT and Codex in a private workspace"] --> App["Private App"]
+    App --> Tunnel["Secure MCP Tunnel"]
+    Tunnel --> MCP
+    MCP --> Router["LAF Router"]
+    Router --> Models["Local models"]
 ```
 
-This creates a new archive only; it installs or starts nothing. Release-time rights,
-secret and dependency review is required before distribution. Portal listing
-metadata is a later submission concern, not a prerequisite to reviewing this source.
+See the [component guide](docs/public-source-component-guide.md) for the
+standalone client and other components.
 
-## LAF 0.1.0 release naming
+## Set up from source
 
-Use the five `laf_router_*` tools for owner-scoped local inference. The fully
-opted-in integrated profile exposes 29 tools. The former four local helper
-operations and their configuration switches have been removed.
+1. Check out the experimental source tag.
 
-The [LAF-only naming gate](docs/laf-release-names.md) is mandatory for 0.1.0.
-Existing resource guards still apply. Allocation-level
-[GPU release verification](https://github.com/i-pp/laf/issues/22) and coordinated
-[swap policy management](https://github.com/i-pp/laf/issues/13) are follow-up work.
+   ```sh
+   git clone --branch 0.0.1 --single-branch https://github.com/i-pp/laf.git
+   cd laf
+   ```
+
+2. [Select or install a model](docs/laf-model-management.md#model-setup-from-the-local-ai-fabric-plugin)
+   and [configure and start its Router](docs/laf-configured-models.md).
+   Keep weights in persistent storage outside the plugin. Install the SDK, then
+   [prepare a private LAF runtime and bind it to the Router](docs/bootstrap.md).
+3. Choose a connection.
+   - **Local Codex.** Follow the [local marketplace instructions](docs/codex-install.md#codex-local-marketplace-option)
+     to install the source-built plugin and connect over stdio.
+   - **Private workspace.** Follow the [workspace setup guide](docs/integrated-plugin-install.md#private-workspace-setup-for-001)
+     to connect ChatGPT and Codex through one private App and its Secure MCP
+     Tunnel.
+4. With the Router running, use `laf_router_status` in the connected plugin or
+   run this command from the checkout with your Router's socket path.
+
+   ```sh
+   ./laf --socket /absolute/owner-private/router/service.sock status
+   ```
+
+   Look for `ready` in the returned status.

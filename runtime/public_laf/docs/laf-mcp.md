@@ -86,10 +86,9 @@ Use an existing isolated interpreter with MCP SDK **1.30.0** and reviewed
 dependencies for the actual protocol checks. The SDK-only installer guide is
 [separate](laf-sdk-install.md). Its successful installation does not activate the
 adapter or change a client's interpreter selection. Actual connection also needs
-an accepted Linux Router and the release gate below. Python >=3.10 is package
-metadata only: historical cloud tests used 3.12; the SDK installation and
-subsequent native checks used 3.14.4. The selected transitive closure includes rpds-py requiring >=3.11;
-it is not a tested Python 3.10 lock. Linux SO_PEERCRED and Unix sockets are required.
+an accepted Linux Router and the release gate below. LAF requires Python 3.12
+or later. Historical cloud tests used 3.12. The SDK installation and subsequent
+native checks used 3.14.4. Linux SO_PEERCRED and Unix sockets are required.
 No Windows/macOS, GPU/NPU, 8-16 GB fit or clean-host inference claim follows.
 
 The SDK pin and official archive hashes are in `mcp/sdk-pin.txt`; the dependency

@@ -23,6 +23,7 @@
 # Modified 2026-11-15: include installed-acceptance offline refusal regressions.
 # Modified 2026-11-15: provision FD-bind-capable Bubblewrap on the hosted source runner.
 # Modified 2026-11-15: create protected SDK test fixtures with an explicit caller umask.
+# Modified 2026-11-21: check the LAF Python runtime minimum before the source tests.
 
 name: Minimum source CI
 
@@ -53,6 +54,11 @@ jobs:
           import json
           import pathlib
           import subprocess
+          import sys
+
+          if sys.version_info < (3, 12):
+              raise SystemExit("LAF requires Python 3.12 or later.")
+          print(f"Checking LAF with Python {sys.version.split()[0]}")
 
           paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
           checked = 0

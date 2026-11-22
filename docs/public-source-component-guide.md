@@ -28,6 +28,8 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 <!-- Modified 2026-11-10: link client-only packaging while retaining the separate runtime-provisioning boundary. -->
 
+<!-- Modified 2026-11-22: fix relative links after moving this guide to docs. -->
+
 # Local AI Fabric
 
 **Your hardware. Your models. Your AI.**
@@ -56,7 +58,7 @@ switches models and handles recovery on your machine.
 with unit/mocked checks. This checkout does not ship model weights, vendor SDKs
 or a ready-to-run runtime image, and does not establish hardware support.
 Getting started assumes an already provisioned host; the optional checks can run
-without models. See [source-preview limits and release gates](docs/source-preview.md).
+without models. See [source-preview limits and release gates](source-preview.md).
 
 ## Architecture
 
@@ -82,8 +84,8 @@ flowchart TD
 
 The default Router manages the host-backed inference path. The opt-in Core
 entrypoint separates inference control from fixed host lifecycle operations.
-See [Core integration](docs/laf-core-integration.md) and
-[the API contract](inference/local_platform/API.md) for those boundaries.
+See [Core integration](laf-core-integration.md) and
+[the API contract](../inference/local_platform/API.md) for those boundaries.
 
 ## How is this different from Ollama?
 
@@ -96,10 +98,10 @@ Start with standalone Ollama if you only need its model runtime. LAF is for
 coordinating engines and guarded development workflows.
 
 The legacy Router exposes `flash`, `coder-next` and `gpt-oss-120b`. The opt-in
-Core can instead use [configured profiles and optional Flash](docs/laf-configured-models.md),
+Core can instead use [configured profiles and optional Flash](laf-configured-models.md),
 with a pinned operator catalog and explicit default. It is not an arbitrary-model
 launcher or a complete OpenAI API emulator. See
-[Router behavior and limits](inference/laf_service/README.md).
+[Router behavior and limits](../inference/laf_service/README.md).
 
 ## Getting started
 
@@ -107,10 +109,10 @@ launcher or a complete OpenAI API emulator. See
 
 This path requires an already configured and accepted LAF Router, with its
 declared default model prepared (`gpt-oss-120b` for the legacy profile). Complete the
-[Router prerequisites and host acceptance](inference/laf_service/README.md#machine-specific-preparation)
+[Router prerequisites and host acceptance](../inference/laf_service/README.md#machine-specific-preparation)
 first. This source preview does not provide a complete fresh-host installation.
 
-Use an existing Linux Python 3.10+ with `fcntl`, `resource` and Unix-process
+Use an existing Linux Python 3.12 or later with `fcntl`, `resource` and Unix-process
 support. From the repository root, use the checkout-local launcher:
 
 ```sh
@@ -129,13 +131,13 @@ it explicitly with:
 
 The default socket is `/run/user/<uid>/laf-inference/service.sock`, using your
 current user ID. `LOCAL_INFERENCE_SOCKET` can select another existing private
-socket; an explicit `--socket` takes priority. See [the chat guide](docs/laf-chat-cli.md)
+socket; an explicit `--socket` takes priority. See [the chat guide](laf-chat-cli.md)
 for custom-socket commands, filename-only workspace search, privacy and cancellation.
 These client commands do not install or start a Router, engine or model. Chat
 replies are unverified model output.
 
 For `laf` outside the checkout, [install the client in a dedicated virtual
-environment](docs/client-install.md) and activate it. This installs only the
+environment](client-install.md) and activate it. This installs only the
 client, not a Router or model. If the checkout launcher's executable bit was lost
 during transfer, use `python3 -B laf` with the same arguments. `./laf --help` shows the CLI reference
 without contacting a Router.
@@ -157,7 +159,7 @@ The first command automatically enters `/help` and `/quit`; it is an offline
 launcher check, not an AI conversation. The test suite uses temporary files and
 owned fake subprocesses, and lists socket tests as **unexecuted**, not passed.
 Neither command establishes runtime or hardware readiness. See
-[test groups and result accounting](docs/testing.md) for details.
+[test groups and result accounting](testing.md) for details.
 
 ## Project status
 
@@ -173,38 +175,38 @@ Neither command establishes runtime or hardware readiness. See
   distributable images, broader hardware acceptance, remote/multi-PC workflows,
   and a web UI. These are not shipped capabilities or promised release dates.
 
-See [the full preview and release boundary](docs/source-preview.md) before
+See [the full preview and release boundary](source-preview.md) before
 selecting a runtime configuration or distributing external assets.
 
 ## Documentation
 
-- [Local stdio MCP source candidate](docs/laf-mcp.md): five Router-job tools,
+- [Local stdio MCP source candidate](laf-mcp.md): five Router-job tools,
   owned receipts and separate runtime/dependency acceptance gates.
 
-- [Router setup, model switching and recovery](inference/laf_service/README.md)
-- [Terminal conversation and filename search](docs/laf-chat-cli.md)
-- [Isolated terminal-client installation](docs/client-install.md)
-- [Development client](inference/local_platform/README.md) and
-  [scoped project tools](inference/local_platform/workspace-client.md)
-- [Model management and provenance](docs/laf-model-management.md)
-- [Core integration](docs/laf-core-integration.md) and
-  [fixed host supervisor](docs/laf-host-supervisor.md)
-- [Optional NPU service](inference/laf_npu_service/README.md) and
-  [NPU distribution requirements](inference/laf_npu_service/DISTRIBUTION.md)
-- [Tests](docs/testing.md), [source-preview limits](docs/source-preview.md) and
-  [naming/migration](inference/local_platform/naming.md)
+- [Router setup, model switching and recovery](../inference/laf_service/README.md)
+- [Terminal conversation and filename search](laf-chat-cli.md)
+- [Isolated terminal-client installation](client-install.md)
+- [Development client](../inference/local_platform/README.md) and
+  [scoped project tools](../inference/local_platform/workspace-client.md)
+- [Model management and provenance](laf-model-management.md)
+- [Core integration](laf-core-integration.md) and
+  [fixed host supervisor](laf-host-supervisor.md)
+- [Optional NPU service](../inference/laf_npu_service/README.md) and
+  [NPU distribution requirements](../inference/laf_npu_service/DISTRIBUTION.md)
+- [Tests](testing.md), [source-preview limits](source-preview.md) and
+  [naming/migration](../inference/local_platform/naming.md)
 
 ## Contributing
 
-Start with [the development rules](AGENTS.md) and [the offline checks](docs/testing.md).
+Start with [the development rules](../AGENTS.md) and [the offline checks](testing.md).
 Keep changes small, preserve the ownership and resource guards, and report what
 you verified and what remains untested. Do not commit model data, credentials,
 caches or logs.
 
 ## License
 
-Identified first-party source is licensed under [KISS Open License v1.0](LICENSE)
+Identified first-party source is licensed under [KISS Open License v1.0](../LICENSE)
 (KOL-v1), a custom license with no claim of OSI approval. Read [the licensing
-scope](LICENSING.md) and [third-party notices](THIRD_PARTY_NOTICES.md). External
+scope](../LICENSING.md) and [third-party notices](../THIRD_PARTY_NOTICES.md). External
 engines, models and SDKs retain their own terms; this source license does not
 grant rights to redistribute them.

@@ -37,7 +37,7 @@ owned Core container. It never accepts client commands, paths, mounts, images,
 container names, arbitrary URLs or host PIDs.
 
 The following are focused checks, not the full regression suite. Run from the
-source root with Python 3.10 or later:
+source root with Python 3.12 or later:
 
 ```sh
 python3 -B -m unittest \
