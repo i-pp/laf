@@ -76,22 +76,36 @@ SOCKET_OPERATIONS = {'AF_UNIX', 'SOCK_STREAM', 'SOL_SOCKET', 'SO_PEERCRED', 'soc
 def check_runtime(name, data):
     if REMOTE_ADDRESS.search(data):
         raise ValueError(f'Unexpected network address in {name}')
-    for node in ast.walk(ast.parse(data, filename=name)):
+    tree = ast.parse(data, filename=name)
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             modules = {alias.name for alias in node.names}
-        elif isinstance(node, ast.ImportFrom) and node.level == 0:
-            modules = {node.module}
+            if any((alias.asname is not None and alias.name == 'socket')
+                   or alias.asname == 'socket' for alias in node.names):
+                raise ValueError(f'Expected canonical socket import in {name}')
+        elif isinstance(node, ast.ImportFrom):
+            modules = {node.module} if node.level == 0 else set()
+            if ((node.module or '').split('.')[0] == 'socket'
+                    or any(alias.name == 'socket' or alias.asname == 'socket'
+                           for alias in node.names)):
+                raise ValueError(f'Expected canonical socket import in {name}')
         else:
             modules = set()
         if not modules <= RUNTIME_IMPORTS:
             raise ValueError(f'Unreviewed runtime import in {name}')
-        if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
-                and node.value.id == 'socket' and node.attr not in SOCKET_OPERATIONS):
-            raise ValueError(f'Unreviewed socket operation in {name}')
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                and isinstance(node.func.value, ast.Name) and node.func.value.id == 'socket'
-                and node.func.attr == 'socket'):
-            family = node.args[0] if node.args else None
+        if isinstance(node, ast.Name) and node.id == 'socket':
+            access = parents.get(node)
+            if (not isinstance(access, ast.Attribute) or access.value is not node
+                    or not isinstance(access.ctx, ast.Load)
+                    or access.attr not in SOCKET_OPERATIONS):
+                raise ValueError(f'Unreviewed socket operation in {name}')
+            if access.attr != 'socket':
+                continue
+            call = parents.get(access)
+            if not isinstance(call, ast.Call) or call.func is not access:
+                raise ValueError(f'Expected a direct Unix socket call in {name}')
+            family = call.args[0] if call.args else None
             if not isinstance(family, ast.Attribute) or ast.unparse(family) != 'socket.AF_UNIX':
                 raise ValueError(f'Expected a Unix socket in {name}')
 

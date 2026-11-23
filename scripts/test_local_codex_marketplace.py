@@ -127,6 +127,33 @@ class MarketplaceTests(unittest.TestCase):
         self.assertEqual((self.plugin / 'mcp.json').read_text(), '{}')
 
     def test_runtime_allowlist_rejects_network_and_private_material(self):
+        for snippet in (
+            b'import socket as local_socket\n',
+            b'import socket as socket\n',
+            b'import os as socket\n',
+            b'from socket import AF_UNIX\n',
+            b'from socket import socket\n',
+            b'from . import socket\n',
+        ):
+            with self.subTest(snippet=snippet):
+                with self.assertRaisesRegex(ValueError, 'canonical socket import'):
+                    marketplace.check_runtime('fixture.py', snippet)
+
+        for snippet in (
+            b'import socket\nmodule = socket\n',
+            b'import socket\nfactory = socket.socket\n',
+        ):
+            with self.subTest(snippet=snippet):
+                with self.assertRaisesRegex(ValueError, 'socket operation|socket call'):
+                    marketplace.check_runtime('fixture.py', snippet)
+
+        for snippet in (
+            b'import socket\nfamily = socket.AF_UNIX\n',
+            b'import socket\nsock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n',
+        ):
+            with self.subTest(snippet=snippet):
+                marketplace.check_runtime('fixture.py', snippet)
+
         source = self.fixture_source()
         target = source / 'mcp/src/laf_mcp/router.py'
         real = target.read_bytes()
