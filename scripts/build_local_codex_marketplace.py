@@ -18,9 +18,12 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-23: pin reviewed standalone runtime source digests.
+
 """Build or verify a standalone Git marketplace tree for the local Codex adapter."""
 import argparse
 import ast
+from hashlib import sha256
 import json
 from pathlib import Path
 import re
@@ -47,6 +50,18 @@ COPY = (
     'mcp/src/laf_mcp/contracts.py', 'mcp/src/laf_mcp/receipts.py',
     'mcp/src/laf_mcp/router.py', 'mcp/src/laf_mcp/server.py',
 )
+# Pins bind the standalone export to reviewed source bytes. Review any runtime
+# change before deliberately updating its pin.
+RUNTIME_SHA256 = {
+    'mcp/codex_local.py': 'b0b81a4acc81448c93224684b6f470d354d93156a605ff68877ab60ef00b37a6',
+    'mcp/launch.py': 'ab5f05bf826e71f544f6d065f5bff12a234a89865dbd4f854907ef21fe6d16d1',
+    'mcp/src/laf_mcp/__init__.py': 'c9d7c6794e0a3d470973bc88d9008ccdb1d71956ba48949dda956cd81446eec9',
+    'mcp/src/laf_mcp/application.py': '3a896868c1d268689373070f574915ba4a85f96685d36839207c92ac799b1a2e',
+    'mcp/src/laf_mcp/contracts.py': 'c3029e41ea0f5b18d21a8d3fc0892bbaef66982a9db4f81868499b3eb055a71e',
+    'mcp/src/laf_mcp/receipts.py': 'dfd4cad82ff8687d6c3e5d275f574c532e33f71cfb925a72ad8580cda0494103',
+    'mcp/src/laf_mcp/router.py': '10d3162df972bd051d4a87a0801ac8ff578e3a3c061a73a49c064b21bbf42af6',
+    'mcp/src/laf_mcp/server.py': 'f2c173542a1b7311bd5ff52cde79cf231072d5621f2dd2012415dd62f2151dec',
+}
 README_SOURCE = 'docs/laf-codex-local-marketplace.md'
 PLUGIN_ROOT = '${PLUGIN_ROOT}'
 PRIVATE_VALUE = re.compile(
@@ -161,11 +176,16 @@ def payload(root):
         with path.open('rb') as stream:
             files[name] = stream.read(MAX_FILE + 1)
 
+    if {name for name in files if name.endswith('.py')} != RUNTIME_SHA256.keys():
+        raise ValueError('Runtime source inventory differs from reviewed digest pins')
+
     for name, data in files.items():
         check_member(name, data)
         if PRIVATE_VALUE.search(data):
             raise ValueError(f'Unexpected private material in {name}')
-        if name.endswith('.py'):
+        if name in RUNTIME_SHA256:
+            if sha256(data).hexdigest() != RUNTIME_SHA256[name]:
+                raise ValueError(f'Runtime source digest differs from reviewed pin in {name}')
             check_runtime(name, data)
         elif name != ICON and any(not url.startswith(PUBLIC_REFERENCES) for url in REFERENCE.findall(data)):
             raise ValueError(f'Unreviewed reference in {name}')

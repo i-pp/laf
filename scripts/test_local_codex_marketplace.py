@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-23: cover unpinned or changed source at both export entry points.
+
 """Offline checks for the exact local Codex marketplace and launcher boundary."""
 import ast
 from contextlib import redirect_stderr
@@ -168,6 +170,32 @@ class MarketplaceTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     marketplace.build(source, self.export)
                 self.assertFalse(self.export.exists())
+
+        runtime_name = target.relative_to(source).as_posix()
+        target.write_bytes(real)
+        without_pin = {name: digest for name, digest in marketplace.RUNTIME_SHA256.items()
+                       if name != runtime_name}
+        with patch.dict(marketplace.RUNTIME_SHA256, without_pin, clear=True):
+            with self.assertRaisesRegex(ValueError, 'inventory differs from reviewed digest pins'):
+                marketplace.build(source, self.export)
+        self.assertFalse(self.export.exists())
+
+        self.assertEqual(marketplace.build(source, self.export), 21)
+        harmless_change = real + b'\n# Synthetic review marker.\n'
+        target.write_bytes(harmless_change)
+        uncreated = self.scratch / 'not-created'
+        with self.assertRaisesRegex(ValueError, 'digest differs from reviewed pin'):
+            marketplace.build(source, uncreated)
+        self.assertFalse(uncreated.exists())
+
+        # Matching source and export bytes must still fail if neither matches the pin.
+        (self.plugin / runtime_name).write_bytes(harmless_change)
+        with (patch.object(marketplace, 'ROOT', source),
+              patch.object(sys, 'argv', ['exporter', '--check', str(self.export)]),
+              redirect_stderr(io.StringIO()) as stderr, self.assertRaises(SystemExit) as failure):
+            marketplace.main()
+        self.assertEqual(failure.exception.code, 1)
+        self.assertIn('digest differs from reviewed pin', stderr.getvalue())
 
     def test_source_symlink_cannot_supply_allowlisted_file(self):
         source = self.fixture_source()
