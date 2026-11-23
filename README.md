@@ -36,30 +36,40 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 <!-- Modified 2026-11-22: give a first job example and separate planning from startup checks. -->
 
+<!-- Modified 2026-11-22: identify third-party clients and distinguish local and private-workspace setup. -->
+
 # Local AI Fabric
 
 **Your hardware. Your models. Your AI.**
 
-Ask a configured local model to summarize a short passage you provide. From
-ChatGPT or Codex, submit the job through LAF, check its status, and retrieve
-the summary.
+Local AI Fabric (LAF) is an independent project developed by I-plusplus Inc.
+It is not an OpenAI product. References to third-party products describe
+interoperability; they do not imply affiliation or endorsement.
 
-ChatGPT and Codex keep their own models and act as control clients for LAF.
-The LAF Router sends the jobs you submit through LAF to a local engine running
-a configured third-party model. Obtain model weights separately from LAF.
+Ask a configured local model to summarize a short passage you provide. Use
+[Codex](https://openai.com/codex/) CLI on the same host over standard input/output
+(stdio), or use [ChatGPT](https://chatgpt.com/) or Codex in a supported private
+workspace where an operator has configured the LAF app through OpenAI's
+[Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels).
+A regular ChatGPT session cannot connect directly to a localhost MCP server.
+Submit the job through LAF, check its status, and retrieve the summary.
+
+ChatGPT and Codex are third-party OpenAI products. They act as clients for LAF
+and are not replaced by it. The LAF Router sends jobs submitted through LAF to
+a local engine running a configured third-party model. Obtain model weights
+separately from LAF.
 
 ## Goal and current scope
 
-Local AI Fabric (LAF) aims to make local models usable through a common job
+LAF aims to make local models usable through a common job
 interface while operators choose their engine and manage model storage. The
 experimental `0.0.1` source preview exposes the configured model catalog and
-Router job tools through MCP. Its documented CPU-only path uses one pinned
-Ollama model.
+Router job tools through MCP. Its documented CPU-only path uses the third-party inference engine
+[Ollama](https://ollama.com/) with one pinned model.
 
 ## Architecture
 
-Local Codex connects over stdio. ChatGPT and Codex in a private workspace
-connect through a private app and Secure MCP Tunnel.
+The local CLI and private workspace paths converge at the LAF MCP server.
 
 ```mermaid
 flowchart LR
@@ -108,15 +118,15 @@ The listed sizes are downloads. Shared graphics memory draws from system DRAM.
 
 ## Installation
 
-Start from the [experimental 0.0.1 source tag](https://github.com/i-pp/laf/tree/0.0.1)
-on Linux with Python 3.12 or later. Install [MCP SDK 1.30.0](docs/laf-sdk-install.md)
-before preparing the private runtime. The SDK installer supports CPython 3.12
-and 3.14 on Linux x86-64.
+Use Linux with Python 3.12 or later and install [MCP SDK 1.30.0](docs/laf-sdk-install.md).
+The SDK installer supports CPython 3.12 and 3.14 on Linux x86-64.
 
-- [Local Codex installation](docs/codex-install.md#codex-local-marketplace-option)
-  installs the source-built plugin from a local marketplace.
-- [Private workspace installation](docs/integrated-plugin-install.md#private-workspace-setup-for-001)
-  sets up one app for ChatGPT and Codex.
+- [Standalone local Codex plugin](docs/laf-codex-local-marketplace.md):
+  build the local-only marketplace from this source tree and connect Codex to
+  your own Router over a local Unix socket.
+- [Private workspace installation](docs/integrated-plugin-install.md#private-workspace-setup-for-001):
+  start from the [experimental 0.0.1 source tag](https://github.com/i-pp/laf/tree/0.0.1)
+  to set up the integrated app for ChatGPT and Codex.
 
 ## Documentation
 
@@ -129,7 +139,8 @@ and 3.14 on Linux x86-64.
 LAF's source is public. The first-party source uses the
 [KISS Open License v1.0](LICENSE), which permits use, modification, and
 redistribution, including commercial use, subject to its terms. Third-party
-models and engine artifacts have their own terms.
+models and engine artifacts have their own terms. Third-party product names
+and marks belong to their respective owners.
 
 Anyone can [open an issue](https://github.com/i-pp/laf/issues) or
 [submit a pull request](https://github.com/i-pp/laf/pulls).
