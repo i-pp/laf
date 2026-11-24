@@ -19,6 +19,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Modified 2026-11-21: require Router-compatible identity before selecting or downloading a model.
+# Modified 2026-11-24: report verified registry bytes for reviewed artifact mappings.
 
 """Owner-side model selection for LAF onboarding."""
 
@@ -130,7 +131,8 @@ def discover(publisher, limit, search=None):
 
 
 def _descriptor(value, media_types):
-    if (not isinstance(value, dict) or value.get("mediaType") not in media_types
+    if (not isinstance(value, dict) or not isinstance(value.get("mediaType"), str)
+            or value["mediaType"] not in media_types
             or not isinstance(value.get("digest"), str) or not DIGEST.fullmatch(value["digest"])
             or type(value.get("size")) is not int or not 1 <= value["size"] <= 2**50
             or "urls" in value or "data" in value):
@@ -141,7 +143,7 @@ def _descriptor(value, media_types):
 def artifact(identifier):
     mapping = ARTIFACTS.get(identifier)
     if mapping is None:
-        raise ModelError("no reviewed compatible artifact mapped to this publisher model")
+        raise ModelError("no reviewed Ollama tag mapping for this publisher model")
     profile, reference = mapping
     if not valid_configured_profile_id(profile) or not valid_profile_reference(reference):
         raise ModelError("reviewed artifact needs a valid nonreserved Router profile")
@@ -161,23 +163,44 @@ def artifact(identifier):
             or not isinstance(manifest.get("layers"), list) or not 1 <= len(manifest["layers"]) <= 16):
         raise ModelError("unsupported registry manifest")
     sizes = dict([_descriptor(manifest.get("config"), {CONFIG_TYPE})])
-    model_count = 0
+    model_layers = []
     for layer in manifest["layers"]:
         layer_digest, size = _descriptor(layer, LAYER_TYPES)
         if layer_digest in sizes and sizes[layer_digest] != size:
             raise ModelError("conflicting registry blob sizes")
         sizes[layer_digest] = size
-        model_count += layer["mediaType"] == MODEL_LAYER
-    if model_count != 1:
+        if layer["mediaType"] == MODEL_LAYER:
+            model_layers.append((layer_digest, size))
+    if len(model_layers) != 1:
         raise ModelError("this setup requires one local Ollama model layer")
+    model_digest, model_size = model_layers[0]
+    total = sum(sizes.values()) + len(manifest_bytes)
     entry = {
         "id": profile, "engine": "ollama", "reference": reference,
         "source": f"https://ollama.com/library/{reference}", "license": LICENSE,
         "license_url": LICENSE_URL, "version": tag, "digest": digest,
-        "required_bytes": sum(sizes.values()) + len(manifest_bytes), "user_setup_required": False,
+        "required_bytes": total, "user_setup_required": False,
     }
     return {"public_model": card, "artifact": entry, "format": "GGUF", "quantization": "Q4_K_M",
-            "runtime_compatibility": "requires local installation and Router validation"}
+            "model_layer": {"digest": model_digest, "size_bytes": model_size}, "manifest_total_bytes": total,
+            "artifact_identity": {
+                "manifest_digest_scope": "current_tag_response",
+                "reviewed_manifest_digest": None,
+                "quantization_source": "reviewed_tag_mapping",
+            }, "runtime_compatibility": "requires local installation and Router validation"}
+
+
+def artifacts():
+    """Check only the reviewed mappings; never turn failed metadata into an offer."""
+    verified, unavailable = [], []
+    for identifier in sorted(ARTIFACTS):
+        try:
+            verified.append(artifact(identifier))
+        except (ModelError, OSError, http.client.HTTPException):
+            unavailable.append({"model": identifier, "status": "metadata_unavailable"})
+    status = "metadata_verified" if verified and not unavailable else "partial" if verified else "unavailable"
+    return {"catalog_status": status, "artifacts": verified, "unavailable": unavailable,
+            "installed": "not_queried", "selectable": "not_queried", "loaded": "not_queried"}
 
 
 def _absolute(path):

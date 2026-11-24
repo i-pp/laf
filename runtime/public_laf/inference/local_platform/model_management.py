@@ -20,6 +20,7 @@
 # Modified 2026-11-21: expose owner-side publisher discovery and model setup.
 # Modified 2026-11-23: add an owner-local observational model registry.
 # Modified 2026-11-24: reject installs against a mismatched registry scope.
+# Modified 2026-11-24: expose the reviewed artifact metadata catalog command.
 
 """Opt-in, persistent model management, separate from Router load/unload.
 
@@ -654,7 +655,8 @@ def main(argv=None):
     discover.add_argument('--publisher', choices=model_setup.PUBLISHERS, required=True)
     discover.add_argument('--limit', type=int, default=12)
     discover.add_argument('--search')
-    sub.add_parser('artifact', help='verify metadata of one reviewed Ollama artifact').add_argument('model')
+    sub.add_parser('artifacts', help='check current public metadata for reviewed Ollama tag mappings')
+    sub.add_parser('artifact', help='check current metadata for one reviewed Ollama tag mapping').add_argument('model')
     setup = sub.add_parser('setup', help='write a new private configuration without contacting an engine')
     setup.add_argument('--engine-url', required=True)
     setup.add_argument('--generation-lock', type=Path, required=True)
@@ -674,11 +676,13 @@ def main(argv=None):
     existing_file.add_argument('--modelfile', type=Path, required=True)
     args=parser.parse_args(argv)
     try:
-        if args.command in {'discover', 'artifact', 'setup', 'download', 'inventory', 'use-installed', 'use-file'}:
+        if args.command in {'discover', 'artifacts', 'artifact', 'setup', 'download', 'inventory', 'use-installed', 'use-file'}:
             if args.catalog:
                 raise ModelError('the setup commands do not accept a replacement catalog')
             if args.command == 'discover':
                 out = model_setup.discover(args.publisher, args.limit, args.search)
+            elif args.command == 'artifacts':
+                out = model_setup.artifacts()
             elif args.command == 'artifact':
                 out = model_setup.artifact(args.model)
             elif args.command == 'setup':
