@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-25: check reported Router provider modes without extra calls.
+
 import tempfile,pathlib,json,unittest,os
 from unittest.mock import MagicMock, patch
 from laf_mcp.application import Application
@@ -133,6 +135,31 @@ class AppTests(unittest.TestCase):
   o=self.a.call('laf_router_get_job',{'handle':r['handle']});self.assertEqual(o['outcome'],'UNKNOWN')
  def test_status_503_not_ready_and_no_raw_error(self):
   o=self.a.call('laf_router_status',{});self.assertEqual(o['status'],'not_ready');self.assertNotIn('SECRET',str(o));self.assertFalse(o['atomic'])
+ def test_status_observes_only_recognized_provider_modes(self):
+  cases = [
+   (200, {'provider_mode': 'cpu-only'}, 'cpu-only'),
+   (503, {'provider_mode': 'host-lifecycle'}, 'host-lifecycle'),
+   (200, {}, 'unknown'),
+   (200, [], 'unknown'),
+   (200, {'provider_mode': ['/private/path']}, 'unknown'),
+   (200, {'provider_mode': '/private/path'}, 'unknown'),
+  ]
+  for code, gpu, mode in cases:
+   with self.subTest(code=code, gpu=gpu):
+    status = 'ready' if code == 200 else 'not_ready'
+    responses = [(code, {'status': status, 'gpu': gpu}),
+                 (200, {'api_version': 1, 'npu': {'configured': True}})]
+    with patch.object(self.f, 'request', side_effect=responses) as request:
+     result = self.a.call('laf_router_status', {})
+    self.assertEqual([call.args for call in request.call_args_list],
+                     [('GET', '/health'), ('GET', '/v1/capabilities')])
+    self.assertEqual(result['outcome'], 'OBSERVED')
+    self.assertEqual(result['status'], status)
+    self.assertEqual(result['provider_mode'], mode)
+    self.assertIs(result['npu_configured'], True)
+    self.assertIs(result['npu_readiness_verified'], False)
+    self.assertIs(result['hardware_attested'], False)
+    self.assertNotIn('/private/path', str(result))
  def test_persist_failure_before_post(self):
   with patch.object(self.r,'create',side_effect=ReceiptError('blocked')):r=self.submit()
   self.assertEqual(r['outcome'],'NOT_SUBMITTED');self.assertFalse(any(x[0]=='POST' for x in self.f.calls))

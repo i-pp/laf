@@ -22,6 +22,8 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
+<!-- Modified 2026-11-25: explain the observed Router provider mode. -->
+
 # Connect a local MCP client to LAF
 
 ## Busy-reader summary
@@ -133,7 +135,10 @@ packaging does not authorize installing the plugin or editing a host's config.
 - `laf_router_models` lists the catalog intersected with the allowlist. It does
   not treat a listed model as ready or installed.
 - `laf_router_status` reports separate non-atomic health/capability observations.
-  `not_ready` remains not ready; GPU readiness does not attest NPU execution.
+  `provider_mode` is the connected Router's reported setup: `cpu-only`,
+  `host-lifecycle`, or `unknown` for a legacy or unrecognized response. It does
+  not prove GPU use. `not_ready` remains not ready; GPU readiness does not
+  attest NPU execution.
 - `laf_router_submit_job` requires `attempt_id`, `model` and 1-32 role/content text messages.
   Optional output/deadline bounds retain Router limits. It makes at most one POST.
 - `laf_router_get_job` accepts the returned opaque `handle`, not an arbitrary
