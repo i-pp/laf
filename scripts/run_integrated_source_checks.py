@@ -25,6 +25,7 @@
 # Modified 2026-11-20: require Flash retry cancellation and watchdog regressions.
 # Modified 2026-11-21: require model onboarding and workspace packaging regressions.
 # Modified 2026-11-21: include the Python support floor regression.
+# Modified 2026-11-24: account for three admission contention regressions.
 
 """Strict supplemental source checks with independent result/inventory refusal guards."""
 import json,sys,unittest
@@ -51,7 +52,7 @@ def main():
  try:
   gates=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_strict_source_gate'),9,runner)
   # Cardinality is a machine refusal guard, not a coverage or product specification.
-  source=run_checked(unittest.defaultTestLoader.loadTestsFromNames(['test_async_job_ack_disconnect','test_integrated_source','test_codex_package','test_common_policy_language','test_english_source','test_ordinary_session_pool','test_session_pool_boundary','test_resource_admission','test_resource_only','test_resource_pipeline','test_resource_review','test_local_resource_admission','test_resource_completion','test_flash_resource_admission','test_npu_resource_evidence','test_resource_read_integration','test_scope_release_unknown']),340,runner)
+  source=run_checked(unittest.defaultTestLoader.loadTestsFromNames(['test_async_job_ack_disconnect','test_integrated_source','test_codex_package','test_common_policy_language','test_english_source','test_ordinary_session_pool','test_session_pool_boundary','test_resource_admission','test_resource_only','test_resource_pipeline','test_resource_review','test_local_resource_admission','test_resource_completion','test_flash_resource_admission','test_npu_resource_evidence','test_resource_read_integration','test_scope_release_unknown']),343,runner)
   codex_selection=run_checked(unittest.defaultTestLoader.loadTestsFromNames(['test_codex_selection_boundary','test_codex_catalog_effort']),77,runner)
   bootstrap=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_bootstrap'),28,runner)
   bindings=run_checked(unittest.defaultTestLoader.loadTestsFromName('test_bootstrap_bindings'),42,runner)
