@@ -107,13 +107,21 @@ def validate_submission(args):
         raise ContractError('request exceeds wire byte bound')
     return out
 
-def validate_catalog(out, allowed):
+def validate_catalog(out, allowed, *, read_only=False):
+    """Validate catalog metadata, requiring exact limits for job admission."""
     if not isinstance(out, dict): raise ContractError('invalid catalog')
     limits = {'context_limit':8192, 'max_output_tokens':1024, 'max_large_models_loaded':1}
-    if any(type(out.get(k)) is not int or out[k] != v for k,v in limits.items()):
+    if read_only:
+        limits = {key: out.get(key) for key in limits}
+        # Keep integers exactly representable by JSON clients.
+        if (any(type(value) is not int or not 0 <= value < 2**53 for value in limits.values())
+                or not limits['context_limit'] or not limits['max_output_tokens']):
+            raise ContractError('invalid catalog limits')
+    elif any(type(out.get(k)) is not int or out[k] != v for k,v in limits.items()):
         raise ContractError('unsupported catalog limits')
     models = out.get('models')
-    if not isinstance(models, list) or not 1 <= len(models) <= 9 or not all(valid_model(m) for m in models) or len(set(models)) != len(models):
+    if (not isinstance(models, list) or len(models) > 9 or (not read_only and not models)
+            or not all(valid_model(m) for m in models) or len(set(models)) != len(models)):
         raise ContractError('invalid catalog models')
     if 'default_model' in out and out['default_model'] is not None and out['default_model'] not in models:
         raise ContractError('invalid catalog default')
