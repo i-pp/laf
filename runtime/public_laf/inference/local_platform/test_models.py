@@ -21,6 +21,7 @@
 """Offline model-lifecycle contracts. Never contacts an engine or downloads weights."""
 # Modified 2026-11-11: advertise the Router catalog separately from model storage status.
 # Modified 2026-11-23: cover the separate owner-local model registry.
+# Modified 2026-11-24: cover import-only registry scope mismatch on install.
 
 import copy
 from contextlib import contextmanager
@@ -406,6 +407,43 @@ class ModelTests(unittest.TestCase):
         self.engine.tags.append({'reference': reference, 'digest': DIGEST, 'size_bytes': 512})
         records = self.manager.migrate_registry()
         self.assertEqual(self.manager.registry()['records'], records + [imported])
+
+    def test_install_refuses_scope_changes_with_only_imported_records(self):
+        reference = 'owner/preinstalled:v1'
+        other_engine = FakeEngine()
+        other_engine.identity = 'other-ollama'
+        other_store = self.root/'other-store'
+        other_store.mkdir(mode=0o700)
+        other_lock_dir = self.root/'other-router'
+        other_lock_dir.mkdir(mode=0o700)
+        other_lock = other_lock_dir/'generation.lock'
+        other_lock.touch(mode=0o600)
+
+        for changed, engine, lock, store in (
+            ('engine', other_engine, self.lock, self.store),
+            ('store', self.engine, self.lock, other_store),
+            ('lock', self.engine, other_lock, self.store),
+        ):
+            with self.subTest(changed=changed):
+                self.engine.tags = [{'reference': reference, 'digest': DIGEST, 'size_bytes': 512}]
+                state = self.root/f'{changed}-state'
+                original = models.ModelManager(state, [ENTRY], self.engine, self.lock, self.store)
+                imported = original.register_existing('preinstalled', reference, DIGEST)
+                journal = state/'models.json'
+                self.assertFalse(os.path.lexists(journal))
+                registry = state/'registry'
+                before = {path: (path.stat().st_ino, path.read_bytes()) for path in registry.rglob('*.json')}
+                calls = engine.calls[:]
+
+                manager = models.ModelManager(state, [ENTRY], engine, lock, store)
+                with self.assertRaisesRegex(models.ModelError, 'local model registry scope changed'):
+                    manager.install(ENTRY['id'])
+
+                self.assertEqual(engine.calls, calls)
+                self.assertFalse(os.path.lexists(journal))
+                self.assertEqual({path: (path.stat().st_ino, path.read_bytes())
+                                  for path in registry.rglob('*.json')}, before)
+                self.assertEqual(original.registry()['records'], [imported])
 
     def test_registry_mutation_respects_generation_lock_and_uncertain_journal(self):
         with self.lock.open('r') as fd:
