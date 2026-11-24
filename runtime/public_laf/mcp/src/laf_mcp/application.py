@@ -44,10 +44,10 @@ class Application:
                 return current
             current.update(changes);self.receipts.save(current)
         return current
-    def _models(self):
+    def _models(self, *, read_only=False):
         code,raw=self.router.request('GET','/v1/models')
         if code!=200:raise ContractError('catalog unavailable')
-        return validate_catalog(raw,self.allowed)
+        return validate_catalog(raw, self.allowed, read_only=read_only)
     def _owned(self,args,*,cancel=False):
         exact_fields(args,{'handle'})
         with self.receipts.locked():r=self.receipts.load(args['handle'])
@@ -60,7 +60,8 @@ class Application:
             if name=='laf_router_get_job':return self.get(args)
             if name=='laf_router_cancel_job':return self.cancel(args)
             if name=='laf_router_models':
-                exact_fields(args,set());return dict(self._models(),outcome='OBSERVED')
+                exact_fields(args,set())
+                return dict(self._models(read_only=True), outcome='OBSERVED')
             if name=='laf_router_status':
                 exact_fields(args,set())
                 code,health=self.router.request('GET','/health')

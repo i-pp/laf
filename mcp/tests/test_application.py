@@ -19,7 +19,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 import tempfile,pathlib,json,unittest,os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from laf_mcp.application import Application
 from laf_mcp.receipts import Receipts,ReceiptError
 class Fake:
@@ -39,6 +39,70 @@ class Fake:
   if p=='/health':return 503,{'status':'not_ready','fault':'SECRET'}
   if p=='/v1/capabilities':return 200,{'api_version':1,'gpu':{'models':['flash'],'max_concurrent_generation':1},'npu':{'configured':False}}
   return 200,{'id':'b'*32,'model':'flash','status':'completed','result':{'content':'hello','thinking':'DO NOT EXECUTE'},'error':None}
+
+
+class CatalogTests(unittest.TestCase):
+ def setUp(self):
+  self.f = Fake()
+  self.r = MagicMock(spec=Receipts)
+  self.a = Application(self.f, self.r, {'flash'})
+
+ def test_models_observe_empty_and_different_catalog_limits(self):
+  standard = {'context_limit': 8192, 'max_output_tokens': 1024, 'max_large_models_loaded': 1}
+  different = {'context_limit': 16384, 'max_output_tokens': 512, 'max_large_models_loaded': 0}
+  cases = [
+   (['flash', 'coder-next'], standard, ['flash']),
+   (['flash', 'coder-next'], different, ['flash']),
+   ([], standard, []),
+  ]
+  for models, limits, visible in cases:
+   with self.subTest(models=models, limits=limits):
+    catalog = {'models': models, **limits}
+    with patch.object(self.f, 'request', return_value=(200, catalog)) as request:
+     observed = self.a.call('laf_router_models', {})
+    request.assert_called_once_with('GET', '/v1/models')
+    self.assertEqual(observed, {'outcome': 'OBSERVED', 'models': visible, **limits,
+                                'explicit_model_required': True})
+  self.assertEqual(self.r.mock_calls, [])
+
+ def test_models_refuse_malformed_catalog_metadata(self):
+  catalog = {'models': ['flash'], 'context_limit': 8192,
+             'max_output_tokens': 1024, 'max_large_models_loaded': 1}
+  cases = [
+   {'max_output_tokens': True}, {'max_output_tokens': 0}, {'context_limit': 2**53},
+   {'max_large_models_loaded': -1}, {'models': ['flash', 'flash']},
+   {'models': [f'model-{i}' for i in range(10)]},
+   {'default_model': 'other'}, {'flash_enabled': False},
+  ]
+  for invalid in cases:
+   with self.subTest(invalid=invalid):
+    with patch.object(self.f, 'request', return_value=(200, {**catalog, **invalid})):
+     observed = self.a.call('laf_router_models', {})
+    self.assertEqual(observed['outcome'], 'UNAVAILABLE')
+
+ def test_submit_rejects_empty_or_incompatible_catalog(self):
+  catalog = {'models': ['flash'], 'context_limit': 8192,
+             'max_output_tokens': 1024, 'max_large_models_loaded': 1}
+  cases = [
+   {'models': []}, {'context_limit': 16384}, {'max_output_tokens': 512},
+   {'max_large_models_loaded': 0},
+  ]
+  for i, override in enumerate(cases, 1):
+   with self.subTest(override=override):
+    args = {'attempt_id': f'{i:032x}', 'model': 'flash',
+            'messages': [{'role': 'user', 'content': 'synthetic'}]}
+    receipt = {'handle': args['attempt_id'], 'model': 'flash', 'job_id': None,
+               'outcome': 'UNKNOWN', 'status': None, 'cancel_outcome': 'NOT_REQUESTED'}
+    self.r.find.return_value = None
+    self.r.create.return_value = receipt.copy()
+    self.r.load.return_value = receipt.copy()
+    with patch.object(self.f, 'request', return_value=(200, {**catalog, **override})) as request:
+     result = self.a.call('laf_router_submit_job', args)
+    request.assert_called_once_with('GET', '/v1/models')
+    self.assertEqual(result['outcome'], 'NOT_SUBMITTED')
+    self.assertEqual(result['error'], 'preflight_rejected')
+
+
 class AppTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.r=Receipts(pathlib.Path(self.tmp.name)/'receipts');self.f=Fake();self.f.receipts=self.r;self.a=Application(self.f,self.r,{'flash'})
