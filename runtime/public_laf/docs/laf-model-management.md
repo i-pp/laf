@@ -24,6 +24,7 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 
 <!-- Modified 2026-11-23: separate local model records from catalog and Router observations. -->
 <!-- Modified 2026-11-24: list verified metadata for reviewed Ollama tag mappings. -->
+<!-- Modified 2026-11-25: document the separately observed loaded manifest digest. -->
 
 # LAF model management: offline-tested first slice
 
@@ -357,9 +358,15 @@ is held. A CLI-level mock test verifies exactly the two GETs while that lock is
 held, and verifies that no state directory is created.
 
 `installed` and `loaded` describe the returned engine inventories for the exact
-catalog reference. `digest_matches` compares the observed engine manifest with
-the catalog's expected manifest digest. It is null if either comparison input is
-unavailable. `registry_record_matches` describes saved registry ownership within
+catalog reference. `engine_manifest_digest` comes from `/api/tags`, and
+`digest_matches` compares it with the catalog's expected manifest digest. That
+comparison is null if either input is unavailable. Separately,
+`loaded_manifest_digest` is the digest reported by `/api/ps` for the exact
+catalog reference, normalized to `sha256:...`, or null if a successful running
+inventory contains no matching reference. It may identify a different manifest
+level than the catalog entry and is not compared with the catalog or installed
+digest. A failed, malformed or ambiguous inventory produces no partial result.
+`registry_record_matches` describes saved registry ownership within
 the configured engine scope. `managed` additionally requires an observed model
 with the saved digest, so changed or missing engine content is not reported as
 currently managed. This inspection never creates ownership.
