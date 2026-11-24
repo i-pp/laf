@@ -19,6 +19,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 # Modified 2026-11-21: expose owner-side publisher discovery and model setup.
 # Modified 2026-11-23: add an owner-local observational model registry.
+# Modified 2026-11-24: reject installs against a mismatched registry scope.
 
 """Opt-in, persistent model management, separate from Router load/unload.
 
@@ -381,6 +382,12 @@ class ModelManager:
     def _registry_scope(scope):
         return hashlib.sha256(json.dumps(scope, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
+    def _registry_rows_for_scope(self, scope_sha256):
+        rows = self._registry_rows()
+        if any(row['scope_sha256'] != scope_sha256 for row in rows.values()):
+            raise ModelError('local model registry scope changed; refusing operation')
+        return rows
+
     @staticmethod
     def _registry_public(record):
         return {key: value for key, value in record.items() if key != 'scope_sha256'}
@@ -400,10 +407,8 @@ class ModelManager:
                 'selectable': 'not_queried', 'loaded': 'not_queried'}
 
     def _record_registry(self, entries, value, *, replace_managed=False):
-        current = self._registry_rows()
         scope = self._registry_scope(value['scope'])
-        if any(row['scope_sha256'] != scope for row in current.values()):
-            raise ModelError('local model registry scope changed; refusing operation')
+        current = self._registry_rows_for_scope(scope)
         merged = {key: row for key, row in current.items() if not replace_managed or row['ownership'] == 'imported'}
         by_reference = {row['reference']: row['id'] for row in merged.values()}
         records = []
@@ -573,13 +578,14 @@ class ModelManager:
         if entry['engine']!='ollama': raise ModelError('engine installation adapter not available')
         if any(entry[field] is None for field in FIELDS): raise ModelError('model provenance, digest and capacity must be verified before installation')
         with self._mutation() as value:
+            rows = self._registry_rows_for_scope(self._registry_scope(value['scope']))
             prior=value['models'].get(identifier)
             if prior is None:
                 if len(value['models'])>=128:
                     raise ModelError('managed model registry capacity reached')
                 if any(row['ownership'] == 'imported' and
                        (row['id'] == identifier or row['reference'] == entry['reference'])
-                       for row in self._registry_rows().values()):
+                       for row in rows.values()):
                     raise ModelError('catalog ID or engine reference conflicts with an imported model; no installation attempted')
             self._idle()
             present=self._find(entry['reference'])
