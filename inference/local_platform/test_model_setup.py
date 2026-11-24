@@ -19,6 +19,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Modified 2026-11-21: check CLI selections against actual Router configuration validation.
+# Modified 2026-11-24: verify the reviewed artifact catalog without local engine access.
 
 """Offline onboarding regressions using synthetic official metadata and engine state."""
 
@@ -41,10 +42,11 @@ REFERENCE = "smollm2:135m-instruct-q4_K_M"
 CARD = {"id": MODEL, "private": False, "gated": False, "sha": "a" * 40,
         "lastModified": "2026-11-12T06:50:41.000Z", "cardData": {"license": "apache-2.0"}}
 BLOB = "sha256:" + "b" * 64
+MODEL_BLOB = "sha256:" + "c" * 64
 MANIFEST = json.dumps({
     "schemaVersion": 2, "mediaType": model_setup.MANIFEST,
     "config": {"mediaType": model_setup.CONFIG_TYPE, "digest": BLOB, "size": 46},
-    "layers": [{"mediaType": model_setup.MODEL_LAYER, "digest": "sha256:" + "c" * 64, "size": 124}],
+    "layers": [{"mediaType": model_setup.MODEL_LAYER, "digest": MODEL_BLOB, "size": 124}],
 }).encode()
 DIGEST = "sha256:" + sha256(MANIFEST).hexdigest()
 
@@ -118,6 +120,109 @@ class SetupTests(unittest.TestCase):
         with patch.object(model_setup, "_get", return_value=(json.dumps({**CARD, "gated": "auto"}).encode(), None)):
             rc, _ = self.invoke("artifact", MODEL)
         self.assertEqual(rc, 1)
+
+    def test_reviewed_artifact_catalog_has_only_individually_verified_downloads(self):
+        qwen = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+        qwen_tag = "1.5b-instruct-q4_K_M"
+        calls = []
+        def documents(host, path, media):
+            calls.append((host, path, media))
+            if host == model_setup.HUB and path.endswith(qwen):
+                return json.dumps({**CARD, "id": qwen}).encode(), None
+            if host == model_setup.REGISTRY and path.endswith("/" + qwen_tag):
+                return MANIFEST, None
+            return self.documents(host, path, media)
+        with patch.object(model_setup, "_get", side_effect=documents), \
+                patch.object(model_setup.OllamaHTTP, "__call__") as engine, \
+                patch.object(cli, "discover_catalog") as router:
+            rc, view = self.invoke("artifacts")
+        self.assertEqual(rc, 0, view)
+        self.assertEqual(view["catalog_status"], "metadata_verified")
+        self.assertEqual(view["unavailable"], [])
+        self.assertEqual([row["public_model"]["id"] for row in view["artifacts"]], [MODEL, qwen])
+        item = view["artifacts"][0]
+        self.assertEqual(item["artifact"]["reference"], REFERENCE)
+        self.assertEqual(item["artifact"]["digest"], DIGEST)
+        self.assertEqual(item["artifact"]["license"], "apache-2.0")
+        self.assertEqual(item["artifact"]["source"], "https://ollama.com/library/" + REFERENCE)
+        self.assertEqual(item["format"], "GGUF")
+        self.assertEqual(item["quantization"], "Q4_K_M")
+        self.assertEqual(item["model_layer"], {"digest": MODEL_BLOB, "size_bytes": 124})
+        self.assertEqual(item["manifest_total_bytes"], len(MANIFEST) + 170)
+        self.assertEqual([view[state] for state in ("installed", "selectable", "loaded")],
+                         ["not_queried"] * 3)
+        self.assertEqual(len(calls), 4)
+        self.assertTrue(all("/manifests/" in path or path.startswith("/api/models/")
+                            for _, path, _ in calls))
+        self.assertFalse(self.conf.exists())
+        self.assertFalse(self.state.exists())
+        engine.assert_not_called()
+        router.assert_not_called()
+
+    def test_mutable_tag_metadata_does_not_establish_a_historically_reviewed_digest(self):
+        revised = json.loads(MANIFEST)
+        revised["layers"][0]["digest"] = "sha256:" + "d" * 64
+        revised_manifest = json.dumps(revised).encode()
+        revised_digest = "sha256:" + sha256(revised_manifest).hexdigest()
+        def documents(host, path, media):
+            if host == model_setup.REGISTRY and path.endswith("/135m-instruct-q4_K_M"):
+                return revised_manifest, revised_digest
+            return self.documents(host, path, media)
+        with patch.dict(model_setup.ARTIFACTS, {MODEL: model_setup.ARTIFACTS[MODEL]}, clear=True):
+            with patch.object(model_setup, "_get", side_effect=self.documents):
+                rc, before = self.invoke("artifacts")
+            self.assertEqual(rc, 0, before)
+            with patch.object(model_setup, "_get", side_effect=documents):
+                rc, after = self.invoke("artifacts")
+            self.assertEqual(rc, 0, after)
+        old, new = before["artifacts"][0], after["artifacts"][0]
+        self.assertEqual(old["artifact"]["reference"], new["artifact"]["reference"])
+        self.assertEqual([row["artifact"]["digest"] for row in (old, new)], [DIGEST, revised_digest])
+        for result in (before, after):
+            self.assertEqual(result["catalog_status"], "metadata_verified")
+            self.assertEqual(result["artifacts"][0]["artifact_identity"], {
+                "manifest_digest_scope": "current_tag_response",
+                "reviewed_manifest_digest": None,
+                "quantization_source": "reviewed_tag_mapping",
+            })
+        self.setup_custom()
+        with patch.object(model_setup, "_get", side_effect=documents), \
+                patch.object(model_setup.OllamaHTTP, "__call__") as engine:
+            rc, error = self.invoke("--config", self.conf, "download", MODEL, "--digest", DIGEST)
+        self.assertEqual(rc, 1)
+        self.assertIn("selected manifest changed", str(error))
+        engine.assert_not_called()
+
+    def test_reviewed_artifact_catalog_does_not_treat_failed_mappings_as_installable(self):
+        qwen = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+        def documents(host, path, media):
+            if path.endswith(qwen):
+                return json.dumps({**CARD, "id": qwen, "gated": "auto"}).encode(), None
+            return self.documents(host, path, media)
+        with patch.object(model_setup, "_get", side_effect=documents) as request:
+            rc, view = self.invoke("artifacts")
+        self.assertEqual(rc, 0, view)
+        self.assertEqual(view["catalog_status"], "partial")
+        self.assertEqual([row["public_model"]["id"] for row in view["artifacts"]], [MODEL])
+        self.assertEqual(view["unavailable"], [{"model": qwen, "status": "metadata_unavailable"}])
+        self.assertEqual(request.call_count, 3)
+        malformed = json.loads(MANIFEST)
+        malformed["layers"][0]["mediaType"] = []
+        with patch.object(model_setup, "_get", side_effect=[
+                (json.dumps(CARD).encode(), None), (json.dumps(malformed).encode(), None),
+                (json.dumps({**CARD, "id": qwen}).encode(), None), (MANIFEST, None)]):
+            rc, view = self.invoke("artifacts")
+        self.assertEqual(rc, 0, view)
+        self.assertEqual(view["catalog_status"], "partial")
+        self.assertEqual([row["public_model"]["id"] for row in view["artifacts"]], [qwen])
+        self.assertEqual(view["unavailable"], [{"model": MODEL, "status": "metadata_unavailable"}])
+        with patch.object(model_setup, "_get", side_effect=TimeoutError("/private-cannot-leak")) as request:
+            rc, view = self.invoke("artifacts")
+        self.assertEqual(rc, 0, view)
+        self.assertEqual(view["catalog_status"], "unavailable")
+        self.assertEqual(view["artifacts"], [])
+        self.assertEqual(request.call_count, 2)
+        self.assertNotIn("/private-cannot-leak", str(view))
 
     def test_default_storage_persists_and_custom_config_is_exclusive(self):
         with patch.dict(os.environ, {"HOME": str(self.root)}):

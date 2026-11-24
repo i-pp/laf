@@ -25,6 +25,7 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 <!-- Modified 2026-11-22: document the isolated client wheel as an alternative to the module entry point. -->
 
 <!-- Modified 2026-11-23: separate local model records from catalog and Router observations. -->
+<!-- Modified 2026-11-24: list verified metadata for reviewed Ollama tag mappings. -->
 
 # LAF model management: offline-tested first slice
 
@@ -38,6 +39,7 @@ to the same plugin. The remote Router tools do not manage model files.
 ```sh
 python3 -B -m inference.local_platform.cli model discover --publisher HuggingFaceTB
 python3 -B -m inference.local_platform.cli model discover --publisher Qwen --limit 15
+python3 -B -m inference.local_platform.cli model artifacts
 python3 -B -m inference.local_platform.cli model artifact HuggingFaceTB/SmolLM2-135M-Instruct
 ```
 
@@ -45,9 +47,10 @@ Discovery uses bounded anonymous GETs to the supported Hugging Face publisher
 catalogs, sorted by the publisher's most recently updated model records.
 Use `--search` to find a named family. Results include the public model name,
 card URL, update time and Hub revision. The separate artifact lookup verifies
-the selected mapping to an exact Ollama tag and returns the format, quantization,
-license, size and full manifest SHA-256. The Hub revision identifies the public
-model card. The manifest digest identifies the Ollama artifact.
+the public metadata for a reviewed Ollama tag mapping, including license, size
+and the full SHA-256 of the manifest returned now. The Hub revision identifies
+the public model card; it does not identify the Ollama artifact. The tag is
+mutable, and LAF has not pinned a historically reviewed manifest for it.
 
 Choose an Ollama process with an explicit numeric-loopback address and a
 persistent model store. Verify that its actual `OLLAMA_MODELS` or container
@@ -146,9 +149,19 @@ engine inventory. `loaded_state: not_queried` must not be read as "unloaded."
 ## Catalog, local registry, and Router views
 
 - `laf model discover --publisher Qwen` lists upstream publisher metadata,
-  not supported downloads. `laf model artifact PUBLISHER/MODEL` separately
-  verifies the full artifact identity, source, runtime, license, size, and
-  quantization for a reviewed mapping.
+  not supported downloads. `laf model artifacts` checks the reviewed Ollama
+  mappings and lists only those that pass their public model card and registry
+  manifest checks. Use `laf model artifact PUBLISHER/MODEL` to check just one.
+  Each result includes source, engine, license, manifest and model-layer
+  digests, model-layer bytes, and total manifest-plus-unique-blob bytes.
+  `metadata_verified` refers to the current public metadata, not prior review
+  of those exact bytes. `artifact_identity` explicitly reports a current tag
+  response and no historically reviewed manifest digest. Format and quantization
+  come from the reviewed tag mapping, not from inspecting model weights.
+  Pin the displayed manifest digest when choosing to download; the download
+  command rechecks it. A `partial` or `unavailable` catalog reports failed
+  mappings separately, never as downloads. This view does not download weights,
+  read local inventory, or validate Router support.
 - `laf model --catalog /PRIVATE/owner-catalog.json installable` shows
   metadata eligibility in the owner's Ollama catalog only. It excludes
   incomplete entries and those requiring separate user setup, including the
