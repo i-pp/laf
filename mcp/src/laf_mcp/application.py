@@ -18,6 +18,8 @@
 # This header is a summary, not a separate license or an amendment to KOL-v1.
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
+# Modified 2026-11-25: report the connected Router provider mode without attesting hardware.
+
 """Five Router tools. No lifecycle, provider, shell or model-management authority."""
 import hashlib
 import json
@@ -69,7 +71,12 @@ class Application:
                 cap_code,cap=self.router.request('GET','/v1/capabilities')
                 if cap_code!=200 or type(cap.get('api_version')) is not int or cap['api_version']!=1:raise ContractError('unsupported API')
                 npu=cap.get('npu',{})
+                gpu=health.get('gpu',{})
+                mode=gpu.get('provider_mode') if type(gpu) is dict else None
+                if type(mode) is not str or mode not in ('cpu-only','host-lifecycle'):
+                    mode='unknown'
                 return {'outcome':'OBSERVED','status':health['status'],'api_version':1,'atomic':False,
+                        'provider_mode':mode,
                         'npu_configured':npu.get('configured') is True,'npu_readiness_verified':False,
                         'hardware_attested':False,'automatic_retry':False}
             raise ContractError('unknown tool')

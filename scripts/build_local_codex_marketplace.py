@@ -19,6 +19,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Modified 2026-11-23: pin reviewed standalone runtime source digests.
+# Modified 2026-11-25: pin the Router provider-mode observation source.
 
 """Build or verify a standalone Git marketplace tree for the local Codex adapter."""
 import argparse
@@ -56,7 +57,7 @@ RUNTIME_SHA256 = {
     'mcp/codex_local.py': 'b0b81a4acc81448c93224684b6f470d354d93156a605ff68877ab60ef00b37a6',
     'mcp/launch.py': 'ab5f05bf826e71f544f6d065f5bff12a234a89865dbd4f854907ef21fe6d16d1',
     'mcp/src/laf_mcp/__init__.py': 'c9d7c6794e0a3d470973bc88d9008ccdb1d71956ba48949dda956cd81446eec9',
-    'mcp/src/laf_mcp/application.py': '19515bce7397cbf2664446ebdb9b8849feb0283f108fb18a694b25ef73f3789f',
+    'mcp/src/laf_mcp/application.py': '58c5a7855aca2afc27289bd10372bda2cad3bc63a9834a396dd69b15e34fa8c5',
     'mcp/src/laf_mcp/contracts.py': '13ec37eaa082a8222d7cd9f6127ed8c0ee1bd6bcc873de25ce586db3f4f97042',
     'mcp/src/laf_mcp/receipts.py': 'dfd4cad82ff8687d6c3e5d275f574c532e33f71cfb925a72ad8580cda0494103',
     'mcp/src/laf_mcp/router.py': '10d3162df972bd051d4a87a0801ac8ff578e3a3c061a73a49c064b21bbf42af6',
