@@ -21,6 +21,7 @@
 # Modified 2026-11-23: add an owner-local observational model registry.
 # Modified 2026-11-24: reject installs against a mismatched registry scope.
 # Modified 2026-11-24: expose the reviewed artifact metadata catalog command.
+# Modified 2026-11-25: report the exact loaded reference's observed manifest digest.
 
 """Opt-in, persistent model management, separate from Router load/unload.
 
@@ -531,13 +532,14 @@ class ModelManager:
         scope_matches=value['scope']==scope
         saved=value['models'].get(identifier)
         installed=next((m for m in self.adapter.installed() if m['reference']==entry['reference']),None)
-        running=self.adapter.running()
+        running=next((m for m in self.adapter.running() if m['reference']==entry['reference']),None)
         registered=bool(scope_matches and saved and saved['reference']==entry['reference'] and saved['digest']==entry['digest'])
         return {'id':identifier,'installed':installed is not None,
                 'engine_manifest_digest':None if installed is None else installed['digest'],
                 'catalog_manifest_digest':entry['digest'],
                 'digest_matches':None if installed is None or entry['digest'] is None else installed['digest']==entry['digest'],
-                'loaded':any(m['reference']==entry['reference'] for m in running),
+                'loaded':running is not None,
+                'loaded_manifest_digest':None if running is None else running['digest'],
                 'registry_record_matches':registered,
                 'managed':bool(registered and installed and installed['digest']==saved['digest']),
                 'management_scope_matches':scope_matches,'pending_action':value['pending'],

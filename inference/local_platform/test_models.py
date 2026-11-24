@@ -23,6 +23,7 @@
 # Modified 2026-11-23: cover the separate owner-local model registry.
 # Modified 2026-11-24: cover import-only registry scope mismatch on install.
 # Modified 2026-11-24: cover independent model-state observations across the local CLI views.
+# Modified 2026-11-25: cover observed loaded digests and uncertain running inventory.
 
 import copy
 from contextlib import contextmanager
@@ -702,6 +703,8 @@ class ModelStateSeparationTests(unittest.TestCase):
         self.engine.tags = [{'reference': reference, 'digest': DIGEST, 'size_bytes': 512}]
         self.manager.register_existing(model_id, reference, DIGEST)
         self.engine.calls.clear()
+        state_dir = self.root/'state'
+        state_before = {p.relative_to(state_dir): p.read_bytes() for p in state_dir.rglob('*') if p.is_file()}
 
         with patch.object(models.OllamaHTTP, '__call__', side_effect=AssertionError('registry contacted engine')), \
              patch.object(cli, 'request', side_effect=AssertionError('registry contacted Router')):
@@ -712,12 +715,16 @@ class ModelStateSeparationTests(unittest.TestCase):
                          ['not_queried'] * 3)
         self.assertEqual(self.engine.calls, [])
 
-        for selectable, installed, loaded in (
-            (False, True, False),
-            (True, False, False),
-            (True, True, False),
-            (True, True, True),
+        loaded_digest = 'sha256:' + 'b' * 64
+        for selectable, installed, running_rows, expected_digest in (
+            (False, True, [], None),
+            (True, False, [dict(wire_row, name='owner/coder:other')], None),
+            (True, True, [], None),
+            (True, True, [wire_row], DIGEST),
+            (True, True, [dict(wire_row, digest='b' * 64)], loaded_digest),
+            (True, False, [dict(wire_row, digest=loaded_digest)], loaded_digest),
         ):
+            loaded = expected_digest is not None
             with self.subTest(selectable=selectable, installed=installed, loaded=loaded):
                 router_calls, engine_calls = [], []
                 def router(path, method, route):
@@ -730,8 +737,9 @@ class ModelStateSeparationTests(unittest.TestCase):
                 def engine(_self, method, route, body=None):
                     engine_calls.append((method, route, body))
                     self.assertIn(route, {'/api/tags', '/api/ps'})
-                    present = installed if route == '/api/tags' else loaded
-                    return {'models': [wire_row] if present else []}
+                    if route == '/api/tags':
+                        return {'models': [wire_row] if installed else []}
+                    return {'models': running_rows}
 
                 with patch.object(cli, 'request', side_effect=router), \
                      patch.object(models.OllamaHTTP, '__call__', engine):
@@ -743,15 +751,61 @@ class ModelStateSeparationTests(unittest.TestCase):
                 self.assertIs(model_id in router_view['models'], selectable)
                 self.assertIs(engine_view['installed'], installed)
                 self.assertIs(engine_view['loaded'], loaded)
+                self.assertEqual(engine_view['loaded_manifest_digest'], expected_digest)
+                self.assertEqual(engine_view['engine_manifest_digest'], DIGEST if installed else None)
                 self.assertIs(engine_view['digest_matches'], True if installed else None)
                 self.assertEqual(router_calls, [('GET', '/v1/models')])
                 self.assertEqual(engine_calls, [('GET', '/api/tags', None), ('GET', '/api/ps', None)])
                 self.assertFalse(engine_view['mutation_performed'])
 
+        self.assertEqual({p.relative_to(state_dir): p.read_bytes() for p in state_dir.rglob('*') if p.is_file()},
+                         state_before)
+
         with patch.object(cli, 'request', side_effect=OSError('synthetic Router unavailable')):
             rc, unavailable = self.invoke('models')
         self.assertNotEqual(rc, 0)
         self.assertNotIn('models', unavailable)
+
+    def test_inspect_cli_reports_uncertain_without_partial_output(self):
+        from . import cli
+        config = self.root/'config.json'
+        config.write_text(json.dumps({
+            'state_dir': str(self.root/'state'), 'model_store': str(self.store),
+            'generation_lock': str(self.lock), 'engine_url': 'http://127.0.0.1:11434',
+        }))
+        config.chmod(0o600)
+        catalog = self.root/'catalog.json'
+        catalog.write_text(json.dumps([ENTRY]))
+        catalog.chmod(0o600)
+        row = {'name': ENTRY['reference'], 'digest': DIGEST, 'size': 512}
+        other_digest = 'sha256:' + 'b' * 64
+
+        for running_rows in ([row, dict(row, digest=other_digest)],
+                             [dict(row, digest='not-a-manifest-digest')],
+                             [{'name': row['name'], 'size': row['size']}],
+                             OSError('synthetic engine unavailable')):
+            with self.subTest(running_rows=running_rows):
+                calls = []
+                def engine(_self, method, route, body=None):
+                    calls.append((method, route, body))
+                    if route == '/api/tags':
+                        return {'models': [row]}
+                    if isinstance(running_rows, OSError):
+                        raise running_rows
+                    return {'models': running_rows}
+
+                with patch.object(cli, 'request', side_effect=AssertionError('inspect contacted Router')), \
+                     patch.object(models.OllamaHTTP, '__call__', engine), \
+                     patch('sys.stdout', new_callable=io.StringIO) as out, \
+                     patch('sys.stderr', new_callable=io.StringIO) as err:
+                    rc = cli.main(['model', '--config', str(config), '--catalog', str(catalog),
+                                   'inspect', ENTRY['id']])
+                self.assertNotEqual(rc, 0)
+                self.assertEqual(out.getvalue(), '')
+                self.assertEqual(json.loads(err.getvalue())['status'], 'blocked_or_uncertain')
+                self.assertEqual(calls, [('GET', '/api/tags', None), ('GET', '/api/ps', None)])
+                self.assertFalse((self.root/'state').exists())
+
 
 class ProvenanceSafetyTests(unittest.TestCase):
     def evidence(self):
