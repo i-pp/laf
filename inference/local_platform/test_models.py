@@ -20,6 +20,7 @@
 
 """Offline model-lifecycle contracts. Never contacts an engine or downloads weights."""
 # Modified 2026-11-11: advertise the Router catalog separately from model storage status.
+# Modified 2026-11-23: cover the separate owner-local model registry.
 
 import copy
 from contextlib import contextmanager
@@ -176,6 +177,276 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(self.manager.list(), [])
         self.assertEqual(self.manager.status()['installed_count'],0)
         self.assertEqual(self.engine.calls, [])
+    def test_registry_import_is_idempotent_and_never_grants_removal(self):
+        self.engine.tags = [{'reference': ENTRY['reference'], 'digest': DIGEST, 'size_bytes': 512}]
+        record = self.manager.register_existing('imported-coder', ENTRY['reference'], DIGEST)
+        registry = self.root/'state'/'registry'
+        active = registry/'active.json'
+        path = registry/json.loads(active.read_bytes())['snapshot']/'imported-coder.json'
+        original = path.read_bytes(), path.stat().st_ino
+        original_pointer = active.read_bytes(), active.stat().st_ino
+        self.assertEqual(record['ownership'], 'imported')
+        self.assertEqual(record['schema_version'], 1)
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(path.stat().st_nlink, 1)
+        self.assertEqual(active.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(active.stat().st_nlink, 1)
+        self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(self.manager.register_existing('imported-coder', ENTRY['reference'], DIGEST), record)
+        self.assertEqual((path.read_bytes(), path.stat().st_ino), original)
+        self.assertEqual((active.read_bytes(), active.stat().st_ino), original_pointer)
+        self.assertFalse((self.root/'state'/'models.json').exists())
+        with self.assertRaises(models.ModelError):
+            self.manager.remove('imported-coder')
+        self.assertEqual(self.engine.calls, ['list', 'list'])
+        self.assertEqual(self.manager.registry(), {
+            'records': [record], 'installed': 'not_queried',
+            'selectable': 'not_queried', 'loaded': 'not_queried',
+        })
+        self.assertEqual(self.engine.calls, ['list', 'list'])
+
+    def test_registry_refuses_absent_changed_and_conflicting_identities(self):
+        with self.assertRaisesRegex(models.ModelError, 'not confirmed'):
+            self.manager.register_existing('imported-coder', ENTRY['reference'], DIGEST)
+        self.assertEqual(self.manager.registry()['records'], [])
+        self.engine.tags = [{'reference': ENTRY['reference'], 'digest': DIGEST, 'size_bytes': 512}]
+        self.manager.register_existing('imported-coder', ENTRY['reference'], DIGEST)
+        self.engine.tags[0]['digest'] = other = 'sha256:' + 'b' * 64
+        with self.assertRaisesRegex(models.ModelError, 'not confirmed'):
+            self.manager.register_existing('imported-coder', ENTRY['reference'], DIGEST)
+        with self.assertRaisesRegex(models.ModelError, 'registry identity conflicts'):
+            self.manager.register_existing('imported-coder', ENTRY['reference'], other)
+        self.assertEqual(self.manager.registry()['records'][0]['digest'], DIGEST)
+
+    def test_registry_migrates_only_confirmed_legacy_asset_without_replacing_journal(self):
+        self.install()
+        state = self.root/'state'/'models.json'
+        original = state.read_bytes()
+        self.engine.tags = []
+        with self.assertRaisesRegex(models.ModelError, 'not confirmed'):
+            self.manager.migrate_registry()
+        self.assertEqual(self.manager.registry()['records'], [])
+        self.engine.tags = [{'reference': ENTRY['reference'], 'digest': DIGEST, 'size_bytes': 512}]
+        records = self.manager.migrate_registry()
+        self.assertEqual(records, self.manager.migrate_registry())
+        self.assertEqual(records[0]['ownership'], 'managed')
+        self.assertEqual(state.read_bytes(), original)
+        self.assertEqual(self.manager.list()[0]['id'], 'coder-next')
+        self.manager.remove('coder-next')
+        self.assertEqual(self.manager.registry()['records'], [])
+
+    def test_registry_publication_is_readable_after_publication_syscall(self):
+        self.engine.tags = [{'reference': ENTRY['reference'], 'digest': DIGEST, 'size_bytes': 512}]
+        observed = []
+        link, replace = os.link, os.replace
+
+        def inspect_after(publish, source, target, *args, **kwargs):
+            publish(source, target, *args, **kwargs)
+            if Path(target).parent == self.root/'state'/'registry':
+                observed.append([record['id'] for record in self.manager.registry()['records']])
+
+        with patch.object(os, 'link', side_effect=lambda *a, **kw: inspect_after(link, *a, **kw)), \
+                patch.object(os, 'replace', side_effect=lambda *a, **kw: inspect_after(replace, *a, **kw)):
+            self.manager.register_existing('imported-coder', ENTRY['reference'], DIGEST)
+        self.assertEqual(observed, [['imported-coder']])
+
+    def _two_managed_models(self):
+        second = dict(ENTRY, id='second-coder', reference='owner/coder:v2')
+        self.manager.catalog[second['id']] = second
+        self.install()
+        self.manager.install(second['id'])
+        self.engine.tags.append({'reference': ENTRY['reference'], 'digest': DIGEST, 'size_bytes': 512})
+        return second
+
+    def test_registry_migration_keeps_previous_commit_on_second_record_failure(self):
+        self._two_managed_models()
+        imported_ref = 'owner/preinstalled:v1'
+        self.engine.tags.append({'reference': imported_ref, 'digest': DIGEST, 'size_bytes': 512})
+        self.manager.register_existing('preinstalled', imported_ref, DIGEST)
+        before = self.manager.registry()
+        legacy = (self.root/'state'/'models.json').read_bytes()
+        dumps = json.dumps
+
+        def fail_second_record(value, *args, **kwargs):
+            if isinstance(value, dict) and value.get('id') == 'second-coder':
+                raise OSError('synthetic failure before batch commit')
+            return dumps(value, *args, **kwargs)
+
+        with patch.object(json, 'dumps', side_effect=fail_second_record):
+            with self.assertRaisesRegex(OSError, 'synthetic failure'):
+                self.manager.migrate_registry()
+        self.assertEqual(self.manager.registry(), before)
+        self.assertEqual((self.root/'state'/'models.json').read_bytes(), legacy)
+        self.manager.migrate_registry()
+        self.assertEqual([row['id'] for row in self.manager.registry()['records']],
+                         ['coder-next', 'preinstalled', 'second-coder'])
+
+    def test_registry_interrupted_before_commit_leaves_snapshot_invisible(self):
+        self._two_managed_models()
+        registry = self.root/'state'/'registry'
+        replace = os.replace
+        snapshots = []
+
+        def stop_before_replace(source, target):
+            self.assertEqual(target, registry/'active.json')
+            snapshots.extend(registry.glob('snapshot-*'))
+            self.assertEqual(len(list(snapshots[0].glob('*.json'))), 2)
+            self.assertEqual(self.manager.registry()['records'], [])
+            raise OSError('synthetic interruption before replacing active pointer')
+
+        with patch.object(os, 'replace', side_effect=stop_before_replace):
+            with self.assertRaisesRegex(OSError, 'synthetic interruption'):
+                self.manager.migrate_registry()
+        self.assertTrue(snapshots[0].exists())
+        self.assertEqual(self.manager.registry()['records'], [])
+        observed = []
+
+        def observe_replace(source, target):
+            replace(source, target)
+            observed.append([row['id'] for row in self.manager.registry()['records']])
+
+        with patch.object(os, 'replace', side_effect=observe_replace):
+            self.manager.migrate_registry()
+        self.assertEqual(observed, [['coder-next', 'second-coder']])
+
+    def test_registry_reader_reopens_replaced_pointer_without_accepting_hardlinks(self):
+        self._two_managed_models()
+        reference = 'owner/preinstalled:v1'
+        self.engine.tags.append({'reference': reference, 'digest': DIGEST, 'size_bytes': 512})
+        self.manager.register_existing('preinstalled', reference, DIGEST)
+        active = self.root/'state'/'registry'/'active.json'
+        old_inode = active.stat().st_ino
+        interrupted = False
+        checked_file = models.checked_file
+
+        def replace_during_reader_fstat(fd):
+            nonlocal interrupted
+            if os.fstat(fd).st_ino == old_inode and not interrupted:
+                interrupted = True
+                self.manager.migrate_registry()
+                self.assertEqual(os.fstat(fd).st_nlink, 0)
+            return checked_file(fd)
+
+        with patch.object(models, 'checked_file', side_effect=replace_during_reader_fstat):
+            self.assertEqual([row['id'] for row in self.manager.registry()['records']],
+                             ['coder-next', 'preinstalled', 'second-coder'])
+        self.assertTrue(interrupted)
+        os.link(active, active.with_name('other-link'))
+        with self.assertRaisesRegex(models.ModelError, 'single-link'):
+            self.manager.registry()
+
+    def test_registry_failure_after_replace_leaves_full_snapshot_readable(self):
+        self._two_managed_models()
+        registry = self.root/'state'/'registry'
+        sync = self.manager._sync_registry_dir
+
+        def fail_after_commit(path):
+            if path == registry and (path/'active.json').exists():
+                raise OSError('synthetic directory fsync failure after commit')
+            sync(path)
+
+        with patch.object(self.manager, '_sync_registry_dir', side_effect=fail_after_commit):
+            with self.assertRaisesRegex(OSError, 'failure after commit'):
+                self.manager.migrate_registry()
+        reopened = models.ModelManager(self.root/'state', [ENTRY])
+        self.assertEqual([row['id'] for row in reopened.registry()['records']],
+                         ['coder-next', 'second-coder'])
+
+    def test_registry_migration_reconciles_stale_managed_record_after_reinstall(self):
+        self.install()
+        self.manager.migrate_registry()
+        self.manager.remove('coder-next')
+        self.assertEqual(self.manager.registry()['records'], [])
+        digest = 'sha256:'+'b'*64
+        self.manager.catalog['coder-next'] = dict(ENTRY, digest=digest)
+        self.engine.wrong_digest = True  # Fake engine now serves the new pinned digest.
+        self.install()
+        records = self.manager.migrate_registry()
+        self.assertEqual(records[0]['digest'], digest)
+        self.assertEqual(self.manager.registry()['records'], records)
+
+    def _check_install_rejects_imported_collision(self, imported_id, imported_ref):
+        self.engine.tags = [{'reference': imported_ref, 'digest': DIGEST, 'size_bytes': 512}]
+        imported = self.manager.register_existing(imported_id, imported_ref, DIGEST)
+        self.engine.tags.clear()  # The engine no longer has the historically imported asset.
+        before = self.engine.calls[:]
+        with self.assertRaisesRegex(models.ModelError, 'conflicts with an imported model'):
+            self.install()
+        self.assertEqual(self.engine.calls, before)
+        self.assertFalse((self.root/'state'/'models.json').exists())
+        self.assertEqual(self.manager.registry()['records'], [imported])
+
+    def test_install_refuses_imported_reference_before_engine_access(self):
+        self._check_install_rejects_imported_collision('imported-coder', ENTRY['reference'])
+
+    def test_install_refuses_imported_id_before_engine_access(self):
+        self._check_install_rejects_imported_collision(ENTRY['id'], 'owner/preinstalled:v1')
+
+    def test_registry_migration_does_not_change_legacy_authority_on_historical_conflict(self):
+        self.engine.tags = [{'reference': ENTRY['reference'], 'digest': DIGEST, 'size_bytes': 512}]
+        imported = self.manager.register_existing('imported-coder', ENTRY['reference'], DIGEST)
+        # Simulate a previously committed legacy install colliding with the sidecar.
+        self.engine.tags.clear()
+        separate_state = self.root/'legacy'
+        legacy_manager = models.ModelManager(separate_state, [ENTRY], self.engine, self.lock, self.store)
+        legacy_manager.install('coder-next')
+        os.replace(separate_state/'models.json', self.root/'state'/'models.json')
+        with self.assertRaisesRegex(models.ModelError, 'registry identity conflicts'):
+            self.manager.migrate_registry()
+        self.assertEqual(self.manager.registry()['records'], [imported])
+        self.assertEqual(self.manager.list()[0]['id'], 'coder-next')
+        self.assertEqual(self.manager.remove('coder-next')['status'], 'removed')
+        self.assertEqual(self.manager.registry()['records'], [imported])
+
+    def test_install_allows_a_nonconflicting_catalog_entry_with_existing_import(self):
+        reference = 'owner/preinstalled:v1'
+        self.engine.tags = [{'reference': reference, 'digest': DIGEST, 'size_bytes': 512}]
+        imported = self.manager.register_existing('preinstalled', reference, DIGEST)
+        self.assertEqual(self.install()['status'], 'installed')
+        self.engine.tags.append({'reference': reference, 'digest': DIGEST, 'size_bytes': 512})
+        records = self.manager.migrate_registry()
+        self.assertEqual(self.manager.registry()['records'], records + [imported])
+
+    def test_registry_mutation_respects_generation_lock_and_uncertain_journal(self):
+        with self.lock.open('r') as fd:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaisesRegex(models.ModelError, 'active'):
+                self.manager.register_existing('imported-coder', ENTRY['reference'], DIGEST)
+        self.assertEqual(self.engine.calls, [])
+        self.engine.fail = TimeoutError()
+        with self.assertRaisesRegex(models.ModelError, 'uncertain'):
+            self.install()
+        before = self.engine.calls[:]
+        with self.assertRaisesRegex(models.ModelError, 'uncertain'):
+            self.manager.migrate_registry()
+        with self.assertRaisesRegex(models.ModelError, 'uncertain'):
+            self.manager.register_existing('imported-coder', ENTRY['reference'], DIGEST)
+        self.assertEqual(self.engine.calls, before)
+        self.assertEqual(self.manager.registry()['records'], [])
+
+    def test_registry_refuses_scope_change_or_plugin_cache_without_rebinding(self):
+        state = self.root/'state'
+        self.engine.tags = [{'reference': ENTRY['reference'], 'digest': DIGEST, 'size_bytes': 512}]
+        self.manager.register_existing('imported-coder', ENTRY['reference'], DIGEST)
+        self.engine.identity = 'other-engine'
+        with self.assertRaisesRegex(models.ModelError, 'scope changed'):
+            self.manager.register_existing('imported-coder', ENTRY['reference'], DIGEST)
+        self.assertEqual(self.manager.registry()['records'][0]['ownership'], 'imported')
+        self.assertFalse((state/'models.json').exists())
+        unsafe = self.root/'plugins'/'cache'/'state'
+        manager = models.ModelManager(unsafe, [ENTRY], self.engine, self.lock, self.store)
+        with self.assertRaisesRegex(models.ModelError, 'outside the plugin'):
+            manager.register_existing('imported-coder', ENTRY['reference'], DIGEST)
+        self.assertFalse((self.root/'plugins').exists())
+
+    def test_installable_catalog_does_not_assert_registry_or_runtime_state(self):
+        self.assertEqual(models.installable_catalog(models.read_catalog()), [])
+        self.assertEqual(models.installable_catalog([ENTRY]), [ENTRY])
+        for change in ({'digest': None}, {'user_setup_required': True}, {'engine': 'strata'}):
+            self.assertEqual(models.installable_catalog([dict(ENTRY, **change)]), [])
+        self.assertEqual(self.manager.registry()['records'], [])
+        self.assertEqual(self.engine.calls, [])
+
     def test_metadata_is_private_and_invalid_state_fails_closed(self):
         self.install()
         state = self.root/'state'/'models.json'

@@ -22,6 +22,8 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
+<!-- Modified 2026-11-23: separate local model records from catalog and Router observations. -->
+
 # LAF model management: offline-tested first slice
 
 ## Model setup from the Local AI Fabric plugin
@@ -135,6 +137,58 @@ the same registry used by model operations; otherwise it reads
 `~/.local/state/laf-models`. Catalog, list and local model status do not create directories or contact
 Ollama. The opt-in inspect command makes GET-only requests to configured Ollama. Registry entries describe the last verified installation, not a fresh
 engine inventory. `loaded_state: not_queried` must not be read as "unloaded."
+
+## Catalog, local registry, and Router views
+
+- `laf model discover --publisher Qwen` lists upstream publisher metadata,
+  not supported downloads. `laf model artifact PUBLISHER/MODEL` separately
+  verifies the full artifact identity, source, runtime, license, size, and
+  quantization for a reviewed mapping.
+- `laf model --catalog /PRIVATE/owner-catalog.json installable` shows
+  metadata eligibility in the owner's Ollama catalog only. It excludes
+  incomplete entries and those requiring separate user setup, including the
+  built-in placeholders. It does not verify an upstream artifact's exact
+  quantization, size, runtime, or availability. Catalog `required_bytes` is
+  a capacity estimate, not an artifact size. This view does not prove local
+  installation, compatibility, or that an install will pass preflight.
+- `laf model registry` lists recorded owner-local identities without contacting
+  the engine or Router. Choose the default LAF state directory or pass an
+  owner-managed configuration outside plugin storage with `--config`. Each
+  record is a separate versioned JSON file in a protected, immutable snapshot.
+  Imported records do not grant deletion rights. Use `laf model --config
+  /PRIVATE/model.json inventory` for a current engine observation.
+- `laf models` and `laf status` still query the selected Router; registry
+  records do not make a model selectable, loaded, or ready. The registry
+  explicitly reports all unobserved live states as `not_queried`.
+
+To register an existing Ollama asset by its exact tag and full manifest digest,
+or copy verified identities from the legacy journal into the new view:
+
+```sh
+laf model --config /PRIVATE/model.json register-existing MODEL_ID \
+  --reference EXACT_TAG --digest 'sha256:FULL_MANIFEST_DIGEST'
+laf model --config /PRIVATE/model.json migrate-registry
+laf model --config /PRIVATE/model.json registry
+```
+
+The two record operations require the existing generation lock, refuse an
+uncertain journal and query the configured engine's read-only inventory.
+Migration verifies the current managed identities against the engine, then
+refreshes just the managed entries. Missing or changed engine identities and
+conflicts with imported identities leave the previous snapshot intact. An
+unchanged snapshot is not republished. Migration leaves `models.json`,
+including its deletion authority and operation history, intact.
+
+Run migration when the managed inventory changes. Imported records are
+historical observations, not proof an asset still exists. New managed
+installs cannot claim an imported model's ID or exact engine reference, even
+if the engine no longer has that asset. Existing managed deletion rights are
+unchanged. A single atomic
+pointer publishes the whole snapshot. After an interruption, use `laf model
+registry` to inspect which complete snapshot is active. Unpublished and older
+snapshots are not read as current state and are not automatically pruned in
+this version. Neither operation downloads, moves or removes model bytes.
+Direct GGUF registration and registry-to-Router binding are separate work.
 
 ## What is implemented
 
