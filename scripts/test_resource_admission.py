@@ -20,6 +20,7 @@
 # All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for the complete license text.
 
 # Added 2026-11-15: atomic resource admission and boundary regressions.
+# Modified 2026-11-24: distinguish SQLite writer contention from uncertain writes.
 
 """Offline durable-ledger and ordinary handoff boundaries; no real provider."""
 from contextlib import closing, ExitStack
@@ -233,6 +234,66 @@ class Reservations(unittest.TestCase):
             with self.assertRaises(ValueError): admission.Ledger(policy(), directory)
             link = Path(other) / 'link'; link.symlink_to(self.directory, target_is_directory=True)
             with self.assertRaises(ValueError): admission.Ledger(policy(), link)
+
+    def test_prewrite_contention_reports_known_wait_without_grant_or_replay(self):
+        contender_ready = threading.Event()
+        writer_ready = threading.Event()
+        finished = threading.Event()
+        observe = Mock(side_effect=AssertionError('observation without SQLite write admission'))
+        seen = []
+        def contender():
+            try:
+                with closing(admission.Ledger(policy(), self.directory)) as ledger:
+                    contender_ready.set()
+                    if not writer_ready.wait(3):
+                        raise AssertionError('writer did not hold the fixture lock')
+                    ledger.reserve(self.directory, str(uuid.UUID(int=1)), str(uuid.UUID(int=1001)),
+                                   demand(), observe, now=100, wall=1000)
+            except BaseException as error:
+                seen.append(error)
+            finally:
+                finished.set()
+        thread = threading.Thread(target=contender)
+        thread.start()
+        try:
+            self.assertTrue(contender_ready.wait(3))
+            with self.ledger.db:
+                self.ledger.db.execute('BEGIN IMMEDIATE')
+                writer_ready.set()
+                self.assertTrue(finished.wait(3))
+                self.assertEqual(self.ledger.held(), [])
+        finally:
+            writer_ready.set()
+            thread.join(3)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(len(seen), 1)
+        self.assertIsInstance(seen[0], admission.AdmissionWait)
+        self.assertEqual(seen[0].code, 'sqlite_locked')
+        self.assertIsInstance(seen[0].__cause__, sqlite3.OperationalError)
+        self.assertEqual(seen[0].__cause__.sqlite_errorcode & 0xff, sqlite3.SQLITE_BUSY)
+        observe.assert_not_called()
+        self.assertEqual(self.ledger.held(), [])
+        self.reserve(1)
+        self.assertEqual(len(self.ledger.held()), 1)
+
+    def test_open_contention_reports_known_wait_without_rebinding(self):
+        with self.ledger.db:
+            self.ledger.db.execute('BEGIN IMMEDIATE')
+            with self.assertRaisesRegex(admission.AdmissionWait, '^sqlite_locked$') as caught:
+                with closing(admission.Ledger(policy(), self.directory)):
+                    self.fail('contender acquired writer lock')
+            self.assertIsInstance(caught.exception.__cause__, sqlite3.OperationalError)
+            self.assertEqual(caught.exception.__cause__.sqlite_errorcode & 0xff, sqlite3.SQLITE_BUSY)
+        with closing(admission.Ledger(policy(), self.directory)) as ledger:
+            self.assertEqual(ledger.held(), [])
+
+    def test_unrelated_sqlite_error_is_not_reported_as_lock_contention(self):
+        with self.ledger.db:
+            self.ledger.db.execute('BEGIN IMMEDIATE')
+            with self.assertRaises(sqlite3.OperationalError) as caught:
+                self.reserve(1)
+            self.assertEqual(caught.exception.sqlite_errorcode & 0xff, sqlite3.SQLITE_ERROR)
+        self.assertEqual(self.ledger.held(), [])
 
     def test_concurrent_connections_cannot_overcommit_cpu_or_ram(self):
         p = policy(); p['capacity'] = v(250,250,1000,10000)

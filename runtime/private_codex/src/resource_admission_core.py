@@ -22,6 +22,7 @@
 """Incremental durable host reservations; no service control or automatic replay.
 
 Added 2026-11-15: atomic CPU/RAM/GPU/VRAM and provider-lease admission.
+Modified 2026-11-24: report known contention before SQLite admission writes.
 This module is original LAF project code under the repository KOL-v1 license.
 """
 
@@ -400,7 +401,7 @@ class Ledger:
         try:
             self.db.execute('PRAGMA synchronous=FULL')
             with self.db:
-                self.db.execute('BEGIN IMMEDIATE')
+                self._begin_admission_write()
                 self.db.execute('CREATE TABLE IF NOT EXISTS admission_meta(id INTEGER PRIMARY KEY CHECK(id=1), generation TEXT, observation TEXT)')
                 self.db.execute('CREATE TABLE IF NOT EXISTS reservations(token TEXT PRIMARY KEY, runtime TEXT NOT NULL, task TEXT NOT NULL, generation TEXT NOT NULL, demand TEXT NOT NULL, scopes TEXT NOT NULL, phase TEXT NOT NULL CHECK(phase IN (\'HELD\',\'RELEASED\')), created REAL NOT NULL, released REAL, UNIQUE(runtime,task))')
                 self.db.execute("CREATE TABLE IF NOT EXISTS admission_owners(id TEXT PRIMARY KEY,runtime TEXT NOT NULL,role TEXT NOT NULL,identity TEXT NOT NULL,generation TEXT NOT NULL,phase TEXT NOT NULL CHECK(phase IN ('HELD','RELEASED')))")
@@ -420,6 +421,17 @@ class Ledger:
                     self.db.execute('INSERT INTO admission_meta VALUES(1,?,NULL)', (self.generation,))
         except BaseException:
             self.db.close()
+            raise
+
+    def _begin_admission_write(self):
+        # Only a failed BEGIN is a known non-start. Do not translate a later
+        # error: admission writes and commit failures require reconciliation.
+        try:
+            self.db.execute('BEGIN IMMEDIATE')
+        except sqlite3.OperationalError as exc:
+            code = getattr(exc, 'sqlite_errorcode', None)
+            if isinstance(code, int) and code & 0xff == sqlite3.SQLITE_BUSY:
+                raise AdmissionWait('sqlite_locked') from exc
             raise
 
     def close(self): self.db.close()
@@ -454,7 +466,7 @@ class Ledger:
         requested_wall = wall
         denied = None
         with self.db:
-            self.db.execute('BEGIN IMMEDIATE')
+            self._begin_admission_write()
             pinned = self.db.execute('SELECT generation,observation FROM admission_meta WHERE id=1').fetchone()
             if pinned['generation'] != self.generation: raise AdmissionWait('resource_generation_held')
             old = self.db.execute('SELECT * FROM reservations WHERE runtime=? AND task=?', (runtime, task)).fetchone()
