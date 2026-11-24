@@ -22,6 +22,7 @@
 # Modified 2026-11-11: advertise the Router catalog separately from model storage status.
 # Modified 2026-11-23: cover the separate owner-local model registry.
 # Modified 2026-11-24: cover import-only registry scope mismatch on install.
+# Modified 2026-11-24: cover independent model-state observations across the local CLI views.
 
 import copy
 from contextlib import contextmanager
@@ -668,6 +669,89 @@ class InspectTests(unittest.TestCase):
         self.assertEqual(code,0);self.assertTrue(json.loads(out.getvalue())['installed'])
         self.assertEqual(wire_calls,[('GET','/api/tags',None),('GET','/api/ps',None)])
         self.assertFalse((self.root/'state').exists())
+
+class ModelStateSeparationTests(unittest.TestCase):
+    """Use the real CLI parsers with synthetic provider-specific observations."""
+
+    setUp = ModelTests.setUp
+
+    @staticmethod
+    def invoke(*args):
+        from . import cli
+        with patch('sys.stdout', new_callable=io.StringIO) as out, \
+             patch('sys.stderr', new_callable=io.StringIO) as err:
+            rc = cli.main(list(args))
+        return rc, json.loads((out if rc == 0 else err).getvalue())
+
+    def test_installed_selectable_and_loaded_are_independent_observations(self):
+        from . import cli
+        config = self.root/'config.json'
+        config.write_text(json.dumps({
+            'state_dir': str(self.root/'state'), 'model_store': str(self.store),
+            'generation_lock': str(self.lock), 'engine_url': 'http://127.0.0.1:11434',
+        }))
+        config.chmod(0o600)
+        catalog = self.root/'catalog.json'
+        catalog.write_text(json.dumps([ENTRY]))
+        catalog.chmod(0o600)
+        model_args = ('model', '--config', str(config), '--catalog', str(catalog))
+        reference = ENTRY['reference']
+        model_id = ENTRY['id']
+        wire_row = {'name': reference, 'digest': DIGEST, 'size': 512}
+
+        self.engine.tags = [{'reference': reference, 'digest': DIGEST, 'size_bytes': 512}]
+        self.manager.register_existing(model_id, reference, DIGEST)
+        self.engine.calls.clear()
+
+        with patch.object(models.OllamaHTTP, '__call__', side_effect=AssertionError('registry contacted engine')), \
+             patch.object(cli, 'request', side_effect=AssertionError('registry contacted Router')):
+            rc, registry = self.invoke(*model_args, 'registry')
+        self.assertEqual(rc, 0, registry)
+        self.assertEqual([r['id'] for r in registry['records']], [model_id])
+        self.assertEqual([registry[name] for name in ('installed', 'selectable', 'loaded')],
+                         ['not_queried'] * 3)
+        self.assertEqual(self.engine.calls, [])
+
+        for selectable, installed, loaded in (
+            (False, True, False),
+            (True, False, False),
+            (True, True, False),
+            (True, True, True),
+        ):
+            with self.subTest(selectable=selectable, installed=installed, loaded=loaded):
+                router_calls, engine_calls = [], []
+                def router(path, method, route):
+                    router_calls.append((method, route))
+                    self.assertEqual(route, '/v1/models')
+                    return {'models': [model_id] if selectable else ['other-model'],
+                            'context_limit': 8192, 'max_output_tokens': 1024,
+                            'max_large_models_loaded': 1}
+
+                def engine(_self, method, route, body=None):
+                    engine_calls.append((method, route, body))
+                    self.assertIn(route, {'/api/tags', '/api/ps'})
+                    present = installed if route == '/api/tags' else loaded
+                    return {'models': [wire_row] if present else []}
+
+                with patch.object(cli, 'request', side_effect=router), \
+                     patch.object(models.OllamaHTTP, '__call__', engine):
+                    rc, router_view = self.invoke('models')
+                    self.assertEqual(rc, 0, router_view)
+                    self.assertEqual(engine_calls, [])
+                    rc, engine_view = self.invoke(*model_args, 'inspect', model_id)
+                    self.assertEqual(rc, 0, engine_view)
+                self.assertIs(model_id in router_view['models'], selectable)
+                self.assertIs(engine_view['installed'], installed)
+                self.assertIs(engine_view['loaded'], loaded)
+                self.assertIs(engine_view['digest_matches'], True if installed else None)
+                self.assertEqual(router_calls, [('GET', '/v1/models')])
+                self.assertEqual(engine_calls, [('GET', '/api/tags', None), ('GET', '/api/ps', None)])
+                self.assertFalse(engine_view['mutation_performed'])
+
+        with patch.object(cli, 'request', side_effect=OSError('synthetic Router unavailable')):
+            rc, unavailable = self.invoke('models')
+        self.assertNotEqual(rc, 0)
+        self.assertNotIn('models', unavailable)
 
 class ProvenanceSafetyTests(unittest.TestCase):
     def evidence(self):
