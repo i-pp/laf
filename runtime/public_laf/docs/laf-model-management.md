@@ -25,6 +25,7 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 <!-- Modified 2026-11-23: separate local model records from catalog and Router observations. -->
 <!-- Modified 2026-11-24: list verified metadata for reviewed Ollama tag mappings. -->
 <!-- Modified 2026-11-25: document the separately observed loaded manifest digest. -->
+<!-- Modified 2026-11-25: distinguish installed selection from optional registry tracking. -->
 
 # LAF model management: offline-tested first slice
 
@@ -90,9 +91,15 @@ python3 -B -m inference.local_platform.cli model --config "$PRIVATE/model.json" 
   --reference "$EXACT_TAG" --digest "$INSTALLED_MANIFEST_SHA256" --profile "$ROUTER_MODEL_ID"
 ```
 
-Selection checks the observed engine tag and full digest. It creates no
-management record or deletion right. For an individually downloaded
-owner-controlled GGUF, first verify its file SHA-256 and prepare a new Modelfile:
+`use-installed` checks the exact engine tag and full manifest digest and
+returns the identity to use in Router configuration. It does not change that
+configuration, create a registry record, or grant deletion rights. To also
+track the asset in LAF, see [Catalog, local registry, and Router views](#catalog-local-registry-and-router-views)
+for `register-existing`. This optional step verifies the tag and digest in
+place without downloading, moving, or deleting model weights.
+
+For an individually downloaded owner-controlled GGUF, first verify its file
+SHA-256 and prepare a new Modelfile:
 
 ```sh
 python3 -B -m inference.local_platform.cli model use-file "$EXISTING_GGUF" \
