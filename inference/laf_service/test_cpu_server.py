@@ -32,6 +32,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 from . import cpu_server
 from .core import GIB, Job, ServiceError, check_cpu_resources, check_resources
+from ..local_platform.model_management import ModelError
 
 
 def configuration(base):
@@ -292,6 +293,209 @@ class CPUProviderTests(unittest.TestCase):
             child.communicate.side_effect = invalidate
             with self.assertRaisesRegex(ServiceError, 'exchange invalidated'):
                 engine.api('/api/ps')
+
+
+class DurableCPUProviderTests(unittest.TestCase):
+    cid = 'c' * 64
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.config = configuration(self.root)
+        (self.root / 'generation.lock').touch(mode=0o600)
+        self.policy_image = self.config['ollama_provider']['image']
+        fixture = CPUProviderTests()
+        fixture.setUp()
+        self.template = fixture.info
+        self.info = None
+        self.trace = []
+        self.fail_create = False
+        self.fail_remove = False
+
+    def engine(self):
+        engine = cpu_server.CPUOllama(self.config, self.root)
+        engine.docker = Mock(side_effect=self.docker)
+        def api(path, **_kwargs):
+            if path == '/api/version':
+                return {'version': engine.policy['version']}
+            if path == '/api/tags':
+                return {'models': [{'name': engine.profile['reference'], 'digest': engine.profile['digest']}]}
+            raise AssertionError(path)
+        engine.api = api
+        return engine
+
+    def read_receipt(self):
+        return json.loads(self.path.read_text())
+
+    def bind_name(self, engine):
+        self.path = self.root / (engine.name + '.json')
+        return engine
+
+    def docker(self, *args, **_kwargs):
+        if args == ('image', 'inspect', '--', self.policy_image):
+            return json.dumps([{'Id': self.policy_image, 'Os': 'linux', 'Config': {'Volumes': None}}])
+        self.trace.append(args[0])
+        if args[0] == 'ps':
+            if self.info:
+                self.assertIn('--no-trunc', args)
+            return self.info['Id'] if self.info else ''
+        if args[0] == 'create':
+            pending = self.read_receipt()
+            self.assertIsNone(pending['container_id'])
+            self.assertIn('laf.cpu.owner=' + pending['owner'], args)
+            self.info = copy.deepcopy(self.template)
+            self.info['Name'] = '/' + args[args.index('--name') + 1]
+            self.info['Config']['Labels']['laf.cpu.owner'] = pending['owner']
+            self.info['Mounts'][0]['Source'] = str(self.root / 'store')
+            self.info['State'] = {'Status': 'created', 'Running': False, 'Pid': 0,
+                                  'Paused': False, 'Restarting': False, 'Dead': False}
+            if self.fail_create:
+                raise ServiceError('synthetic Docker confirmation lost')
+            return self.cid
+        if args[:2] == ('container', 'inspect'):
+            self.assertEqual(args[2:], (self.cid,))
+            return json.dumps([self.info])
+        if args[0] == 'start':
+            self.assertEqual(args[1:], (self.cid,))
+            self.assertEqual(self.read_receipt()['container_id'], self.cid)
+            self.info['State'].update(Status='running', Running=True, Pid=51)
+            return ''
+        if args[0] == 'rm':
+            self.assertEqual(args[1:], (self.cid,))
+            self.assertEqual(self.read_receipt()['container_id'], self.cid)
+            if self.fail_remove:
+                raise ServiceError('synthetic Docker removal unconfirmed')
+            self.info = None
+            return ''
+        raise AssertionError(args)
+
+    def create_known(self):
+        engine = self.bind_name(self.engine())
+        engine.create()
+        self.assertEqual(self.read_receipt()['container_id'], self.cid)
+        self.info['State'].update(Status='exited')
+        self.trace.clear()
+        return engine
+
+    def test_known_stopped_generation_is_reused_through_admission_after_restart(self):
+        previous = self.create_known()
+        engine = self.engine()
+        self.assertNotEqual(engine.owner, previous.owner)
+        with patch.object(cpu_server, 'snapshot_cpu', return_value={'mem_available': 9 * GIB}):
+            engine.ensure(lambda: None)
+        self.assertEqual(engine.owner, previous.owner)
+        self.assertEqual(engine.cid, self.cid)
+        self.assertTrue(engine.ready)
+        self.assertEqual(self.trace, ['ps', 'container', 'container', 'start', 'container'])
+        self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+
+    def test_recovered_generation_still_requires_ram_admission(self):
+        self.create_known()
+        engine = self.engine()
+        with patch.object(cpu_server, 'snapshot_cpu', return_value={'mem_available': 9 * GIB - 1}):
+            with self.assertRaisesRegex(ServiceError, 'RAM reserve'):
+                engine.ensure(lambda: None)
+        self.assertEqual(self.trace, ['ps', 'container', 'container'])
+        self.assertFalse(engine.ready)
+
+    def test_legacy_markerless_container_is_preserved_without_cleaning_up(self):
+        self.create_known()
+        self.path.unlink()  # Simulate a legacy generation created before receipt support.
+        engine = self.engine()
+        with self.assertRaises(ServiceError):
+            engine.create()
+        self.assertEqual(self.trace, ['ps'])
+        self.assertIsNone(engine.cid)
+        engine.close()
+        self.assertEqual(self.trace, ['ps'])
+
+    def test_lost_create_ack_is_fenced_by_pending_receipt_after_restart(self):
+        engine = self.bind_name(self.engine())
+        self.fail_create = True
+        with self.assertRaisesRegex(ServiceError, 'synthetic Docker confirmation lost'):
+            engine.create()
+        self.assertIsNone(self.read_receipt()['container_id'])
+        self.assertEqual(self.trace, ['ps', 'create'])
+        self.trace.clear()
+        second = self.engine()
+        with self.assertRaises(ServiceError):
+            second.create()
+        self.assertIsNone(second.cid)
+        second.close()
+        self.assertEqual(self.trace, ['ps'])
+        self.assertIsNone(self.read_receipt()['container_id'])
+
+    def test_wrong_identity_or_nonexited_state_never_becomes_owned(self):
+        self.create_known()
+        valid = copy.deepcopy(self.info)
+        for test in ('wrong-id', 'wrong-label', 'wrong-network', 'running', 'restarting', 'created', 'missing'):
+            with self.subTest(case=test):
+                self.info = copy.deepcopy(valid)
+                if test == 'wrong-id':
+                    self.info['Id'] = 'd' * 64
+                if test == 'wrong-label':
+                    self.info['Config']['Labels']['laf.cpu.owner'] = 'd' * 32
+                if test == 'wrong-network':
+                    self.info['HostConfig']['NetworkMode'] = 'bridge'
+                if test == 'running':
+                    self.info['State'].update(Status='running', Running=True, Pid=51)
+                if test == 'restarting':
+                    self.info['State'].update(Restarting=True)
+                if test == 'created':
+                    self.info['State'].update(Status='created')
+                if test == 'missing':
+                    self.info = None
+                engine = self.engine()
+                self.trace.clear()
+                with self.assertRaises(ServiceError):
+                    engine.create()
+                self.assertIsNone(engine.cid)
+                engine.close()
+                self.assertTrue(set(self.trace) <= {'ps', 'container'})
+
+    def test_receipt_survives_failed_removal_and_clears_after_owned_removal(self):
+        self.create_known()
+        engine = self.engine()
+        engine.create()
+        self.fail_remove = True
+        with self.assertRaisesRegex(ServiceError, 'synthetic Docker removal unconfirmed'):
+            engine.close()
+        self.assertEqual(self.read_receipt()['container_id'], self.cid)
+        self.fail_remove = False
+        next_engine = self.engine()
+        next_engine.create()
+        next_engine.close()
+        self.assertFalse(self.path.exists())
+
+
+    def test_failed_intent_sync_never_creates_container_or_clears_pending(self):
+        engine = self.bind_name(self.engine())
+        with patch.object(cpu_server, 'sync_receipt_parent', side_effect=OSError('synthetic sync loss')):
+            with self.assertRaisesRegex(OSError, 'synthetic sync loss'):
+                engine.create()
+        self.assertIsNone(self.read_receipt()['container_id'])
+        self.assertEqual(self.trace, ['ps'])
+        self.trace.clear()
+        second = self.engine()
+        with self.assertRaises(ServiceError):
+            second.create()
+        second.close()
+        self.assertEqual(self.trace, ['ps'])
+
+    def test_unsafe_receipt_makes_existing_name_ineligible_before_any_lookup(self):
+        self.create_known()
+        self.path.chmod(0o644)
+        engine = self.engine()
+        with self.assertRaises(ModelError):
+            engine.create()
+        engine.close()
+        self.assertEqual(self.trace, [])
+        self.path.chmod(0o600)
+        self.path.write_text('{"version":1,"version":1}')
+        with self.assertRaises((ModelError, ServiceError)):
+            engine.create()
+        self.assertEqual(self.trace, [])
 
 
 if __name__ == '__main__':
