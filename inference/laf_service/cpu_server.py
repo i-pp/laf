@@ -47,6 +47,7 @@ from .server import Handler, Server
 LIMIT = 262144
 REQUEST_LIMIT = 65536
 CID = re.compile(r'[a-f0-9]{64}\Z')
+OWNER = re.compile(r'[a-f0-9]{32}\Z')
 HTTP_WIRE = (
     'set -eu; exec 3<>/dev/tcp/127.0.0.1/11434; '
     '/usr/bin/head -c "$1" >&3; /usr/bin/head -c 262145 <&3'
@@ -84,6 +85,54 @@ def load_cpu_config(path):
     return config
 
 
+# Changed 2026-11-26: persist exact CPU provider ownership beside the
+# generation lock. The Router holds that lock for all journal transitions.
+def read_provider_receipt(path, name):
+    try:
+        receipt = read_private_json(path)
+    except FileNotFoundError:
+        return None
+    if (type(receipt) is not dict or set(receipt) != {'version', 'name', 'owner', 'container_id'}
+            or type(receipt['version']) is not int or receipt['version'] != 1
+            or receipt['name'] != name
+            or type(receipt['owner']) is not str or not OWNER.fullmatch(receipt['owner'])
+            or (receipt['container_id'] is not None and
+                (type(receipt['container_id']) is not str or not CID.fullmatch(receipt['container_id'])))):
+        raise ServiceError('CPU provider ownership receipt invalid; existing state preserved')
+    return receipt
+
+
+def sync_receipt_parent(path):
+    fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def write_provider_receipt(path, name, expected, receipt):
+    checked_directory(path.parent)
+    if read_provider_receipt(path, name) != expected:
+        raise ServiceError('CPU provider ownership receipt changed; existing state preserved')
+    fd, temporary = tempfile.mkstemp(prefix='.cpu-provider-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write((json.dumps(receipt, separators=(',', ':')) + '\n').encode('ascii'))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        sync_receipt_parent(path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def confirmed_inactive(state, status):
+    return (state.get('Status') == status and state.get('Running') is False
+            and type(state.get('Pid')) is int and state['Pid'] == 0
+            and state.get('Dead') is False and state.get('Paused') is False
+            and state.get('Restarting') is False)
+
+
 class _HTTPBytes:
     def __init__(self, raw):
         self.raw = raw
@@ -104,6 +153,8 @@ class CPUOllama:
         self.store = str(Path(config['model_store']).resolve())
         self.name = 'laf-cpu-' + hashlib.sha256(str(self.runtime.resolve()).encode()).hexdigest()[:20]
         self.owner = uuid.uuid4().hex
+        self.receipt_path = Path(config['generation_lock']).parent / (self.name + '.json')
+        self.receipt = None
         self.uid = f'{os.getuid()}:{os.getgid()}'
         self.argv = ('/usr/bin/docker', '--config', str(docker_config), '--host=unix:///var/run/docker.sock')
         self.environment = {'HOME': str(self.runtime), 'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'}
@@ -126,8 +177,13 @@ class CPUOllama:
         return result.stdout.decode().strip()
 
     def inspect(self, *, timeout=8):
-        fields = json.loads(self.docker('container', 'inspect', self.cid, timeout=timeout))
-        if len(fields) != 1 or not self.cid or fields[0].get('Id') != self.cid:
+        return self.inspect_identity(self.cid, self.owner, timeout=timeout)
+
+    def inspect_identity(self, cid, owner, *, timeout=8):
+        if not cid:
+            raise ServiceError('owned CPU provider identity unavailable')
+        fields = json.loads(self.docker('container', 'inspect', cid, timeout=timeout))
+        if len(fields) != 1 or fields[0].get('Id') != cid:
             raise ServiceError('owned CPU provider identity unavailable')
         info = fields[0]
         settings = info['Config']
@@ -135,7 +191,7 @@ class CPUOllama:
         attached = info['NetworkSettings']['Networks']
         devices = ('Devices', 'DeviceRequests', 'DeviceCgroupRules', 'GroupAdd', 'CapAdd')
         if (info['Name'] != '/' + self.name or info['Image'] != self.image
-                or settings['Labels'].get('laf.cpu.owner') != self.owner or settings['User'] != self.uid
+                or settings['Labels'].get('laf.cpu.owner') != owner or settings['User'] != self.uid
                 or settings['Entrypoint'] != ['/bin/ollama'] or settings['Cmd'] != ['serve']
                 or host['Runtime'] != 'runc' or host['NetworkMode'] != 'none'
                 or not isinstance(attached, dict) or set(attached) - {'none'}
@@ -162,9 +218,22 @@ class CPUOllama:
         return state
 
     def create(self):
+        if self.creation_attempted:
+            raise ServiceError('CPU provider creation outcome requires owner reconciliation')
         self.image = installed_provider_image(self.policy['image'], self.docker)
-        if self.docker('ps', '-aq', '--filter', f'name=^/{self.name}$'):
-            raise ServiceError('existing CPU provider requires owner reconciliation')
+        receipt = read_provider_receipt(self.receipt_path, self.name)
+        listed = self.docker('ps', '-aq', '--no-trunc', '--filter', f'name=^/{self.name}$')
+        if receipt is not None or listed:
+            if receipt is None or not CID.fullmatch(listed) or receipt['container_id'] != listed:
+                raise ServiceError('existing CPU provider requires owner reconciliation')
+            state = self.inspect_identity(listed, receipt['owner'])
+            if not confirmed_inactive(state, 'exited'):
+                raise ServiceError('recorded CPU provider not confirmed stopped; existing state preserved')
+            self.cid, self.owner, self.receipt = listed, receipt['owner'], receipt
+            return
+
+        intent = {'version': 1, 'name': self.name, 'owner': self.owner, 'container_id': None}
+        write_provider_receipt(self.receipt_path, self.name, None, intent)
         self.creation_attempted = True
         memory = str(self.policy['memory_bytes'])
         flags = ['create', '--pull=never', '--name', self.name, '--label', 'laf.cpu.owner=' + self.owner,
@@ -181,7 +250,11 @@ class CPUOllama:
         cid = self.docker(*flags, self.image, 'serve')
         if not CID.fullmatch(cid):
             raise ServiceError('created CPU provider identity unconfirmed')
-        self.cid = cid
+        if not confirmed_inactive(self.inspect_identity(cid, self.owner), 'created'):
+            raise ServiceError('new CPU provider not confirmed inactive; existing state preserved')
+        receipt = dict(intent, container_id=cid)
+        write_provider_receipt(self.receipt_path, self.name, intent, receipt)
+        self.cid, self.receipt = cid, receipt
 
     def api(self, path, body=None, *, check=lambda: None, timeout=5):
         if not (path in ENDPOINTS and body is None or path == '/api/chat' and body is not None):
@@ -324,8 +397,14 @@ class CPUOllama:
             self.closing = True
             self.abort()
             if self.cid is not None:
+                if self.receipt is not None and read_provider_receipt(self.receipt_path, self.name) != self.receipt:
+                    raise ServiceError('CPU provider ownership receipt changed; existing state preserved')
                 self.docker('rm', self.cid)
                 self.cid = None
+                if self.receipt is not None:
+                    self.receipt_path.unlink()
+                    sync_receipt_parent(self.receipt_path)
+                    self.receipt = None
 
 
 def serve_cpu(config):
@@ -377,6 +456,10 @@ def serve_cpu(config):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', required=True)
+    # Compatibility handshake for a reviewed supervisor. This Router always
+    # enforces durable receipts, regardless of whether the flag is supplied.
+    parser.add_argument('--cpu-provider-receipt-v1', action='store_true',
+                        help='Require the durable CPU provider receipt v1 contract')
     args = parser.parse_args()
     serve_cpu(load_cpu_config(args.config))
 
