@@ -22,6 +22,7 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 
 Modified 2026-11-21 to document the explicit CPU-only Router.
+Modified 2026-11-27 to distinguish model catalog, registry, engine, and Router observations.
 -->
 
 # Configured models and optional Flash
@@ -63,6 +64,33 @@ If selection or discovery fails, no job is submitted. Repair and developer
 commands retain their previous legacy defaults; use their existing `--model`
 option for a configured ID. File capabilities, read-only tests, fixed execution
 profiles and bounded attempts/deadlines remain unchanged.
+
+## Find a model without confusing catalog and runtime state
+
+From the LAF checkout, use the command that answers the question you have:
+
+| Question | Command | What it tells you |
+| --- | --- | --- |
+| Which recent models does a supported publisher list? | `./laf model discover --publisher Qwen` | A bounded set of public publisher metadata, newest first (up to 12 by default). Use `--search` for a named model. Discovery alone does not establish a supported download. |
+| Which entries in my reviewed catalog are eligible to install? | `./laf model --catalog "$CATALOG" installable` | Reviewed Ollama entries with complete metadata, including an expected digest and a storage estimate. Does not query an engine, measure size, verify local files, or download. |
+| What have I recorded locally? | `./laf model --config "$CONFIG" registry` | Versioned records from the selected owner configuration, including imported and managed assets. Does not imply that an asset is still present or usable. |
+| What is installed in this local engine? | `./laf model --config "$CONFIG" inventory` | The explicitly configured engine's current tags and manifest digests, not the Router's model IDs. |
+| What has this engine loaded for a catalog entry? | `./laf model --config "$CONFIG" --catalog "$CATALOG" inspect "$MODEL_ID"` | Whether the exact catalog reference is installed or loaded. `digest_matches` compares the installed engine digest with the catalog digest. The separately reported loaded digest may describe a different manifest level and is not checked against the catalog. |
+| What can the selected Router accept? | `./laf --socket "$SOCKET" models` | Model IDs advertised by that Router now. This is not a list of installed files or of loaded engine models. |
+
+In these examples, use an existing owner configuration, private reviewed
+catalog, catalog model ID, or Router socket as appropriate. To check public
+metadata for known Ollama tag mappings, use `./laf model artifacts`. Its
+reported digest is from the current registry response, not a historical
+approval or a guarantee of compatibility with your Router. The built-in owner
+catalog contains setup placeholders: `./laf model installable` can legitimately
+return an empty list even when `./laf models` lists usable Router IDs.
+
+A result of `not_queried` means unknown, not absent. Keep the three questions
+separate: a recorded model can be missing from the engine, an installed
+model may not be selectable through this Router, and a selectable model
+need not be loaded. Use an independently verified profile mapping rather
+than joining a Router ID and an engine tag by spelling.
 
 ## Explicit Core configuration
 
