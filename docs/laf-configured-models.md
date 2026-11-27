@@ -71,11 +71,11 @@ From the LAF checkout, use the command that answers the question you have:
 
 | Question | Command | What it tells you |
 | --- | --- | --- |
-| What does a supported publisher list? | `./laf model discover --publisher Qwen` | Public publisher metadata. Discovery alone does not establish a supported download. |
-| Which entries in my reviewed catalog are eligible to install? | `./laf model --catalog "$CATALOG" installable` | Entries with complete metadata, including an expected digest and required storage. Does not query an engine, verify local files, or download. |
+| Which recent models does a supported publisher list? | `./laf model discover --publisher Qwen` | A bounded set of public publisher metadata, newest first (up to 12 by default). Use `--search` for a named model. Discovery alone does not establish a supported download. |
+| Which entries in my reviewed catalog are eligible to install? | `./laf model --catalog "$CATALOG" installable` | Reviewed Ollama entries with complete metadata, including an expected digest and a storage estimate. Does not query an engine, measure size, verify local files, or download. |
 | What have I recorded locally? | `./laf model --config "$CONFIG" registry` | Versioned records from the selected owner configuration, including imported and managed assets. Does not imply that an asset is still present or usable. |
 | What is installed in this local engine? | `./laf model --config "$CONFIG" inventory` | The explicitly configured engine's current tags and manifest digests, not the Router's model IDs. |
-| What has this engine loaded for a catalog entry? | `./laf model --config "$CONFIG" --catalog "$CATALOG" inspect "$MODEL_ID"` | Whether the exact catalog reference is installed or loaded, and its observed digests. Compare the observed digest with the expected one; a loaded reference alone does not prove the same artifact is loaded. |
+| What has this engine loaded for a catalog entry? | `./laf model --config "$CONFIG" --catalog "$CATALOG" inspect "$MODEL_ID"` | Whether the exact catalog reference is installed or loaded. `digest_matches` compares the installed engine digest with the catalog digest. The separately reported loaded digest may describe a different manifest level and is not checked against the catalog. |
 | What can the selected Router accept? | `./laf --socket "$SOCKET" models` | Model IDs advertised by that Router now. This is not a list of installed files or of loaded engine models. |
 
 In these examples, use an existing owner configuration, private reviewed
