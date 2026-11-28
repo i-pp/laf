@@ -21,12 +21,14 @@
 # Modified 2026-11-21: require Router-compatible identity before selecting or downloading a model.
 # Modified 2026-11-24: report verified registry bytes for reviewed artifact mappings.
 # Modified 2026-11-28: share GGUF verification between Modelfile preparation and registry import.
+# Modified 2026-11-28: separate reviewed manifest matches from mutable tag observations.
 
 """Owner-side model selection for LAF onboarding."""
 
 import hashlib
 import http.client
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -38,7 +40,7 @@ from urllib.parse import quote, urlencode
 from ..laf_service.core_backends import valid_configured_profile_id, valid_profile_reference
 from .model_management import (
     DIGEST, MAX_JSON, ModelError, ModelManager, OllamaAdapter,
-    OllamaHTTP, checked_directory, checked_file, gguf_path, read_engine_config, strict_json,
+    OllamaHTTP, checked_directory, checked_file, gguf_path, https_url, read_engine_config, strict_json,
 )
 
 HUB = "huggingface.co"
@@ -58,6 +60,32 @@ LAYER_TYPES = {MODEL_LAYER} | {
 CONFIG_TYPE = "application/vnd.docker.container.image.v1+json"
 LICENSE = "apache-2.0"
 LICENSE_URL = "https://www.apache.org/licenses/LICENSE-2.0"
+
+
+@dataclass(frozen=True)
+class ReviewedTagPin:
+    reference: str
+    manifest_digest: str
+    layer_digest: str
+    layer_bytes: int
+    total_bytes: int
+    quantization: str
+    license: str
+    model_card_revision: str
+    review_url: str
+
+    def matches(self, observation):
+        artifact = observation["artifact"]
+        layer = observation["model_layer"]
+        return (self.reference, self.manifest_digest, self.layer_digest,
+                self.layer_bytes, self.total_bytes, self.quantization, self.license) == (
+            artifact["reference"], artifact["digest"], layer["digest"], layer["size_bytes"],
+            observation["manifest_total_bytes"], observation["quantization"], artifact["license"])
+
+
+# Populate only after approval of the full, independently cited review evidence.
+# A resolved mutable tag or a local runtime observation is not a review.
+REVIEWED_TAG_PINS: dict[str, ReviewedTagPin] = {}
 
 
 def _get(host, path, media):
@@ -201,6 +229,38 @@ def artifacts():
             unavailable.append({"model": identifier, "status": "metadata_unavailable"})
     status = "metadata_verified" if verified and not unavailable else "partial" if verified else "unavailable"
     return {"catalog_status": status, "artifacts": verified, "unavailable": unavailable,
+            "installed": "not_queried", "selectable": "not_queried", "loaded": "not_queried"}
+
+
+def reviewed_artifacts():
+    """Show approved exact manifests still matching their mutable Ollama tags."""
+    matches, unavailable = [], []
+    for identifier, pin in sorted(REVIEWED_TAG_PINS.items()):
+        if not REVISION.fullmatch(pin.model_card_revision) or not https_url(pin.review_url):
+            unavailable.append({"model": identifier, "status": "review_record_invalid"})
+            continue
+        try:
+            observed = artifact(identifier)
+        except (ModelError, OSError, http.client.HTTPException):
+            unavailable.append({"model": identifier, "status": "metadata_unavailable"})
+            continue
+        if not pin.matches(observed):
+            unavailable.append({"model": identifier, "status": "tag_pin_mismatch"})
+            continue
+        observed["artifact_identity"].update(
+            verification="reviewed_tag_match",
+            reviewed_manifest_digest=pin.manifest_digest,
+            reviewed_model_card_revision=pin.model_card_revision,
+            review_url=pin.review_url,
+        )
+        matches.append(observed)
+    if not REVIEWED_TAG_PINS:
+        status = "no_reviewed_pins"
+    elif not matches:
+        status = "no_matching_reviewed_tags"
+    else:
+        status = "partial" if unavailable else "reviewed_tag_matches"
+    return {"catalog_status": status, "artifacts": matches, "unavailable": unavailable,
             "installed": "not_queried", "selectable": "not_queried", "loaded": "not_queried"}
 
 

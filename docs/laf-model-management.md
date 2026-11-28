@@ -29,6 +29,7 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 <!-- Modified 2026-11-25: document the separately observed loaded manifest digest. -->
 <!-- Modified 2026-11-25: distinguish installed selection from optional registry tracking. -->
 <!-- Modified 2026-11-28: document standalone GGUF file registration in place. -->
+<!-- Modified 2026-11-28: document the separate reviewed manifest view. -->
 
 # LAF model management: offline-tested first slice
 
@@ -43,6 +44,7 @@ to the same plugin. The remote Router tools do not manage model files.
 python3 -B -m inference.local_platform.cli model discover --publisher HuggingFaceTB
 python3 -B -m inference.local_platform.cli model discover --publisher Qwen --limit 15
 python3 -B -m inference.local_platform.cli model artifacts
+python3 -B -m inference.local_platform.cli model reviewed-artifacts
 python3 -B -m inference.local_platform.cli model artifact HuggingFaceTB/SmolLM2-135M-Instruct
 ```
 
@@ -171,6 +173,17 @@ engine inventory. `loaded_state: not_queried` must not be read as "unloaded."
   command rechecks it. A `partial` or `unavailable` catalog reports failed
   mappings separately, never as downloads. This view does not download weights,
   read local inventory, or validate Router support.
+- `laf model reviewed-artifacts` is the separate LAF-reviewed catalog. It
+  lists only reviewed records whose full manifest SHA-256 still matches the
+  bytes returned by the public tag, with the recorded metadata and review
+  link. A changed tag or unavailable metadata is reported separately, not
+  as an offer or as a verified match. No reviewed records ship in this
+  change; `no_reviewed_pins` makes no requests. Even a match proves neither
+  retrieval by digest nor availability after the metadata check: Ollama
+  still pulls by tag, and the explicit download verifies the final digest.
+  This catalog does not change the existing owner-selected exact-digest
+  download workflow. It never queries installed, selectable, or loaded
+  state.
 - `laf model --catalog /PRIVATE/owner-catalog.json installable` shows
   metadata eligibility in the owner's Ollama catalog only. It excludes
   incomplete entries and those requiring separate user setup, including the

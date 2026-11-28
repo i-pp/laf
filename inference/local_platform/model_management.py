@@ -25,6 +25,7 @@
 # Modified 2026-11-28: distinguish an imported registry match from managed ownership.
 # Modified 2026-11-28: normalize inspection and mutation scope paths consistently.
 # Modified 2026-11-28: register verified standalone GGUF files as imported metadata.
+# Modified 2026-11-28: expose the separately reviewed public catalog view.
 
 """Opt-in, persistent model management, separate from Router load/unload.
 
@@ -755,6 +756,7 @@ def main(argv=None):
     discover.add_argument('--limit', type=int, default=12)
     discover.add_argument('--search')
     sub.add_parser('artifacts', help='check current public metadata for reviewed Ollama tag mappings')
+    sub.add_parser('reviewed-artifacts', help='show exact reviewed manifests that still match their public tags')
     sub.add_parser('artifact', help='check current metadata for one reviewed Ollama tag mapping').add_argument('model')
     setup = sub.add_parser('setup', help='write a new private configuration without contacting an engine')
     setup.add_argument('--engine-url', required=True)
@@ -775,13 +777,16 @@ def main(argv=None):
     existing_file.add_argument('--modelfile', type=Path, required=True)
     args=parser.parse_args(argv)
     try:
-        if args.command in {'discover', 'artifacts', 'artifact', 'setup', 'download', 'inventory', 'use-installed', 'use-file'}:
+        if args.command in {'discover', 'artifacts', 'reviewed-artifacts', 'artifact', 'setup',
+                             'download', 'inventory', 'use-installed', 'use-file'}:
             if args.catalog:
                 raise ModelError('the setup commands do not accept a replacement catalog')
             if args.command == 'discover':
                 out = model_setup.discover(args.publisher, args.limit, args.search)
             elif args.command == 'artifacts':
                 out = model_setup.artifacts()
+            elif args.command == 'reviewed-artifacts':
+                out = model_setup.reviewed_artifacts()
             elif args.command == 'artifact':
                 out = model_setup.artifact(args.model)
             elif args.command == 'setup':
