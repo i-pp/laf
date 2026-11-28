@@ -22,6 +22,8 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
+<!-- Modified 2026-11-22: document the isolated client wheel as an alternative to the module entry point. -->
+
 <!-- Modified 2026-11-23: separate local model records from catalog and Router observations. -->
 <!-- Modified 2026-11-24: list verified metadata for reviewed Ollama tag mappings. -->
 <!-- Modified 2026-11-25: document the separately observed loaded manifest digest. -->
@@ -139,9 +141,12 @@ python3 -B -m unittest -v inference.local_platform.test_models
 python3 -B scripts/check-laf.py --suite portable
 ```
 
-The implementation uses the existing module entry point. A packaged `laf`
-executable, engine provisioning and complete Docker Compose installation remain
-separate work. These commands are not a complete Quick Start for a running LAF.
+The examples use the module entry point from the checkout. After the
+[isolated wheel installation](client-install.md#offline-wheel-and-isolated-install),
+run the same model commands through `laf` in the activated virtual environment
+or through that environment's `bin/laf` path. For example, run `laf model catalog`.
+The wheel installs the Python client only. Engine provisioning and complete
+Docker Compose installation remain separate work.
 The existing `status` command still queries the private Router and now includes
 an independent local `model_storage` summary. Use `LAF_MODEL_STATE_DIR` to select
 the same registry used by model operations; otherwise it reads
@@ -373,10 +378,13 @@ catalog reference, normalized to `sha256:...`, or null if a successful running
 inventory contains no matching reference. It may identify a different manifest
 level than the catalog entry and is not compared with the catalog or installed
 digest. A failed, malformed or ambiguous inventory produces no partial result.
-`registry_record_matches` describes saved registry ownership within
-the configured engine scope. `managed` additionally requires an observed model
-with the saved digest, so changed or missing engine content is not reported as
-currently managed. This inspection never creates ownership.
+`registry_record_matches` compares saved metadata with the exact catalog model
+ID, reference, and digest in the configured engine scope. `registry_ownership`
+reports `imported`, `managed`, or null when no saved identity matches. An import
+can still match saved metadata after the engine asset disappears or changes.
+Only a matching managed journal record with the same currently installed
+digest sets `managed` to true. This inspection does not adopt an import or
+grant deletion authority.
 
 An inventory result does not establish model compatibility, current weight-file
 hashes or the actual engine store's volume mapping. The output explicitly labels

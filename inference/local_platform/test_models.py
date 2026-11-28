@@ -24,6 +24,7 @@
 # Modified 2026-11-24: cover import-only registry scope mismatch on install.
 # Modified 2026-11-24: cover independent model-state observations across the local CLI views.
 # Modified 2026-11-25: cover observed loaded digests and uncertain running inventory.
+# Modified 2026-11-28: exercise inspection of imported records with normalized paths.
 
 import copy
 from contextlib import contextmanager
@@ -654,6 +655,85 @@ class InspectTests(unittest.TestCase):
         out=self.manager.inspect('coder-next')
         self.assertTrue(out['registry_record_matches']);self.assertFalse(out['managed'])
         self.assertFalse(out['installed'])
+    def test_inspect_recognizes_exact_registry_import_without_management(self):
+        observed = {'reference': ENTRY['reference'], 'digest': DIGEST, 'size_bytes': 512}
+        self.engine.tags = [observed]
+        self.manager.register_existing(ENTRY['id'], ENTRY['reference'], DIGEST)
+        self.engine.calls.clear()
+        saved = self.root/'state'/'registry'/'active.json'
+        pointer = (saved.read_bytes(), saved.stat().st_ino)
+        for tags in ([observed], [dict(observed, digest='sha256:'+'b'*64)], []):
+            self.engine.tags = tags
+            with self.subTest(tags=tags):
+                result = self.manager.inspect(ENTRY['id'])
+                self.assertTrue(result['registry_record_matches'])
+                self.assertEqual(result['registry_ownership'], 'imported')
+                self.assertFalse(result['managed'])
+                self.assertEqual(result['installed'], bool(tags))
+                self.assertEqual(result['digest_matches'], None if not tags else tags[0]['digest']==DIGEST)
+                self.assertFalse(result['loaded'])
+        self.assertEqual(self.engine.calls, ['list', 'running'] * 3)
+        self.assertEqual((saved.read_bytes(), saved.stat().st_ino), pointer)
+        self.assertFalse((self.root/'state'/'models.json').exists())
+
+    def test_inspect_import_not_matched_across_scope_and_catalog_identities(self):
+        self.engine.tags = [{'reference': ENTRY['reference'], 'digest': DIGEST, 'size_bytes': 512}]
+        self.manager.register_existing(ENTRY['id'], ENTRY['reference'], DIGEST)
+        for entry, store in [(dict(ENTRY, digest=None), self.store),
+                             (dict(ENTRY, digest='sha256:'+'b'*64), self.store),
+                             (dict(ENTRY, reference='owner/coder:v2'), self.store),
+                             (dict(ENTRY, id='other-id'), self.store),
+                             (ENTRY, self.root/'other-store')]:
+            with self.subTest(id=entry['id'], reference=entry['reference'], digest=entry['digest'], store=store):
+                reader = models.ModelManager(self.root/'state', [entry], self.engine, self.lock, store)
+                result = reader.inspect(entry['id'])
+                self.assertFalse(result['registry_record_matches'])
+                self.assertIsNone(result['registry_ownership'])
+                self.assertFalse(result['managed'])
+
+    def test_inspect_import_via_public_cli_is_get_only_while_generation_lock_held(self):
+        config=self.root/'config.json'
+        def write_config(store, lock):
+            config.write_text(json.dumps({'state_dir':str(self.root/'state'),
+                'model_store':store,'generation_lock':lock,'engine_url':'http://127.0.0.1:11434'}))
+            config.chmod(0o600)
+        store, lock = str(self.store), str(self.lock)
+        dotted_lock = f'{self.lock.parent}/./{self.lock.name}'
+        write_config(store+'/', dotted_lock)
+        catalog=self.root/'catalog.json';catalog.write_text(json.dumps([ENTRY]));catalog.chmod(0o600)
+        calls=[]
+        def endpoints(_self, method, path, body=None):
+            calls.append((method, path, body))
+            if (method, path) == ('GET', '/api/tags'):
+                return {'models':[{'name':ENTRY['reference'],'digest':'a'*64,'size':512}]}
+            if (method, path) == ('GET', '/api/ps'):
+                return {'models':[]}
+            self.fail(f'unexpected engine action: {method} {path}')
+        with patch.object(models.OllamaHTTP, '__call__', endpoints):
+            rc, row = ModelStateSeparationTests.invoke('model', '--config', str(config),
+                'register-existing', ENTRY['id'], '--reference', ENTRY['reference'], '--digest', DIGEST)
+            self.assertEqual(rc, 0, row)
+            pointer = self.root/'state'/'registry'/'active.json'
+            before = pointer.read_bytes(), pointer.stat().st_ino
+            for store_path, lock_path in ((store+'/', dotted_lock), (store, lock)):
+                with self.subTest(store=store_path, lock=lock_path):
+                    write_config(store_path, lock_path)
+                    calls.clear()
+                    with self.lock.open('r') as fd:
+                        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        rc, row = ModelStateSeparationTests.invoke('model', '--config', str(config),
+                            '--catalog', str(catalog), 'inspect', ENTRY['id'])
+                    self.assertEqual(rc, 0, row)
+                    self.assertTrue(row['registry_record_matches'])
+                    self.assertEqual(row['registry_ownership'], 'imported')
+                    self.assertTrue(row['installed'])
+                    self.assertFalse(row['loaded'])
+                    self.assertFalse(row['managed'])
+                    self.assertFalse(row['mutation_performed'])
+                    self.assertEqual(calls, [('GET','/api/tags',None),('GET','/api/ps',None)])
+        self.assertEqual((pointer.read_bytes(), pointer.stat().st_ino), before)
+        self.assertFalse((self.root/'state'/'models.json').exists())
+
     def test_inspect_cli_end_to_end_is_get_only_and_no_lock_changes(self):
         config=self.root/'config.json';config.write_text(json.dumps({
             'state_dir':str(self.root/'state'),'model_store':str(self.store),
