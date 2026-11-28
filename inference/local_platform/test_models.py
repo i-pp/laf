@@ -24,6 +24,7 @@
 # Modified 2026-11-24: cover import-only registry scope mismatch on install.
 # Modified 2026-11-24: cover independent model-state observations across the local CLI views.
 # Modified 2026-11-25: cover observed loaded digests and uncertain running inventory.
+# Modified 2026-11-28: exercise inspection of imported records with normalized paths.
 
 import copy
 from contextlib import contextmanager
@@ -691,9 +692,14 @@ class InspectTests(unittest.TestCase):
                 self.assertFalse(result['managed'])
 
     def test_inspect_import_via_public_cli_is_get_only_while_generation_lock_held(self):
-        config=self.root/'config.json';config.write_text(json.dumps({
-            'state_dir':str(self.root/'state'),'model_store':str(self.store),
-            'generation_lock':str(self.lock),'engine_url':'http://127.0.0.1:11434'}));config.chmod(0o600)
+        config=self.root/'config.json'
+        def write_config(store, lock):
+            config.write_text(json.dumps({'state_dir':str(self.root/'state'),
+                'model_store':store,'generation_lock':lock,'engine_url':'http://127.0.0.1:11434'}))
+            config.chmod(0o600)
+        store, lock = str(self.store), str(self.lock)
+        dotted_lock = f'{self.lock.parent}/./{self.lock.name}'
+        write_config(store+'/', dotted_lock)
         catalog=self.root/'catalog.json';catalog.write_text(json.dumps([ENTRY]));catalog.chmod(0o600)
         calls=[]
         def endpoints(_self, method, path, body=None):
@@ -707,21 +713,24 @@ class InspectTests(unittest.TestCase):
             rc, row = ModelStateSeparationTests.invoke('model', '--config', str(config),
                 'register-existing', ENTRY['id'], '--reference', ENTRY['reference'], '--digest', DIGEST)
             self.assertEqual(rc, 0, row)
-            calls.clear()
             pointer = self.root/'state'/'registry'/'active.json'
             before = pointer.read_bytes(), pointer.stat().st_ino
-            with self.lock.open('r') as fd:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                rc, row = ModelStateSeparationTests.invoke('model', '--config', str(config),
-                    '--catalog', str(catalog), 'inspect', ENTRY['id'])
-            self.assertEqual(rc, 0, row)
-        self.assertTrue(row['registry_record_matches'])
-        self.assertEqual(row['registry_ownership'], 'imported')
-        self.assertTrue(row['installed'])
-        self.assertFalse(row['loaded'])
-        self.assertFalse(row['managed'])
-        self.assertFalse(row['mutation_performed'])
-        self.assertEqual(calls, [('GET','/api/tags',None),('GET','/api/ps',None)])
+            for store_path, lock_path in ((store+'/', dotted_lock), (store, lock)):
+                with self.subTest(store=store_path, lock=lock_path):
+                    write_config(store_path, lock_path)
+                    calls.clear()
+                    with self.lock.open('r') as fd:
+                        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        rc, row = ModelStateSeparationTests.invoke('model', '--config', str(config),
+                            '--catalog', str(catalog), 'inspect', ENTRY['id'])
+                    self.assertEqual(rc, 0, row)
+                    self.assertTrue(row['registry_record_matches'])
+                    self.assertEqual(row['registry_ownership'], 'imported')
+                    self.assertTrue(row['installed'])
+                    self.assertFalse(row['loaded'])
+                    self.assertFalse(row['managed'])
+                    self.assertFalse(row['mutation_performed'])
+                    self.assertEqual(calls, [('GET','/api/tags',None),('GET','/api/ps',None)])
         self.assertEqual((pointer.read_bytes(), pointer.stat().st_ino), before)
         self.assertFalse((self.root/'state'/'models.json').exists())
 

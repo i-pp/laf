@@ -23,6 +23,7 @@
 # Modified 2026-11-24: expose the reviewed artifact metadata catalog command.
 # Modified 2026-11-25: report the exact loaded reference's observed manifest digest.
 # Modified 2026-11-28: distinguish an imported registry match from managed ownership.
+# Modified 2026-11-28: normalize inspection and mutation scope paths consistently.
 
 """Opt-in, persistent model management, separate from Router load/unload.
 
@@ -520,6 +521,12 @@ class ModelManager:
         value = self._read()
         return {'installed_count':len(value['models']),'pending':value['pending'],
                 'loaded_state':'not_queried','automatic_retry':False}
+    def _management_scope(self, identity):
+        # Preserve the journal's lexical Path format, without resolving symlinks.
+        def path_string(path):
+            return str(Path(path)) if path is not None else str(path)
+        return {'engine':identity,'model_store':path_string(self.model_store),
+                'generation_lock':path_string(self.generation_lock)}
     def inspect(self, identifier):
         """GET-only engine observation; never acquire locks or create state."""
         entry=self.catalog.get(identifier)
@@ -529,7 +536,7 @@ class ModelManager:
         identity=getattr(self.adapter,'identity',None)
         if not text_field(identity): raise ModelError('explicit engine identity required')
         value=self._read()
-        scope={'engine':identity,'model_store':str(self.model_store),'generation_lock':str(self.generation_lock)}
+        scope=self._management_scope(identity)
         scope_matches=value['scope']==scope
         saved=value['models'].get(identifier)
         managed_match=bool(scope_matches and saved and saved['reference']==entry['reference']
@@ -565,7 +572,7 @@ class ModelManager:
         if lock.name != 'generation.lock': raise ModelError('existing Router generation.lock required')
         with private_lock(lock.parent,lock.name), private_lock(self.directory,'models.lock',create=True):
             value = self._read()
-            scope={'engine':identity,'model_store':str(Path(self.model_store)),'generation_lock':str(lock)}
+            scope=self._management_scope(identity)
             if value['scope'] is not None and value['scope']!=scope:
                 raise ModelError('model management scope changed; refusing operation')
             if value['pending'] is not None:
