@@ -20,6 +20,7 @@
 
 # Modified 2026-11-21: require Router-compatible identity before selecting or downloading a model.
 # Modified 2026-11-24: report verified registry bytes for reviewed artifact mappings.
+# Modified 2026-11-28: share GGUF verification between Modelfile preparation and registry import.
 
 """Owner-side model selection for LAF onboarding."""
 
@@ -37,7 +38,7 @@ from urllib.parse import quote, urlencode
 from ..laf_service.core_backends import valid_configured_profile_id, valid_profile_reference
 from .model_management import (
     DIGEST, MAX_JSON, ModelError, ModelManager, OllamaAdapter,
-    OllamaHTTP, checked_directory, checked_file, read_engine_config, strict_json,
+    OllamaHTTP, checked_directory, checked_file, gguf_path, read_engine_config, strict_json,
 )
 
 HUB = "huggingface.co"
@@ -322,11 +323,10 @@ def installed(config_path, reference=None, digest=None, profile=None):
             "router_configuration_required": True}
 
 
-def prepare_existing_file(path, expected_digest, modelfile):
-    path = _absolute(path)
-    if (path.suffix.lower() != ".gguf" or not DIGEST.fullmatch(expected_digest)
-            or any(not c.isprintable() or c in '"\\' for c in str(path))):
-        raise ModelError("provide an absolute GGUF path without control characters, and its full SHA-256")
+def verify_existing_file(path, expected_digest):
+    path = gguf_path(path)
+    if not isinstance(expected_digest, str) or not DIGEST.fullmatch(expected_digest):
+        raise ModelError("provide the full SHA-256 of the selected GGUF")
     _protected_tree(path.parent)
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, "rb") as stream:
@@ -352,6 +352,12 @@ def prepare_existing_file(path, expected_digest, modelfile):
             raise ModelError("GGUF changed during verification")
     if "sha256:" + hasher.hexdigest() != expected_digest:
         raise ModelError("GGUF does not match the selected SHA-256")
+    return {"source_path": str(path), "file_sha256": expected_digest, "size_bytes": before.st_size}
+
+
+def prepare_existing_file(path, expected_digest, modelfile):
+    verified = verify_existing_file(path, expected_digest)
+    path = verified["source_path"]
     _new_file(modelfile, f"FROM {path}\n".encode())
     return {"source_path": str(path), "file_sha256": expected_digest, "modelfile": str(modelfile),
             "engine_contacted": False, "downloaded": False, "ollama_import_required": True}

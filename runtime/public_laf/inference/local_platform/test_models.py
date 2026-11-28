@@ -25,10 +25,12 @@
 # Modified 2026-11-24: cover independent model-state observations across the local CLI views.
 # Modified 2026-11-25: cover observed loaded digests and uncertain running inventory.
 # Modified 2026-11-28: exercise inspection of imported records with normalized paths.
+# Modified 2026-11-28: cover local GGUF imports without engine adoption or deletion rights.
 
 import copy
 from contextlib import contextmanager
 import fcntl
+import hashlib
 import io
 import json
 import os
@@ -542,6 +544,145 @@ class ModelTests(unittest.TestCase):
         with models.private_lock(self.root/'state', 'models.lock', create=True):
             with self.assertRaises(models.ModelError): self.install()
         self.assertEqual(self.engine.calls, [])
+
+
+class FileRegistryTests(unittest.TestCase):
+    setUp = ModelTests.setUp
+    install = ModelTests.install
+
+    def asset(self, path=None, suffix=b'a'):
+        path = path or self.root/'local.gguf'
+        payload = b'GGUF\x03\0\0\0' + b'\0'*16 + suffix
+        path.write_bytes(payload)
+        path.chmod(0o600)
+        return path, 'sha256:'+hashlib.sha256(payload).hexdigest()
+
+    def test_register_file_via_cli_is_local_idempotent_and_never_grants_remove(self):
+        path, digest = self.asset()
+        before_source = (path.stat().st_ino, path.stat().st_mtime_ns, path.read_bytes())
+        state = self.root/'state'
+        from . import cli
+        with patch.dict(os.environ, {'LAF_MODEL_STATE_DIR':str(state)}), \
+             patch.object(models, 'OllamaHTTP', side_effect=AssertionError('engine')), \
+             patch.object(cli, 'request', side_effect=AssertionError('Router')):
+            args = ('model', 'register-file', 'raw-gguf', str(path), '--digest', digest)
+            rc, record = ModelStateSeparationTests.invoke(*args)
+            self.assertEqual(rc, 0, record)
+            pointer = state/'file-registry'/'active.json'
+            before_pointer = (pointer.stat().st_ino, pointer.read_bytes())
+            self.assertEqual(ModelStateSeparationTests.invoke(*args), (0, record))
+            rc, registry = ModelStateSeparationTests.invoke('model', 'registry')
+            self.assertEqual(rc, 0, registry)
+        self.assertEqual(record, {'schema_version':1, 'id':'raw-gguf', 'engine':None,
+                         'format':'GGUF', 'file_path':str(path), 'digest':digest,
+                         'size_bytes':len(before_source[2]), 'ownership':'imported'})
+        self.assertEqual(registry, {'records':[record], 'installed':'not_queried',
+                                    'selectable':'not_queried', 'loaded':'not_queried'})
+        self.assertEqual((pointer.stat().st_ino, pointer.read_bytes()), before_pointer)
+        self.assertFalse((state/'models.json').exists())
+        with self.assertRaisesRegex(models.ModelError, 'not LAF-managed'):
+            self.manager.remove('raw-gguf')
+        self.assertEqual(self.engine.calls, [])
+        self.assertEqual((path.stat().st_ino, path.stat().st_mtime_ns, path.read_bytes()), before_source)
+
+    def test_register_file_rejects_missing_changed_conflicting_and_cache_paths(self):
+        path, digest = self.asset()
+        stored = self.manager.register_file('raw', path, digest)
+        pointer = self.root/'state'/'file-registry'/'active.json'
+        before = pointer.stat().st_ino, pointer.read_bytes()
+        with self.assertRaisesRegex(models.ModelError, 'registry identity conflicts'):
+            self.manager.register_file('other', path, digest)
+        path, changed = self.asset(path, b'b')
+        with self.assertRaisesRegex(models.ModelError, 'selected SHA-256'):
+            self.manager.register_file('raw', path, digest)
+        with self.assertRaisesRegex(models.ModelError, 'registry identity conflicts'):
+            self.manager.register_file('raw', path, changed)
+        alias = self.root/'alias.gguf'
+        alias.symlink_to(path)
+        with self.assertRaises(OSError):
+            self.manager.register_file('symlink', alias, changed)
+        path.unlink()
+        with self.assertRaises(FileNotFoundError):
+            self.manager.register_file('raw', path, digest)
+        metadata, metadata_digest = self.asset(self.root/'state'/'weights.gguf')
+        with self.assertRaisesRegex(models.ModelError, 'separate from registry state'):
+            self.manager.register_file('metadata', metadata, metadata_digest)
+        cache = self.root/'plugins'/'cache'
+        cache.mkdir(parents=True, mode=0o700)
+        payload, cached = self.asset(cache/'weights.gguf')
+        with self.assertRaisesRegex(models.ModelError, 'outside the plugin'):
+            self.manager.register_file('cached', payload, cached)
+        self.assertEqual((pointer.stat().st_ino, pointer.read_bytes()), before)
+        self.assertEqual(self.manager.registry()['records'], [stored])
+        self.assertEqual(self.engine.calls, [])
+
+    def test_file_metadata_coexists_without_ollama_scope_or_authority_changes(self):
+        path, digest = self.asset()
+        file_record = self.manager.register_file('raw-gguf', path, digest)
+        self.install()
+        imported_ref = 'owner/imported:v2'
+        self.engine.tags.append({'reference':imported_ref, 'digest':DIGEST, 'size_bytes':512})
+        with self.assertRaisesRegex(models.ModelError, 'registry identity conflicts'):
+            self.manager.register_existing('raw-gguf', imported_ref, DIGEST)
+        imported = self.manager.register_existing('other', imported_ref, DIGEST)
+        with self.assertRaisesRegex(models.ModelError, 'existing LAF-managed'):
+            self.manager.register_file(ENTRY['id'], path, digest)
+        journal = self.root/'state'/'models.json'
+        before = journal.read_bytes()
+        online, = self.manager.migrate_registry()
+        self.assertEqual(journal.read_bytes(), before)
+        self.assertEqual(self.manager.registry()['records'], [online, imported, file_record])
+        self.engine.identity = 'different-ollama'
+        with self.assertRaisesRegex(models.ModelError, 'scope changed'):
+            self.manager.register_existing('different', imported_ref, DIGEST)
+
+    def test_install_refuses_catalog_id_reserved_by_file_import(self):
+        path, digest = self.asset()
+        self.manager.register_file(ENTRY['id'], path, digest)
+        with self.assertRaisesRegex(models.ModelError, 'conflicts with an imported model'):
+            self.install()
+        self.assertEqual(self.engine.calls, [])
+        self.assertFalse((self.root/'state'/'models.json').exists())
+
+    def test_file_commit_does_not_replace_ollama_pointer_or_expose_failed_records(self):
+        self.install()
+        self.manager.migrate_registry()
+        first, digest = self.asset()
+        self.manager.register_file('first-file', first, digest)
+        state = self.root/'state'
+        legacy_pointer, file_pointer = (state/name/'active.json' for name in ('registry', 'file-registry'))
+        pointers = {p: (p.read_bytes(), p.stat().st_ino) for p in (legacy_pointer, file_pointer)}
+        all_records = self.manager.registry()
+        second, digest = self.asset(self.root/'second.gguf')
+        writer = self.manager._write_registry_json
+        def fail_new_file(path, value):
+            if path.name == 'second-file.json':
+                raise OSError('snapshot refused')
+            return writer(path, value)
+        with patch.object(self.manager, '_write_registry_json', side_effect=fail_new_file):
+            with self.assertRaisesRegex(OSError, 'snapshot refused'):
+                self.manager.register_file('second-file', second, digest)
+        self.assertEqual(self.manager.registry(), all_records)
+        self.assertEqual({p: (p.read_bytes(), p.stat().st_ino) for p in pointers}, pointers)
+        self.manager.register_file('second-file', second, digest)
+        self.assertEqual((legacy_pointer.read_bytes(), legacy_pointer.stat().st_ino), pointers[legacy_pointer])
+        self.assertNotEqual(file_pointer.read_bytes(), pointers[file_pointer][0])
+
+    def test_explicit_config_selects_file_registry_without_needing_router_lock(self):
+        path, digest = self.asset(self.store/'weights.gguf')
+        config = self.root/'config.json'
+        config.write_text(json.dumps({'state_dir':str(self.root/'state'),
+            'model_store':str(self.store), 'generation_lock':str(self.lock),
+            'engine_url':'http://127.0.0.1:11434'}))
+        config.chmod(0o600)
+        with self.lock.open('r') as fd, \
+             patch.object(models, 'OllamaHTTP', side_effect=AssertionError('engine')):
+            fcntl.flock(fd, fcntl.LOCK_EX|fcntl.LOCK_NB)
+            result, record = ModelStateSeparationTests.invoke(
+                'model', '--config', str(config), 'register-file', 'asset', str(path), '--digest', digest)
+        self.assertEqual(result, 0, record)
+        self.assertEqual(self.manager.registry()['records'], [record])
+        self.assertIsNone(record['engine'])
 
 
 class ValidationTests(unittest.TestCase):

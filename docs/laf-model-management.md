@@ -28,6 +28,7 @@ Scope: This notice applies only to the project-authored metadata or documentatio
 <!-- Modified 2026-11-24: list verified metadata for reviewed Ollama tag mappings. -->
 <!-- Modified 2026-11-25: document the separately observed loaded manifest digest. -->
 <!-- Modified 2026-11-25: distinguish installed selection from optional registry tracking. -->
+<!-- Modified 2026-11-28: document standalone GGUF file registration in place. -->
 
 # LAF model management: offline-tested first slice
 
@@ -214,7 +215,35 @@ pointer publishes the whole snapshot. After an interruption, use `laf model
 registry` to inspect which complete snapshot is active. Unpublished and older
 snapshots are not read as current state and are not automatically pruned in
 this version. Neither operation downloads, moves or removes model bytes.
-Direct GGUF registration and registry-to-Router binding are separate work.
+Register a standalone GGUF directly if you want to track it without copying it
+into Ollama or assigning it to any engine:
+
+```sh
+laf model --config /PRIVATE/model.json register-file MODEL_ID "$EXISTING_GGUF" \
+  --digest "$WEIGHTS_FILE_SHA256"
+laf model --config /PRIVATE/model.json registry
+```
+
+Without `--config`, these commands use the default registry or
+`LAF_MODEL_STATE_DIR`, with an existing owner directory as its parent.
+Use the absolute path to a protected owner-controlled file, under the default
+model store or another directory outside plugin storage and registry state.
+Registration checks the supported GGUF header and the entire file SHA-256;
+it does not validate the model's tensors, license, quantization, or runtime
+compatibility. The private record stores the exact path, digest, size, and
+`ownership: imported`; `engine: null` means no engine was assigned. It
+does not contact Ollama or take the Router generation lock. Repeating the
+same registration verifies the bytes again and preserves the existing record;
+if the file is missing or changed, the previous record remains historical.
+No Modelfile is created and the source bytes are neither moved nor deleted.
+The separate `file-registry` snapshot leaves `registry` and `models.json`
+readable as before in older releases; only newer releases list the file
+records. Use the newer client for writes once you register files. Older
+clients do not know those IDs and can reuse one for an Ollama model. The
+newer registry reports such conflicts as `conflicting_file_ids` without
+listing the conflicting file as an ordinary record or changing its bytes.
+Use `use-file` only if you also want to prepare an Ollama import. Registry to
+Router binding is separate work.
 
 ## What is implemented
 
