@@ -22,6 +22,8 @@ All terms and conditions of KOL-v1 apply. See the accompanying LICENSE file for 
 Scope: This notice applies only to the project-authored metadata or documentation in this exact file. External material it describes retains its separate terms.
 -->
 
+<!-- Modified 2026-11-22: document the isolated client wheel as an alternative to the module entry point. -->
+
 <!-- Modified 2026-11-23: separate local model records from catalog and Router observations. -->
 <!-- Modified 2026-11-24: list verified metadata for reviewed Ollama tag mappings. -->
 <!-- Modified 2026-11-25: document the separately observed loaded manifest digest. -->
@@ -139,9 +141,12 @@ python3 -B -m unittest -v inference.local_platform.test_models
 python3 -B scripts/check-laf.py --suite portable
 ```
 
-The implementation uses the existing module entry point. A packaged `laf`
-executable, engine provisioning and complete Docker Compose installation remain
-separate work. These commands are not a complete Quick Start for a running LAF.
+The examples use the module entry point from the checkout. After the
+[isolated wheel installation](client-install.md#offline-wheel-and-isolated-install),
+run the same model commands through `laf` in the activated virtual environment
+or through that environment's `bin/laf` path. For example, run `laf model catalog`.
+The wheel installs the Python client only. Engine provisioning and complete
+Docker Compose installation remain separate work.
 The existing `status` command still queries the private Router and now includes
 an independent local `model_storage` summary. Use `LAF_MODEL_STATE_DIR` to select
 the same registry used by model operations; otherwise it reads
