@@ -373,10 +373,13 @@ catalog reference, normalized to `sha256:...`, or null if a successful running
 inventory contains no matching reference. It may identify a different manifest
 level than the catalog entry and is not compared with the catalog or installed
 digest. A failed, malformed or ambiguous inventory produces no partial result.
-`registry_record_matches` describes saved registry ownership within
-the configured engine scope. `managed` additionally requires an observed model
-with the saved digest, so changed or missing engine content is not reported as
-currently managed. This inspection never creates ownership.
+`registry_record_matches` compares saved metadata with the exact catalog model
+ID, reference, and digest in the configured engine scope. `registry_ownership`
+reports `imported`, `managed`, or null when no saved identity matches. An import
+can still match saved metadata after the engine asset disappears or changes.
+Only a matching managed journal record with the same currently installed
+digest sets `managed` to true. This inspection does not adopt an import or
+grant deletion authority.
 
 An inventory result does not establish model compatibility, current weight-file
 hashes or the actual engine store's volume mapping. The output explicitly labels

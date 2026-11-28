@@ -22,6 +22,7 @@
 # Modified 2026-11-24: reject installs against a mismatched registry scope.
 # Modified 2026-11-24: expose the reviewed artifact metadata catalog command.
 # Modified 2026-11-25: report the exact loaded reference's observed manifest digest.
+# Modified 2026-11-28: distinguish an imported registry match from managed ownership.
 
 """Opt-in, persistent model management, separate from Router load/unload.
 
@@ -531,17 +532,25 @@ class ModelManager:
         scope={'engine':identity,'model_store':str(self.model_store),'generation_lock':str(self.generation_lock)}
         scope_matches=value['scope']==scope
         saved=value['models'].get(identifier)
+        managed_match=bool(scope_matches and saved and saved['reference']==entry['reference']
+                           and saved['digest']==entry['digest'])
+        # A saved import is observational only: it can match the catalog even
+        # when the engine no longer has those bytes, but cannot grant removal.
+        record=self._registry_rows().get(identifier)
+        imported_match=bool(record and record['ownership']=='imported'
+                            and record['scope_sha256']==self._registry_scope(scope)
+                            and record['reference']==entry['reference'] and record['digest']==entry['digest'])
         installed=next((m for m in self.adapter.installed() if m['reference']==entry['reference']),None)
         running=next((m for m in self.adapter.running() if m['reference']==entry['reference']),None)
-        registered=bool(scope_matches and saved and saved['reference']==entry['reference'] and saved['digest']==entry['digest'])
         return {'id':identifier,'installed':installed is not None,
                 'engine_manifest_digest':None if installed is None else installed['digest'],
                 'catalog_manifest_digest':entry['digest'],
                 'digest_matches':None if installed is None or entry['digest'] is None else installed['digest']==entry['digest'],
                 'loaded':running is not None,
                 'loaded_manifest_digest':None if running is None else running['digest'],
-                'registry_record_matches':registered,
-                'managed':bool(registered and installed and installed['digest']==saved['digest']),
+                'registry_record_matches':managed_match or imported_match,
+                'registry_ownership':'managed' if managed_match else 'imported' if imported_match else None,
+                'managed':bool(managed_match and installed and installed['digest']==saved['digest']),
                 'management_scope_matches':scope_matches,'pending_action':value['pending'],
                 'compatibility':'not_evaluated','weight_hashes':'not_recomputed',
                 'storage_mapping':'not_verified','mutation_performed':False,'automatic_retry':False}
