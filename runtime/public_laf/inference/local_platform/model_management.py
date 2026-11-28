@@ -24,6 +24,7 @@
 # Modified 2026-11-25: report the exact loaded reference's observed manifest digest.
 # Modified 2026-11-28: distinguish an imported registry match from managed ownership.
 # Modified 2026-11-28: normalize inspection and mutation scope paths consistently.
+# Modified 2026-11-28: register verified standalone GGUF files as imported metadata.
 
 """Opt-in, persistent model management, separate from Router load/unload.
 
@@ -57,6 +58,8 @@ REGISTRY_LIMIT = 128
 REGISTRY_SNAPSHOT = re.compile(r'snapshot-[a-f0-9]{32}\Z')
 REGISTRY_FIELDS = {'schema_version', 'id', 'engine', 'reference', 'digest',
                    'size_bytes', 'ownership', 'scope_sha256'}
+FILE_REGISTRY_FIELDS = {'schema_version', 'id', 'engine', 'format', 'file_path',
+                        'digest', 'size_bytes', 'ownership'}
 DIGEST = re.compile(r'sha256:[a-f0-9]{64}\Z')
 REFERENCE = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)?(?::[A-Za-z0-9][A-Za-z0-9._-]*)?\Z')
 
@@ -127,6 +130,23 @@ def validate_catalog(entries):
         if type(entry['user_setup_required']) is not bool:
             raise ModelError('explicit user setup requirement required')
     return copy.deepcopy(entries)
+
+
+def gguf_path(path):
+    if not isinstance(path, (str, Path)) or not text_field(str(path)):
+        raise ModelError('provide an absolute GGUF path')
+    path = Path(path)
+    if (not path.is_absolute() or '..' in path.parts or path.suffix.lower() != '.gguf'
+            or any(not c.isprintable() or c in '"\\' for c in str(path))):
+        raise ModelError('provide an absolute GGUF path without control characters')
+    return path
+
+
+def check_outside_plugin_storage(path):
+    parts = Path(path).parts
+    if any(parts[i:i+2] in (('plugins', 'cache'), ('plugins', 'marketplaces'))
+           for i in range(len(parts)-1)):
+        raise ModelError('keep model data outside the plugin installation and cache')
 
 
 def checked_directory(path, create=False):
@@ -345,8 +365,8 @@ class ModelManager:
             if temporary.exists(): temporary.unlink()
     def list(self):
         return [copy.deepcopy(entry) for _,entry in sorted(self._read()['models'].items())]
-    def _registry_rows(self):
-        path = self.directory/'registry'
+    def _registry_rows(self, *, files=False):
+        path = self.directory/('file-registry' if files else 'registry')
         if not path.exists() and not path.is_symlink():
             return {}
         checked_directory(path)
@@ -360,26 +380,38 @@ class ModelManager:
             raise ModelError('invalid local model registry snapshot pointer')
         snapshot = checked_directory(path/pointer['snapshot'])
         result = {}
-        references = set()
+        identities = set()
         for entry in snapshot.iterdir():
             identifier = entry.stem
             if (len(result) == REGISTRY_LIMIT or entry.name != identifier+'.json'
                     or not MODEL_ID.fullmatch(identifier)):
                 raise ModelError('invalid or oversized local model registry')
             record = read_private_json(entry)
-            if (not isinstance(record, dict) or record.keys() != REGISTRY_FIELDS
-                    or type(record['schema_version']) is not int or record['schema_version'] != 1
-                    or record['id'] != identifier or record['engine'] != 'ollama'
-                    or record['ownership'] not in ('imported', 'managed')
-                    or not isinstance(record['reference'], str) or not REFERENCE.fullmatch(record['reference'])
-                    or record['reference'] in references
-                    or not isinstance(record['digest'], str) or not DIGEST.fullmatch(record['digest'])
-                    or type(record['size_bytes']) is not int or record['size_bytes'] < 0
-                    or not isinstance(record['scope_sha256'], str)
-                    or not re.fullmatch(r'[a-f0-9]{64}', record['scope_sha256'])):
+            if (not isinstance(record, dict)
+                    or type(record.get('schema_version')) is not int or record['schema_version'] != 1
+                    or record.get('id') != identifier
+                    or not isinstance(record.get('digest'), str) or not DIGEST.fullmatch(record['digest'])
+                    or type(record.get('size_bytes')) is not int or record['size_bytes'] < 0):
                 raise ModelError('invalid local model registry record')
+            if files:
+                if (record.keys() != FILE_REGISTRY_FIELDS or record['engine'] is not None
+                        or record['format'] != 'GGUF' or record['ownership'] != 'imported'
+                        or record['size_bytes'] < 24 or str(gguf_path(record['file_path'])) != record['file_path']):
+                    raise ModelError('invalid local GGUF registry record')
+                check_outside_plugin_storage(record['file_path'])
+                identity = record['file_path']
+            else:
+                if (record.keys() != REGISTRY_FIELDS or record['engine'] != 'ollama'
+                        or record['ownership'] not in ('imported', 'managed')
+                        or not isinstance(record['reference'], str) or not REFERENCE.fullmatch(record['reference'])
+                        or not isinstance(record['scope_sha256'], str)
+                        or not re.fullmatch(r'[a-f0-9]{64}', record['scope_sha256'])):
+                    raise ModelError('invalid local model registry record')
+                identity = record['reference']
+            if identity in identities:
+                raise ModelError('duplicate local model registry identity')
             result[identifier] = record
-            references.add(record['reference'])
+            identities.add(identity)
         return result
 
     @staticmethod
@@ -399,24 +431,35 @@ class ModelManager:
     def registry(self):
         value = self._read()
         scope = self._registry_scope(value['scope'])
+        stored = self._registry_rows()
+        files = self._registry_rows(files=True)
+        conflicts = sorted(files.keys() & (stored.keys() | value['models'].keys()))
         records = []
-        for identifier, record in sorted(self._registry_rows().items()):
+        for identifier, record in sorted((files | stored).items()):
+            if identifier in conflicts and identifier not in stored:
+                continue  # A legacy writer may have used this ID in models.json.
             if record['ownership'] == 'managed':
                 current = value['models'].get(identifier)
                 if (current is None or record['scope_sha256'] != scope
                         or any(current[key] != record[key] for key in ('reference', 'digest'))):
                     continue
             records.append(self._registry_public(record))
-        return {'records': records, 'installed': 'not_queried',
-                'selectable': 'not_queried', 'loaded': 'not_queried'}
+        result = {'records': records, 'installed': 'not_queried',
+                  'selectable': 'not_queried', 'loaded': 'not_queried'}
+        if conflicts:
+            result['conflicting_file_ids'] = conflicts
+        return result
 
     def _record_registry(self, entries, value, *, replace_managed=False):
         scope = self._registry_scope(value['scope'])
         current = self._registry_rows_for_scope(scope)
         merged = {key: row for key, row in current.items() if not replace_managed or row['ownership'] == 'imported'}
         by_reference = {row['reference']: row['id'] for row in merged.values()}
+        files = self._registry_rows(files=True)
         records = []
         for identifier, actual, ownership in entries:
+            if identifier in files:
+                raise ModelError('local model registry identity conflicts with verified asset')
             record = {'schema_version': 1, 'id': identifier, 'engine': 'ollama',
                       **actual, 'ownership': ownership, 'scope_sha256': scope}
             prior = merged.get(identifier)
@@ -452,10 +495,10 @@ class ModelManager:
         finally:
             os.close(fd)
 
-    def _publish_registry_snapshot(self, rows):
+    def _publish_registry_snapshot(self, rows, *, files=False):
         # All writers hold models.lock. Readers only resolve committed,
         # immutable snapshots, which remain available after pointer changes.
-        directory = checked_directory(self.directory/'registry', create=True)
+        directory = checked_directory(self.directory/('file-registry' if files else 'registry'), create=True)
         token = secrets.token_hex(16)
         snapshot = directory/('snapshot-'+token)
         snapshot.mkdir(mode=0o700)
@@ -490,10 +533,43 @@ class ModelManager:
         for location in (self.directory, self.model_store):
             if location is None:
                 continue
-            parts = Path(location).parts
-            if any(parts[i:i+2] in (('plugins', 'cache'), ('plugins', 'marketplaces'))
-                   for i in range(len(parts)-1)):
-                raise ModelError('keep model data outside the plugin installation and cache')
+            check_outside_plugin_storage(location)
+
+    def register_file(self, identifier, path, digest):
+        from .model_setup import verify_existing_file
+
+        if not isinstance(identifier, str) or not MODEL_ID.fullmatch(identifier):
+            raise ModelError('provide a stable model ID')
+        self._check_registry_location()
+        path = gguf_path(path)
+        check_outside_plugin_storage(path)
+        if path.is_relative_to(self.directory):
+            raise ModelError('keep the model file separate from registry state')
+        verified = verify_existing_file(path, digest)
+        record = {'schema_version': 1, 'id': identifier, 'engine': None, 'format': 'GGUF',
+                  'file_path': str(path), 'digest': digest, 'size_bytes': verified['size_bytes'],
+                  'ownership': 'imported'}
+        # This stores a historical file observation only. It needs the shared
+        # metadata writer lock, but cannot contact or mutate an engine or Router.
+        with private_lock(self.directory, 'models.lock', create=True):
+            value = self._read()
+            if value['pending'] is not None:
+                raise ModelError('previous operation uncertain; inspect engine and journal, do not retry')
+            if identifier in value['models']:
+                raise ModelError('existing LAF-managed model; choose a different ID')
+            if identifier in self._registry_rows():
+                raise ModelError('local model registry identity conflicts with verified asset')
+            rows = self._registry_rows(files=True)
+            prior = rows.get(identifier)
+            if (prior is not None and prior != record
+                    or any(row['id'] != identifier and row.get('file_path') == str(path) for row in rows.values())):
+                raise ModelError('local model registry identity conflicts with verified asset')
+            if prior is None:
+                if len(rows) >= REGISTRY_LIMIT:
+                    raise ModelError('local model registry capacity reached')
+                rows[identifier] = record
+                self._publish_registry_snapshot(rows, files=True)
+        return self._registry_public(record)
 
     def register_existing(self, identifier, reference, digest):
         if (not isinstance(identifier, str) or not MODEL_ID.fullmatch(identifier)
@@ -602,9 +678,10 @@ class ModelManager:
             if prior is None:
                 if len(value['models'])>=128:
                     raise ModelError('managed model registry capacity reached')
-                if any(row['ownership'] == 'imported' and
-                       (row['id'] == identifier or row['reference'] == entry['reference'])
-                       for row in rows.values()):
+                if (identifier in self._registry_rows(files=True)
+                        or any(row['ownership'] == 'imported' and
+                               (row['id'] == identifier or row['reference'] == entry['reference'])
+                               for row in rows.values())):
                     raise ModelError('catalog ID or engine reference conflicts with an imported model; no installation attempted')
             self._idle()
             present=self._find(entry['reference'])
@@ -667,6 +744,10 @@ def main(argv=None):
     register.add_argument('model')
     register.add_argument('--reference', required=True)
     register.add_argument('--digest', required=True)
+    register_file = sub.add_parser('register-file', help='record an existing GGUF without importing it into an engine')
+    register_file.add_argument('model')
+    register_file.add_argument('path', type=Path)
+    register_file.add_argument('--digest', required=True)
     for action in ('install','remove','inspect'):
         sub.add_parser(action).add_argument('model')
     discover = sub.add_parser('discover', help='read the official publisher model list')
@@ -732,6 +813,8 @@ def main(argv=None):
             elif args.command=='registry': out=manager.registry()
             elif args.command=='register-existing':
                 out=manager.register_existing(args.model,args.reference,args.digest)
+            elif args.command=='register-file':
+                out=manager.register_file(args.model,args.path,args.digest)
             elif args.command=='migrate-registry':
                 out={'records':manager.migrate_registry()}
             else: out=getattr(manager,args.command)(args.model)
