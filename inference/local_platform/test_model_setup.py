@@ -20,6 +20,7 @@
 
 # Modified 2026-11-21: check CLI selections against actual Router configuration validation.
 # Modified 2026-11-24: verify the reviewed artifact catalog without local engine access.
+# Modified 2026-11-28: verify tag drift and separate owner-selected downloads.
 
 """Offline onboarding regressions using synthetic official metadata and engine state."""
 
@@ -101,6 +102,76 @@ class SetupTests(unittest.TestCase):
         self.assertEqual([v["id"] for v in data["public_models"]], [unsupported["id"], MODEL])
         self.assertFalse(data["public_models"][0]["reviewed_artifact_mapping"])
         self.assertFalse(self.conf.exists())
+
+    def reviewed_pin(self):
+        return model_setup.ReviewedTagPin(
+            reference=REFERENCE, manifest_digest=DIGEST, layer_digest=MODEL_BLOB,
+            layer_bytes=124, total_bytes=len(MANIFEST)+170, quantization="Q4_K_M",
+            license="apache-2.0", model_card_revision=CARD["sha"],
+            review_url="https://example.test/review/fixture")
+
+    def test_no_reviewed_pins_perform_no_network_or_owner_operations(self):
+        with patch.object(model_setup, "REVIEWED_TAG_PINS", {}, create=True), \
+             patch.object(model_setup, "_get", side_effect=AssertionError("network")), \
+             patch.object(model_setup, "OllamaHTTP", side_effect=AssertionError("engine")), \
+             patch.object(cli, "request", side_effect=AssertionError("Router")):
+            rc, result = self.invoke("reviewed-artifacts")
+        self.assertEqual(rc, 0, result)
+        self.assertEqual(result, {"catalog_status":"no_reviewed_pins", "artifacts":[],
+            "unavailable":[], "installed":"not_queried", "selectable":"not_queried",
+            "loaded":"not_queried"})
+
+    def test_reviewed_exact_raw_manifest_is_not_router_selectability(self):
+        with patch.object(model_setup, "REVIEWED_TAG_PINS", {MODEL:self.reviewed_pin()}), \
+             patch.object(model_setup, "_get", side_effect=self.documents) as get, \
+             patch.object(model_setup, "OllamaHTTP", side_effect=AssertionError("engine")), \
+             patch.object(cli, "request", side_effect=AssertionError("Router")):
+            rc, result = self.invoke("reviewed-artifacts")
+        self.assertEqual(rc, 0, result)
+        self.assertEqual(get.call_count, 2)
+        self.assertEqual(result["catalog_status"], "reviewed_tag_matches")
+        self.assertEqual(result["selectable"], "not_queried")
+        self.assertEqual(result["loaded"], "not_queried")
+        asset, = result["artifacts"]
+        self.assertEqual(asset["artifact"]["digest"], DIGEST)
+        self.assertEqual(asset["artifact_identity"]["verification"], "reviewed_tag_match")
+        self.assertEqual(asset["artifact_identity"]["reviewed_manifest_digest"], DIGEST)
+        self.assertEqual(asset["artifact_identity"]["reviewed_model_card_revision"], CARD["sha"])
+
+    def test_raw_tag_drift_blocks_reviewed_offer_but_not_owner_explicit_refresh(self):
+        self.setup_custom()
+        drifted = MANIFEST + b"\n"
+        latest = "sha256:" + sha256(drifted).hexdigest()
+        self.assertEqual(json.loads(drifted), json.loads(MANIFEST))
+        def documents(host, path, media):
+            if host == model_setup.REGISTRY:
+                return drifted, None
+            return self.documents(host, path, media)
+        with patch.object(model_setup, "REVIEWED_TAG_PINS", {MODEL:self.reviewed_pin()}), \
+             patch.object(model_setup, "_get", side_effect=documents) as get, \
+             patch.object(model_setup, "ModelManager") as manager:
+            rc, result = self.invoke("reviewed-artifacts")
+            self.assertEqual(rc, 0, result)
+            self.assertEqual(result["artifacts"], [])
+            self.assertEqual(result["unavailable"], [{"model":MODEL, "status":"tag_pin_mismatch"}])
+            self.assertEqual(get.call_count, 2)
+            rc, result = self.invoke("--config", self.conf, "download", MODEL, "--digest", DIGEST)
+            self.assertEqual(rc, 1, result)
+            manager.assert_not_called()
+            manager.return_value.install.return_value = {"fixture":True}
+            rc, result = self.invoke("--config", self.conf, "download", MODEL, "--digest", latest)
+            self.assertEqual(rc, 0, result)
+            manager.return_value.install.assert_called_once_with("smollm2-135m")
+            self.assertEqual(manager.call_args.args[1][0]["digest"], latest)
+
+    def test_reviewed_catalog_distinguishes_transport_failure_from_drift(self):
+        with patch.object(model_setup, "REVIEWED_TAG_PINS", {MODEL:self.reviewed_pin()}), \
+             patch.object(model_setup, "_get", side_effect=OSError("offline")) as get:
+            rc, result = self.invoke("reviewed-artifacts")
+        self.assertEqual(rc, 0, result)
+        self.assertEqual(result["artifacts"], [])
+        self.assertEqual(result["unavailable"], [{"model":MODEL, "status":"metadata_unavailable"}])
+        self.assertEqual(get.call_count, 1)
 
     def test_artifact_checks_scope_license_and_manifest(self):
         with patch.object(model_setup, "_get", side_effect=self.documents):
